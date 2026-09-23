@@ -1,0 +1,55 @@
+{
+  "name": "@accessdurin/cli",
+  "version": "1.0.0",
+  "type": "module",
+  "bin": {
+    "durin": "dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "vite build",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "prepack": "pnpm build",
+    "lint": "oxlint --config .oxlintrc.json .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "secrets:check": "node scripts/check-secrets.mjs",
+    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm secrets:check",
+    "prepublishOnly": "pnpm verify"
+  },
+  "dependencies": {
+    "@clack/prompts": "1.8.1",
+    "@modelcontextprotocol/client": "2.0.0",
+    "@modelcontextprotocol/core": "2.0.0",
+    "@modelcontextprotocol/server": "2.0.0",
+    "@napi-rs/keyring": "2.1.0",
+    "jsonc-parser": "3.3.1",
+    "smol-toml": "1.7.1",
+    "zod": "4.1.13"
+  },
+  "devDependencies": {
+    "@types/node": "24.0.0",
+    "typescript": "5.9.3",
+    "vite": "8.2.2",
+    "vitest": "4.1.11",
+    "oxlint": "1.81.0",
+    "prettier": "3.6.2"
+  },
+  "engines": {
+    "node": ">=24.15.0 <25"
+  },
+  "description": "Durin organization onboarding, governed tools, and MCP bridge CLI",
+  "packageManager": "pnpm@11.21.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/accessdurin/cli.git"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}

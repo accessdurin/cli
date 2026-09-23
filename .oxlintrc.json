@@ -1,0 +1,127 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "import", "promise", "vitest"],
+  "env": {
+    "builtin": true,
+    "es2024": true,
+    "node": true
+  },
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error",
+    "perf": "error"
+  },
+  "rules": {
+    "eslint/complexity": [
+      "error",
+      {
+        "max": 4
+      }
+    ],
+    "eslint/max-depth": [
+      "error",
+      {
+        "max": 2
+      }
+    ],
+    "eslint/max-params": [
+      "error",
+      {
+        "max": 4
+      }
+    ],
+    "eslint/max-lines-per-function": [
+      "error",
+      {
+        "max": 50,
+        "skipBlankLines": true,
+        "skipComments": true
+      }
+    ],
+    "eslint/max-nested-callbacks": [
+      "error",
+      {
+        "max": 2
+      }
+    ],
+    "eslint/max-lines": [
+      "error",
+      {
+        "max": 300,
+        "skipBlankLines": true,
+        "skipComments": true
+      }
+    ],
+    "eslint/eqeqeq": ["error", "always"],
+    "eslint/no-var": "error",
+    "eslint/prefer-const": "error",
+    "eslint/no-param-reassign": "error",
+    "eslint/no-else-return": "error",
+    "eslint/default-case-last": "error",
+    "eslint/no-nested-ternary": "off",
+    "eslint/no-eval": "error",
+    "eslint/no-alert": "error",
+    "eslint/no-underscore-dangle": "off",
+    "typescript/no-explicit-any": "error",
+    "typescript/no-non-null-assertion": "error",
+    "typescript/consistent-type-imports": "off",
+    "typescript/no-unused-vars": [
+      "error",
+      {
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_"
+      }
+    ],
+    "unicorn/no-array-reduce": "off",
+    "unicorn/prefer-ternary": "error",
+    "unicorn/no-negated-condition": "error",
+    "unicorn/prefer-string-replace-all": "off",
+    "unicorn/filename-case": "off",
+    "import/no-cycle": "error",
+    "import/no-default-export": "off",
+    "promise/no-return-wrap": "error",
+    "promise/param-names": "error"
+  },
+  "overrides": [
+    {
+      "files": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/test/**",
+        "**/test-node/**",
+        "**/tests/**",
+        "**/testing/**",
+        "**/fixtures/**",
+        "**/test-setup.ts",
+        "**/test-utils.tsx",
+        "**/*.test.mjs"
+      ],
+      "rules": {
+        "import/no-unassigned-import": "off",
+        "eslint/max-lines": "off",
+        "eslint/max-lines-per-function": "off",
+        "eslint/max-nested-callbacks": [
+          "error",
+          {
+            "max": 4
+          }
+        ],
+        "typescript/no-non-null-assertion": "off",
+        "unicorn/consistent-function-scoping": "off",
+        "unicorn/no-invalid-fetch-options": "off",
+        "vitest/require-to-throw-message": "off",
+        "no-restricted-imports": "off"
+      }
+    },
+    {
+      "files": ["**/*.config.ts", "**/*.config.mjs", "scripts/**"],
+      "rules": {
+        "eslint/max-lines": "off",
+        "typescript/no-explicit-any": "off",
+        "eslint/no-await-in-loop": "off"
+      }
+    }
+  ],
+  "ignorePatterns": ["node_modules/**", "dist/**", "coverage/**"]
+}
