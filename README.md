@@ -21,7 +21,7 @@ node dist/cli.js
 
 The examples below use `durin` for this executable. To install a local build, run
 `pnpm pack --pack-destination /tmp/durin-cli-release`, then install the resulting
-archive with `npm install --global /tmp/durin-cli-release/accessdurin-cli-1.0.0.tgz`.
+archive with `npm install --global /tmp/durin-cli-release/accessdurin-cli-1.0.1.tgz`.
 After the first npm release, run `pnpx @accessdurin/cli` or install the executable
 with `npm install --global @accessdurin/cli`. Publishing this Git repository alone
 does not make the package available on npm.

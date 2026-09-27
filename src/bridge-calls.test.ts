@@ -1,8 +1,9 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { JSONRPCRequestSchema } from '@modelcontextprotocol/core';
+import type { JSONRPCMessage } from '@modelcontextprotocol/client';
 import { FileCallLedger, BridgeCalls } from './bridge-calls.js';
 import type { PendingCliCall } from './ports/cli-call-ledger.js';
 
@@ -12,34 +13,46 @@ const request = {
   method: 'tools/call',
   params: { name: 'github__create_issue', arguments: { title: 'Fixture' } },
 };
-it('preserves an uncertain call across bridge restarts and resumes the same approval without generating another operation', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'durin-call-ledger-'));
-  try {
-    const first = new BridgeCalls(new FileCallLedger(directory, 'a'.repeat(64)));
-    const sent = await first.outgoing(request);
-    const control = JSONRPCRequestSchema.parse(sent).params!._meta;
-    expect(control).toMatchObject({ 'io.durin/control': { idempotencyKey: expect.any(String) } });
-    const resumed = new BridgeCalls(new FileCallLedger(directory, 'a'.repeat(64)));
-    expect(
-      JSONRPCRequestSchema.parse(await resumed.outgoing({ ...request, id: 2 })).params!._meta,
-    ).toEqual(control);
-    const approval = {
-      jsonrpc: '2.0' as const,
-      id: 2,
-      result: {
-        content: [],
-        isError: true,
-        structuredContent: { status: 'approval_required', approvalId: 'approval_one' },
-      },
-    };
-    await resumed.deliver(approval, async () => {});
-    expect(
-      JSONRPCRequestSchema.parse(await resumed.outgoing({ ...request, id: 3 })).params!._meta,
-    ).toMatchObject({ 'io.durin/control': { approvalId: 'approval_one' } });
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-  }
-});
+const pendingApproval = { status: 'approval_required', approvalId: 'approval_one' };
+it.each([
+  { format: 'object', structuredContent: pendingApproval },
+  { format: 'legacy wrapper', structuredContent: { result: pendingApproval } },
+])(
+  'resumes the same approval across bridge restarts with $format content',
+  async ({ structuredContent }) => {
+    const directory = await mkdtemp(join(tmpdir(), 'durin-call-ledger-'));
+    try {
+      const first = new BridgeCalls(new FileCallLedger(directory, 'a'.repeat(64)));
+      const sent = await first.outgoing(request);
+      const control = JSONRPCRequestSchema.parse(sent).params!._meta;
+      expect(control).toMatchObject({ 'io.durin/control': { idempotencyKey: expect.any(String) } });
+      const resumed = new BridgeCalls(new FileCallLedger(directory, 'a'.repeat(64)));
+      expect(
+        JSONRPCRequestSchema.parse(await resumed.outgoing({ ...request, id: 2 })).params!._meta,
+      ).toEqual(control);
+      const approval = {
+        jsonrpc: '2.0' as const,
+        id: 2,
+        result: {
+          content: [],
+          isError: true,
+          structuredContent,
+        },
+      };
+      const send = vi.fn<(message: JSONRPCMessage) => Promise<void>>(async () => {});
+      await resumed.deliver(approval, send);
+      expect(send).toHaveBeenCalledWith({
+        ...approval,
+        result: { ...approval.result, _meta: control },
+      });
+      expect(
+        JSONRPCRequestSchema.parse(await resumed.outgoing({ ...request, id: 3 })).params!._meta,
+      ).toMatchObject({ 'io.durin/control': { approvalId: 'approval_one' } });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  },
+);
 
 it.each([{ failedDelivery: false }, { failedDelivery: true }])(
   'retains an operation only until its successful response is delivered: $failedDelivery',

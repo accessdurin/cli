@@ -3,6 +3,14 @@ import { sessionSchema } from './account.js';
 import { mcpEndpointSchema } from './mcp-endpoint.js';
 import { countSchema, environmentSchema, roleSchema } from './primitives.js';
 
+const packageSchema = z.enum(['standard', 'enterprise']);
+export const organizationEntitlementsSchema = z
+  .object({
+    organizationId: z.string().min(1),
+    package: packageSchema,
+  })
+  .strict();
+
 export const personalWorkspaceSchema = z
   .object({
     organization: z.object({ id: z.string(), name: z.string(), environment: environmentSchema }),
@@ -15,6 +23,7 @@ export const personalWorkspaceSchema = z
   })
   .strict();
 export const personalBootstrapSchema = personalWorkspaceSchema.extend({
+  entitlements: organizationEntitlementsSchema,
   session: sessionSchema,
   mcp: mcpEndpointSchema,
   settings: z.object({

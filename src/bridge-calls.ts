@@ -22,6 +22,10 @@ const approvalSchema = z.object({
   status: z.literal('approval_required'),
   approvalId: z.string().min(1),
 });
+const approvalContentSchema = z.union([
+  approvalSchema,
+  z.object({ result: approvalSchema }).transform(({ result }) => result),
+]);
 const missingFile = (error: unknown): null => {
   if (z.object({ code: z.literal('ENOENT') }).safeParse(error).success) return null;
   throw error;
@@ -94,7 +98,7 @@ export class BridgeCalls {
     tracked: TrackedCall,
     send: (message: JSONRPCMessage) => Promise<void>,
   ): Promise<void> {
-    const approval = approvalSchema.safeParse(message.result.structuredContent);
+    const approval = approvalContentSchema.safeParse(message.result.structuredContent);
     if (approval.success)
       await this.ledger.save(tracked.fingerprint, {
         ...tracked.control,
