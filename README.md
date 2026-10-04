@@ -28,6 +28,21 @@ does not make the package available on npm.
 The default app origin is `https://app.getdurin.com`. That deployment must have
 AuthKit CLI authentication and MCP authorization configured before onboarding works.
 
+## Claude Code plugin
+
+The [Durin plugin](plugins/durin/README.md) adds `/durin:setup`, `/durin:verify`,
+and `/durin:tools` skills to Claude Code. It uses this CLI's existing organization
+profiles and MCP bridge. Install from the Durin-owned marketplace in Claude Code:
+
+```text
+/plugin marketplace add accessdurin/cli
+/plugin install durin@accessdurin
+```
+
+See the [directory submission guide](docs/claude-directory-submission.md) for
+Anthropic's source fields, validation, and publisher review steps. The npm CLI
+package and Claude plugin are distributed separately.
+
 ## Onboarding
 
 1. Choose **Log in** or **Create an account**. Authorize the displayed device code
