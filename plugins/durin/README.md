@@ -53,7 +53,7 @@ the plugin does not enable providers or grant access.
 
 ## What runs and where data goes
 
-The installed plugin contains Markdown instructions and JSON metadata. It has no
+The installed plugin contains Markdown instructions, JSON metadata, and a listing icon. It has no
 hooks, background processes, bundled executable, telemetry, or automatic package
 installer. Claude can run CLI commands when needed for your request, subject to
 Claude Code's normal permissions. Installation from source fetches code and
@@ -67,6 +67,9 @@ tool results used by Claude become part of your Claude conversation. Share only
 data appropriate for that conversation. Provider access, approval, audit, and
 server retention are governed by your organization's Durin configuration and
 service terms; the plugin does not set a server retention period.
+
+Read Durin's [Privacy](https://getdurin.com/privacy) notice for service data
+handling and privacy contacts.
 
 The CLI saves organization/profile metadata and a stable runtime under
 `~/.config/durin` (or your explicit `--config-dir`). MCP credentials live in
