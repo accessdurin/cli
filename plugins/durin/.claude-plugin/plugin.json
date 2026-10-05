@@ -13,5 +13,6 @@
   "keywords": ["durin", "mcp", "governance", "approvals", "organization-tools"],
   "icon": "./.claude-plugin/icon.png",
   "documentationUrl": "https://github.com/accessdurin/cli/tree/main/plugins/durin",
-  "supportUrl": "https://github.com/accessdurin/cli/issues"
+  "supportUrl": "https://github.com/accessdurin/cli/issues",
+  "privacyPolicyUrl": "https://getdurin.com/privacy"
 }

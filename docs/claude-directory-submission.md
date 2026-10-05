@@ -21,6 +21,7 @@ the plugin to Anthropic or establish a directory listing.
 | Supported surface          | Claude Code                                                  |
 | Documentation              | `https://github.com/accessdurin/cli/tree/main/plugins/durin` |
 | Support                    | `https://github.com/accessdurin/cli/issues`                  |
+| Privacy                    | `https://getdurin.com/privacy`                               |
 | License                    | MIT; regular `LICENSE` file included in the plugin folder    |
 
 The README and manifest supply the listing text. The maintainer must provide a
@@ -73,7 +74,7 @@ Include the icon before the first time the plugin is saved or submitted in the
 developer portal. The portal captures the listing icon only then; adding or
 changing the repository image afterward does not replace an existing listing icon.
 
-Keep `documentationUrl` and `supportUrl` in `plugin.json`. The directory reads
+Keep `documentationUrl`, `supportUrl`, and `privacyPolicyUrl` in `plugin.json`. The directory reads
 them for the listing, while Claude Code ignores them at load time. An `UNKNOWN_KEY`
 notice for these fields is informational and does not require removing them.
 Claude Code 2.1.281 and later accepts these directory fields in manifest validation;
