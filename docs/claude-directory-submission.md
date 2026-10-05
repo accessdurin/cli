@@ -15,7 +15,8 @@ the plugin to Anthropic or establish a directory listing.
 | Plugin path                | `plugins/durin`                                              |
 | Tracked branch after merge | `main`                                                       |
 | Plugin identifier          | `durin`                                                      |
-| Plugin version             | `1.0.0`                                                      |
+| Plugin version             | `1.0.1`                                                      |
+| Listing icon               | `plugins/durin/.claude-plugin/icon.png`; 1024 × 1024 PNG     |
 | Publisher                  | Durin                                                        |
 | Supported surface          | Claude Code                                                  |
 | Documentation              | `https://github.com/accessdurin/cli/tree/main/plugins/durin` |
@@ -39,7 +40,7 @@ claude plugin validate --strict ./plugins/durin
 claude plugin validate --strict .
 ```
 
-The plugin contains only regular text files and uses default `skills/` discovery.
+The plugin contains regular text files and a PNG icon and uses default `skills/` discovery.
 Its resources, README, and license are inside the plugin folder. It contains no
 hooks, MCP declaration, executable, package install hook, environment credential
 reference, or symlink. Onboarding delegates MCP registration and credential
@@ -60,6 +61,23 @@ compare a real authorized tool task with and without the plugin. Test empty
 catalog, denied policy, independent approval, and uncertain result handling.
 The offline CLI suite and manifest validation do not prove hosted authentication,
 provider access, skill behavior in a model session, or portal acceptance.
+
+### Listing metadata and icon
+
+The manifest's `icon` points to `./.claude-plugin/icon.png`, relative to the plugin
+root. This is the existing Durin brand mark exported as a 1024 × 1024 PNG under
+2 MB. The portal accepts a square PNG or JPEG from 512 to 2048 pixels on each side;
+SVG and WebP are not accepted as listing icons.
+
+Include the icon before the first time the plugin is saved or submitted in the
+developer portal. The portal captures the listing icon only then; adding or
+changing the repository image afterward does not replace an existing listing icon.
+
+Keep `documentationUrl` and `supportUrl` in `plugin.json`. The directory reads
+them for the listing, while Claude Code ignores them at load time. An `UNKNOWN_KEY`
+notice for these fields is informational and does not require removing them.
+Claude Code 2.1.281 and later accepts these directory fields in manifest validation;
+older validators may warn about them, including `icon`.
 
 ## Data handling answers to review
 
