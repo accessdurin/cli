@@ -1,0 +1,14 @@
+{
+  "name": "accessdurin",
+  "description": "Durin plugins for organization tool access, governance, and approvals.",
+  "owner": {
+    "name": "Durin"
+  },
+  "plugins": [
+    {
+      "name": "durin",
+      "source": "./plugins/durin",
+      "description": "Connect Claude Code to Durin and use organization tools with policy checks and approvals."
+    }
+  ]
+}

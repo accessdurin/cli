@@ -1,0 +1,16 @@
+{
+  "name": "durin",
+  "displayName": "Durin",
+  "version": "1.0.0",
+  "description": "Connect Claude Code to Durin and use organization tools with policy checks and approvals.",
+  "author": {
+    "name": "Durin",
+    "url": "https://getdurin.com"
+  },
+  "homepage": "https://github.com/accessdurin/cli/tree/main/plugins/durin",
+  "repository": "https://github.com/accessdurin/cli",
+  "license": "MIT",
+  "keywords": ["durin", "mcp", "governance", "approvals", "organization-tools"],
+  "documentationUrl": "https://github.com/accessdurin/cli/tree/main/plugins/durin",
+  "supportUrl": "https://github.com/accessdurin/cli/issues"
+}
