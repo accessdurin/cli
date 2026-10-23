@@ -100,6 +100,14 @@ it.each([
   ['rate limiting', () => new Response(null, { status: 429 })],
   ['a refused connection', networkFailure('ECONNREFUSED')],
   ['a reset connection', networkFailure('UND_ERR_SOCKET')],
+  ['an unresolvable host', networkFailure('ENOTFOUND')],
+  ['an untrusted certificate', networkFailure('DEPTH_ZERO_SELF_SIGNED_CERT')],
+  [
+    'an unclassified fetch failure',
+    () => {
+      throw new TypeError('fetch failed');
+    },
+  ],
   [
     'a timeout',
     () => {
@@ -149,14 +157,6 @@ it.each([
       throw new TypeError('fetch failed', { cause: new Error('unexpected redirect') });
     }),
   ],
-  ['an unknown host', authorizationServer(networkFailure('ENOTFOUND'))],
-  ['an untrusted certificate', authorizationServer(networkFailure('DEPTH_ZERO_SELF_SIGNED_CERT'))],
-  [
-    'an unclassified fetch failure',
-    authorizationServer(() => {
-      throw new TypeError('fetch failed');
-    }),
-  ],
   [
     'an insecure revocation endpoint',
     async (url: string | URL | Request) =>
@@ -172,4 +172,13 @@ it.each([
     local: 'cleared',
   });
   expect(values.size).toBe(0);
+});
+
+it('reports nothing to revoke when no grant is stored', async () => {
+  const values = new Map<string, string>();
+  const request = authorizationServer(() => new Response(null, { status: 200 }));
+  expect(await signOutMcp({ profile, store: memoryStore(values), request })).toEqual({
+    remote: 'unavailable',
+    local: 'cleared',
+  });
 });

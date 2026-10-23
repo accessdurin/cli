@@ -164,11 +164,11 @@ MCP credentials use macOS Keychain, Windows Credential Manager, or Linux Secret
 Service. There is no plaintext fallback. Account-session tokens remain in memory
 only during onboarding. `logout` affects the selected CLI-owned MCP grant, retains
 config/profile metadata, and reports remote revocation separately. If the
-authorization server refuses or drops the connection, times out, rate-limits, or
-returns a server error, the grant stays stored so that `durin logout` can retry;
-`durin logout --force` clears it anyway. Other failures, including redirects, unknown
-hosts, and TLS errors, still clear it locally. Other clients' OAuth grants and browser sessions are
-unaffected.
+authorization server gives no HTTP answer (a connection, DNS, or TLS failure, or a
+timeout), rate-limits, or returns a server error, the grant stays stored so that
+`durin logout` can retry; `durin logout --force` clears it anyway. A redirect, a 4xx
+response, or missing or unsafe metadata still clears it locally. Other clients'
+OAuth grants and browser sessions are unaffected.
 
 If a process dies while holding a profile lock, the CLI reports its exact lock path.
 Stop Durin and the profile's bridges before removing that abandoned lock, then retry

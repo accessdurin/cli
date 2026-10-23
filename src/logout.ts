@@ -1,5 +1,6 @@
 import { discoverAuthorizationServerMetadata } from '@modelcontextprotocol/client';
 import { z } from 'zod';
+import { CliError } from './cli-options.js';
 import type { CliProfile } from './contracts/cli-profile.js';
 import type { CredentialStore } from './ports/credential-store.js';
 import { McpOAuthProvider } from './mcp-oauth.js';
@@ -20,28 +21,13 @@ export type SignOutResult = {
 /** The authorization server was unreachable or busy, so revocation may succeed later. */
 class TransientRevocationError extends Error {}
 const retryableStatus = (status: number): boolean => status === 429 || status >= 500;
-const TRANSIENT_NETWORK_CODES = new Set([
-  'EAI_AGAIN',
-  'ECONNREFUSED',
-  'ECONNRESET',
-  'EHOSTDOWN',
-  'EHOSTUNREACH',
-  'ENETDOWN',
-  'ENETUNREACH',
-  'EPIPE',
-  'ETIMEDOUT',
-  'UND_ERR_BODY_TIMEOUT',
-  'UND_ERR_CONNECT_TIMEOUT',
-  'UND_ERR_HEADERS_TIMEOUT',
-  'UND_ERR_SOCKET',
-]);
-const causeCodeSchema = z.object({ cause: z.object({ code: z.string() }) });
-/** Only known-temporary failures qualify; redirects, TLS, and DNS lookup failures do not. */
-const transientNetworkFailure = (error: unknown): boolean => {
-  if (error instanceof DOMException) return error.name === 'TimeoutError';
-  const parsed = causeCodeSchema.safeParse(error);
-  return parsed.success && TRANSIENT_NETWORK_CODES.has(parsed.data.cause.code);
-};
+const redirected = (error: unknown): boolean =>
+  error instanceof TypeError &&
+  error.cause instanceof Error &&
+  error.cause.message === 'unexpected redirect';
+/** Without an HTTP answer the server may still honour the grant; a refused redirect is an answer. */
+const transientNetworkFailure = (error: unknown): boolean =>
+  !(error instanceof CliError) && !redirected(error);
 const transientFailures =
   (request: typeof fetch): typeof fetch =>
   async (input, init) => {
@@ -67,7 +53,7 @@ async function revokeGrant(
   provider: McpOAuthProvider,
 ): Promise<RevocationStatus | 'retry'> {
   const tokens = await provider.tokens();
-  if (!tokens) return 'revoked';
+  if (!tokens) return 'unavailable';
   const client = await provider.clientInformation();
   if (!client) return 'unavailable';
   const request = transientFailures(secureFetch(options.profile.development, options.request));
