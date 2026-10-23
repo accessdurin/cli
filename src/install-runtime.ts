@@ -1,8 +1,10 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
-import { cp, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { cp, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import { dirname, join, relative } from 'node:path';
 import { z } from 'zod';
+import { CliError } from './cli-options.js';
+import { assertPrivateDirectory } from './private-directory.js';
 
 const manifestSchema = z.object({
   optionalDependencies: z.record(z.string(), z.string()).default({}),
@@ -43,10 +45,14 @@ export async function installRuntime(directory: string, source: string): Promise
   const temporary = join(runtime, `.install-${randomUUID()}`);
   await mkdir(temporary, { recursive: true, mode: 0o700 });
   try {
+    await assertPrivateDirectory(directory);
     await writeFile(join(temporary, 'package.json'), '{"type":"module"}\n', { mode: 0o600 });
     await writeFile(join(temporary, 'cli.js'), code, { mode: 0o600 });
     await copyCredentialStore(source, temporary);
-    await rename(temporary, version).catch(ignoreExistingVersion);
+    await rename(temporary, version).catch(async (error: unknown) => {
+      ignoreExistingVersion(error);
+      await assertSameRuntime(temporary, version);
+    });
     await publishLauncher(runtime, id);
     return join(runtime, 'cli.mjs');
   } finally {
@@ -56,6 +62,30 @@ export async function installRuntime(directory: string, source: string): Promise
 const ignoreExistingVersion = (error: unknown): void => {
   if (!z.object({ code: z.enum(['EEXIST', 'ENOTEMPTY']) }).safeParse(error).success) throw error;
 };
+const treeDigest = async (root: string): Promise<string> => {
+  const entries = await readdir(root, { recursive: true, withFileTypes: true });
+  const files = await Promise.all(
+    entries
+      .filter((entry) => !entry.isDirectory())
+      .map(async (entry) => {
+        const path = join(entry.parentPath, entry.name);
+        const content = entry.isFile()
+          ? createHash('sha256')
+              .update(await readFile(path))
+              .digest('hex')
+          : 'not-a-file';
+        return `${relative(root, path)}\0${content}`;
+      }),
+  );
+  return files.toSorted().join('\n');
+};
+/** An existing runtime is reused only when it is byte-for-byte the runtime just staged. */
+async function assertSameRuntime(staged: string, installed: string): Promise<void> {
+  if ((await treeDigest(staged)) !== (await treeDigest(installed)))
+    throw new CliError(
+      `The installed Durin runtime at ${installed} does not match this CLI. Stop Durin bridges, remove that directory, then run durin again.`,
+    );
+}
 async function publishLauncher(runtime: string, id: string): Promise<void> {
   const temporary = join(runtime, `launcher-${randomUUID()}.mjs`);
   try {

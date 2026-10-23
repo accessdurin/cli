@@ -11,6 +11,7 @@ import type {
 } from '@modelcontextprotocol/client';
 import type { CredentialStore } from './ports/credential-store.js';
 import type { CliProfile } from './contracts/cli-profile.js';
+import { safeCliUrl } from './contracts/cli-url.js';
 
 type Authorization = {
   readonly redirectUrl: string;
@@ -46,6 +47,13 @@ const parseClient = (value: unknown, issuer: string): StoredOAuthClientInformati
   ...clientMetadataSchema.parse(value),
   issuer: requireIssuer(value, issuer),
 });
+/** Authorization-server metadata chooses this URL; only web URLs may reach the OS opener. */
+const authorizationUrl = (url: URL, development: boolean): URL => {
+  const base = new URL(url);
+  base.search = '';
+  if (!safeCliUrl(base.href, development)) throw new CliError('Unsafe MCP authorization URL.');
+  return url;
+};
 
 export class McpOAuthProvider implements OAuthClientProvider {
   private verifier: string | undefined;
@@ -70,7 +78,7 @@ export class McpOAuthProvider implements OAuthClientProvider {
     return this.authorization().state;
   }
   async redirectToAuthorization(url: URL): Promise<void> {
-    await this.authorization().open(url);
+    await this.authorization().open(authorizationUrl(url, this.options.profile.development));
   }
   saveCodeVerifier(verifier: string): void {
     this.verifier = verifier;

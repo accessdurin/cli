@@ -12,33 +12,47 @@ type Options = {
 };
 const revocationSchema = z.object({ revocation_endpoint: z.url().optional() });
 export type RevocationStatus = 'revoked' | 'unavailable' | 'failed';
-export async function signOutMcp(options: Options): Promise<RevocationStatus> {
+export type SignOutResult = {
+  readonly remote: RevocationStatus;
+  readonly local: 'cleared' | 'retained';
+};
+/** A grant whose revocation request failed stays stored so that logout can be retried. */
+export async function signOutMcp(options: Options): Promise<SignOutResult> {
   const provider = new McpOAuthProvider({ profile: options.profile, store: options.store });
-  try {
-    return await revokeGrant(options, provider);
-  } catch {
-    return 'failed';
-  } finally {
-    await provider.invalidateCredentials('all');
-  }
+  const remote = await revokeGrant(options, provider).catch(() => 'failed' as const);
+  if (remote === 'retry') return { remote: 'failed', local: 'retained' };
+  await provider.invalidateCredentials('all');
+  return { remote, local: 'cleared' };
 }
 async function revokeGrant(
   options: Options,
   provider: McpOAuthProvider,
-): Promise<RevocationStatus> {
+): Promise<RevocationStatus | 'retry'> {
   const tokens = await provider.tokens();
   if (!tokens) return 'revoked';
   const client = await provider.clientInformation();
   if (!client) return 'unavailable';
   const request = secureFetch(options.profile.development, options.request);
-  const metadata = await discoverAuthorizationServerMetadata(options.profile.mcpIssuer, {
-    fetchFn: request,
+  return revokeRemotely({ request, clientId: client.client_id, tokens }, options.profile).catch(
+    () => 'retry' as const,
+  );
+}
+async function revokeRemotely(
+  input: {
+    request: typeof fetch;
+    clientId: string;
+    tokens: { refresh_token?: string | undefined; access_token: string };
+  },
+  profile: CliProfile,
+): Promise<RevocationStatus> {
+  const metadata = await discoverAuthorizationServerMetadata(profile.mcpIssuer, {
+    fetchFn: input.request,
   });
   const endpoint = revocationSchema.parse(metadata).revocation_endpoint;
   if (!endpoint) return 'unavailable';
-  const input = { request, endpoint, clientId: client.client_id };
-  await revokeToken({ ...input, token: tokens.refresh_token, hint: 'refresh_token' });
-  await revokeToken({ ...input, token: tokens.access_token, hint: 'access_token' });
+  const target = { request: input.request, endpoint, clientId: input.clientId };
+  await revokeToken({ ...target, token: input.tokens.refresh_token, hint: 'refresh_token' });
+  await revokeToken({ ...target, token: input.tokens.access_token, hint: 'access_token' });
   return 'revoked';
 }
 async function revokeToken(input: {

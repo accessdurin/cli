@@ -79,7 +79,7 @@ It does not trust a saved completion flag. No pasted endpoint or token is requir
 | Flag                      | Applies to                                                               |
 | ------------------------- | ------------------------------------------------------------------------ |
 | `--profile <id>`          | `verify`, `logout`, `tools …`, `mcp …`; otherwise use the active profile |
-| `--config-dir <path>`     | All commands; default `~/.config/durin`                                  |
+| `--config-dir <path>`     | All commands; default `~/.config/durin`; must be private to you          |
 | `--input <file\|->`       | `tools call`; a JSON object, at most 1 MiB; `-` reads stdin              |
 | `--idempotency-key <key>` | Required for `tools call`; retain it on retries                          |
 | `--approval-id <id>`      | `tools call`; resume the exact independently approved operation          |
@@ -101,6 +101,10 @@ Tool results retain their native content, structured output and errors. A tool e
 produces exit status 1. After an approval-required response, obtain independent
 approval in Durin, then repeat the same arguments and idempotency key with
 `--approval-id`. An uncertain response is never retried automatically with a new key.
+
+CLI tool listings and calls include only tools whose names are inert shell arguments:
+up to 128 letters, digits, `_`, `.`, `:`, `/`, and `-`, starting with a letter, digit,
+or `_`. The stdio bridge still serves the complete native catalog.
 
 ## Agent configuration
 
@@ -124,7 +128,9 @@ Project or managed harness settings may override these user-level files.
 The CLI copies its executable and native credential-store dependency to a stable
 location under the profile directory. Agent configs contain absolute Node/runtime
 paths and profile references, never tokens. Keep the referenced Node installation
-available. `NODE_EXTRA_CA_CERTS` is passed to the verification child when present;
+available. Because agents execute that runtime, the CLI refuses a profile directory
+that another user owns or can write, and reuses an installed runtime only when it
+matches the running CLI byte for byte. `NODE_EXTRA_CA_CERTS` is passed to the verification child when present;
 custom enterprise certificate settings must also be available to your harness.
 
 ## Direct MCP and credentials
@@ -138,13 +144,17 @@ supply this metadata can use `durin mcp serve`.
 
 The stdio bridge adds missing operation keys, keeps pending/uncertain calls across
 process restarts, and resumes the same approval. It retains native schemas and
-results. Its ledger stores hashes and operation IDs, not tool arguments. Successful
-responses clear pending records; a later deliberate call may create a new operation.
+results. Its ledger stores hashes and operation IDs, not tool arguments. Any result
+that is not an error clears its pending record. An approval is used once: when the
+approved call fails, the bridge keeps its operation key but not the approval. Records
+expire 24 hours after their last change, after which an identical call is a new
+operation.
 
 MCP credentials use macOS Keychain, Windows Credential Manager, or Linux Secret
 Service. There is no plaintext fallback. Account-session tokens remain in memory
 only during onboarding. `logout` affects the selected CLI-owned MCP grant, retains
-config/profile metadata, and reports remote revocation separately. Other clients'
+config/profile metadata, and reports remote revocation separately. If the revocation
+request fails, the grant stays stored so that `durin logout` can retry it. Other clients'
 OAuth grants and browser sessions are unaffected.
 
 If a process dies while holding a profile lock, the CLI reports its exact lock path.

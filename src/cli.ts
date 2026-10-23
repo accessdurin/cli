@@ -5,6 +5,7 @@ import { wizard } from './commands/wizard.js';
 import { profileCommand, logoutCommand } from './profile-commands.js';
 import { toolCommand } from './tool-commands.js';
 import { mcpCommand, verifyProfile } from './mcp-command.js';
+import { assertPrivateDirectory } from './private-directory.js';
 
 const COMMANDS: Readonly<Record<string, (options: CliOptions) => Promise<void>>> = {
   '': wizard,
@@ -27,6 +28,7 @@ async function main(): Promise<void> {
   const command = options.positionals[0] ?? '';
   const handler = commandHandler(command);
   if (!handler) throw new CliError('Unknown command. Run durin --help.');
+  await assertPrivateDirectory(options.directory);
   await handler(options);
 }
 void Promise.resolve()

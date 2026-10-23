@@ -1,4 +1,7 @@
 import { execFile } from 'node:child_process';
+import { chmod, mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { build } from 'vite';
@@ -30,6 +33,20 @@ describe('CLI public interface', () => {
       stderr: expect.stringContaining('Invalid arguments'),
     });
   });
+  it.skipIf(process.platform === 'win32')(
+    'refuses a configuration directory other users can write',
+    async () => {
+      const directory = await mkdtemp(join(tmpdir(), 'durin-cli-'));
+      try {
+        await chmod(directory, 0o777);
+        await expect(
+          exec(process.execPath, ['dist/cli.js', 'profiles', 'list', '--config-dir', directory]),
+        ).rejects.toMatchObject({ code: 1, stderr: expect.stringContaining('chmod 700') });
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    },
+  );
   it.each(['--agent', '-a'])('rejects the removed %s option before onboarding', async (flag) => {
     await expect(
       exec(process.execPath, ['dist/cli.js', '--help', flag, 'claude']),

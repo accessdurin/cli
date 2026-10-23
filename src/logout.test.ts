@@ -3,30 +3,29 @@ import { signOutMcp } from './logout.js';
 import { createProfile } from './profiles.js';
 import { McpOAuthProvider } from './mcp-oauth.js';
 
-it('revokes this profile grant where supported and removes only its local credentials', async () => {
-  const profile = createProfile({
-    appOrigin: 'https://app.example.test',
-    accountIssuer: 'https://account.example.test',
-    accountClientId: 'account',
-    principalId: 'user_one',
-    workosOrganizationId: 'org_one',
-    organizationId: 'org_internal',
-    environment: 'production',
-    resource: `https://mcp.example.test/mcp/u/${'a'.repeat(64)}`,
-    mcpIssuer: 'https://issuer.example.test',
-    development: false,
-  });
-  const values = new Map<string, string>([['unrelated', 'keep']]);
-  const store = {
-    read: async (key: string) => values.get(key) ?? null,
-    write: async (key: string, value: string) => {
-      values.set(key, value);
-    },
-    remove: async (key: string) => {
-      values.delete(key);
-    },
-  };
-  const provider = new McpOAuthProvider({ profile, store });
+const profile = createProfile({
+  appOrigin: 'https://app.example.test',
+  accountIssuer: 'https://account.example.test',
+  accountClientId: 'account',
+  principalId: 'user_one',
+  workosOrganizationId: 'org_one',
+  organizationId: 'org_internal',
+  environment: 'production',
+  resource: `https://mcp.example.test/mcp/u/${'a'.repeat(64)}`,
+  mcpIssuer: 'https://issuer.example.test',
+  development: false,
+});
+const memoryStore = (values: Map<string, string>) => ({
+  read: async (key: string) => values.get(key) ?? null,
+  write: async (key: string, value: string) => {
+    values.set(key, value);
+  },
+  remove: async (key: string) => {
+    values.delete(key);
+  },
+});
+const signedIn = async (values: Map<string, string>): Promise<McpOAuthProvider> => {
+  const provider = new McpOAuthProvider({ profile, store: memoryStore(values) });
   await provider.saveClientInformation({ client_id: 'client_one', issuer: profile.mcpIssuer });
   await provider.saveTokens({
     access_token: 'synthetic-access',
@@ -34,20 +33,61 @@ it('revokes this profile grant where supported and removes only its local creden
     token_type: 'Bearer',
     issuer: profile.mcpIssuer,
   });
+  return provider;
+};
+const authorizationServer =
+  (revoke: (init?: RequestInit) => Response): typeof fetch =>
+  async (url, init) =>
+    String(url).includes('.well-known')
+      ? Response.json({
+          issuer: profile.mcpIssuer,
+          authorization_endpoint: 'https://issuer.example.test/authorize',
+          token_endpoint: 'https://issuer.example.test/token',
+          response_types_supported: ['code'],
+          revocation_endpoint: 'https://issuer.example.test/revoke',
+        })
+      : revoke(init);
+
+it('revokes this profile grant where supported and removes only its local credentials', async () => {
+  const values = new Map<string, string>([['unrelated', 'keep']]);
+  await signedIn(values);
   const revoked: string[] = [];
-  const request: typeof fetch = async (url, init) => {
-    if (String(url).includes('.well-known'))
-      return Response.json({
-        issuer: profile.mcpIssuer,
-        authorization_endpoint: 'https://issuer.example.test/authorize',
-        token_endpoint: 'https://issuer.example.test/token',
-        response_types_supported: ['code'],
-        revocation_endpoint: 'https://issuer.example.test/revoke',
-      });
+  const request = authorizationServer((init) => {
     revoked.push(new URLSearchParams(String(init?.body)).get('token')!);
     return new Response(null, { status: 200 });
-  };
-  expect(await signOutMcp({ profile, store, request })).toBe('revoked');
+  });
+  expect(await signOutMcp({ profile, store: memoryStore(values), request })).toEqual({
+    remote: 'revoked',
+    local: 'cleared',
+  });
   expect(revoked).toEqual(['synthetic-refresh', 'synthetic-access']);
   expect([...values.entries()]).toEqual([['unrelated', 'keep']]);
+});
+
+it('keeps the grant when revocation fails so that logout can retry it', async () => {
+  const values = new Map<string, string>();
+  const provider = await signedIn(values);
+  let status = 503;
+  const request = authorizationServer(() => new Response(null, { status }));
+  expect(await signOutMcp({ profile, store: memoryStore(values), request })).toEqual({
+    remote: 'failed',
+    local: 'retained',
+  });
+  expect(await provider.tokens()).toMatchObject({ refresh_token: 'synthetic-refresh' });
+  status = 200;
+  expect(await signOutMcp({ profile, store: memoryStore(values), request })).toEqual({
+    remote: 'revoked',
+    local: 'cleared',
+  });
+  expect(values.size).toBe(0);
+});
+
+it('clears saved credentials that cannot be read, since they cannot be revoked', async () => {
+  const values = new Map<string, string>([[`mcp:${profile.id}:tokens`, 'not json']]);
+  const request = authorizationServer(() => new Response(null, { status: 500 }));
+  expect(await signOutMcp({ profile, store: memoryStore(values), request })).toEqual({
+    remote: 'failed',
+    local: 'cleared',
+  });
+  expect(values.size).toBe(0);
 });

@@ -38,8 +38,8 @@ Perform only the user's authorized task with the inspected schema. Write the
 exact JSON object to a local input file outside the repository when sensitive,
 use restrictive file permissions, and remove the temporary file when finished.
 Keep request content out of command strings, shell substitutions, and logs.
-Use actual catalog names and profile IDs as quoted arguments; never execute raw
-skill arguments as a command.
+Use actual catalog names and profile IDs as single-quoted arguments; never execute
+raw skill arguments as a command.
 
 Choose a unique idempotency key for one logical operation and retain it before
 the first invocation. An example command shape is:
@@ -71,6 +71,6 @@ durin tools call <catalog-tool-name> --profile <profile-id> \
 For a timeout or uncertain response, do not create a new key, change the input,
 switch profiles, or retry in a loop. Report the uncertainty and retain the
 operation identity for a deliberate retry. The stdio bridge keeps pending
-operations across restarts. If its outcome or identity cannot be established,
-stop and resolve that state before another call. A new deliberate operation gets
-a new key only after the prior operation's result is resolved.
+operations across restarts for up to 24 hours. If its outcome or identity cannot
+be established, stop and resolve that state before another call. A new deliberate
+operation gets a new key only after the prior operation's result is resolved.
