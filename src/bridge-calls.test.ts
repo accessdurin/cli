@@ -161,17 +161,28 @@ it('stops resuming an operation a day after its last state change, even across r
   }
 });
 
+it('keeps the same operation across an input_required result', async () => {
+  const bridge = new BridgeCalls(memoryLedger());
+  const first = controlOf(await bridge.outgoing(request));
+  await bridge.deliver(
+    {
+      jsonrpc: '2.0',
+      id: 1,
+      result: { resultType: 'input_required', inputRequests: {}, requestState: 'state-one' },
+    },
+    ignoreDelivery,
+  );
+  expect(controlOf(await bridge.outgoing({ ...request, id: 2 }))).toEqual(first);
+});
+
 it.each([
-  {
-    name: 'input_required',
-    result: { resultType: 'input_required', inputRequests: {}, requestState: 'state-one' },
-  },
-  { name: 'task', result: { task: { taskId: 'task-one', status: 'working' } } },
-])('keeps the same operation across a non-final $name result', async ({ result }) => {
+  { name: 'structured-only', result: { structuredContent: { ok: true } } },
+  { name: 'task-creating', result: { task: { taskId: 'task-one', status: 'working' } } },
+])('resolves the operation on a $name result', async ({ result }) => {
   const bridge = new BridgeCalls(memoryLedger());
   const first = controlOf(await bridge.outgoing(request));
   await bridge.deliver({ jsonrpc: '2.0', id: 1, result }, ignoreDelivery);
-  expect(controlOf(await bridge.outgoing({ ...request, id: 2 }))).toEqual(first);
+  expect(controlOf(await bridge.outgoing({ ...request, id: 2 }))).not.toEqual(first);
 });
 
 it('never stores or replays an approval ID that is unsafe on a command line', async () => {

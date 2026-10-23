@@ -92,13 +92,18 @@ it('clears saved credentials that cannot be read, since they cannot be revoked',
   expect(values.size).toBe(0);
 });
 
+const networkFailure = (code: string) => () => {
+  throw new TypeError('fetch failed', { cause: Object.assign(new Error(code), { code }) });
+};
 it.each([
   ['a busy server', () => new Response(null, { status: 503 })],
   ['rate limiting', () => new Response(null, { status: 429 })],
+  ['a refused connection', networkFailure('ECONNREFUSED')],
+  ['a reset connection', networkFailure('UND_ERR_SOCKET')],
   [
-    'a network failure',
+    'a timeout',
     () => {
-      throw new TypeError('fetch failed');
+      throw new DOMException('The operation was aborted due to timeout', 'TimeoutError');
     },
   ],
 ])('keeps the grant after %s', async (_name, revoke) => {
@@ -108,6 +113,17 @@ it.each([
     await signOutMcp({ profile, store: memoryStore(values), request: authorizationServer(revoke) }),
   ).toEqual({ remote: 'failed', local: 'retained' });
   expect(values.size).toBe(2);
+});
+
+it('clears the grant despite a transient failure when forced', async () => {
+  const values = new Map<string, string>();
+  await signedIn(values);
+  const request = authorizationServer(() => new Response(null, { status: 503 }));
+  expect(await signOutMcp({ profile, store: memoryStore(values), request, force: true })).toEqual({
+    remote: 'failed',
+    local: 'cleared',
+  });
+  expect(values.size).toBe(0);
 });
 
 const metadataWith = (revocationEndpoint: string) => ({
@@ -127,6 +143,20 @@ it.each([
     authorizationServer(() => Response.json({ error: 'invalid_client' }, { status: 401 })),
   ],
   ['missing metadata', async () => new Response(null, { status: 404 })],
+  [
+    'a redirect',
+    authorizationServer(() => {
+      throw new TypeError('fetch failed', { cause: new Error('unexpected redirect') });
+    }),
+  ],
+  ['an unknown host', authorizationServer(networkFailure('ENOTFOUND'))],
+  ['an untrusted certificate', authorizationServer(networkFailure('DEPTH_ZERO_SELF_SIGNED_CERT'))],
+  [
+    'an unclassified fetch failure',
+    authorizationServer(() => {
+      throw new TypeError('fetch failed');
+    }),
+  ],
   [
     'an insecure revocation endpoint',
     async (url: string | URL | Request) =>

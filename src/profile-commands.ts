@@ -18,7 +18,12 @@ export async function profileCommand(options: CliOptions): Promise<void> {
 export async function logoutCommand(options: CliOptions): Promise<void> {
   const profile = await new FileProfiles(options.directory).load(options.values.profile);
   const { remote, local } = await withProfileLock(options.directory, profile.id, () =>
-    signOutMcp({ profile, store: new NativeCredentialStore(), request: fetch }),
+    signOutMcp({
+      profile,
+      store: new NativeCredentialStore(),
+      request: fetch,
+      force: options.values.force ?? false,
+    }),
   );
   printJson({
     profile: profile.id,
@@ -26,7 +31,7 @@ export async function logoutCommand(options: CliOptions): Promise<void> {
     remoteMcpGrant: remote,
     detail:
       local === 'retained'
-        ? 'Revocation failed, so this profile’s MCP grant was kept. Run durin logout again to retry revocation.'
+        ? 'Revocation failed, so this profile’s MCP grant was kept. Run durin logout again to retry, or durin logout --force to clear it locally anyway.'
         : 'Agent configuration is retained. Run durin to sign in again. Other organization MCP grants are unchanged.',
   });
   if (remote === 'failed') process.exitCode = 1;

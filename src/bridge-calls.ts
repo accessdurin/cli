@@ -156,12 +156,14 @@ const withApproval = (control: PendingCliCall, approvalId: string): PendingCliCa
   cliIdentifierSchema.safeParse(approvalId).success
     ? { ...control, approvalId }
     : { idempotencyKey: control.idempotencyKey };
-/** Multi-round-trip (`input_required`) and task results are not the operation's outcome. */
+/**
+ * An `input_required` result is answered by repeating the same call, so it stays pending.
+ * A created task is resolved here: its outcome arrives through `tasks/result`, not a new call.
+ */
 const finalSuccess = (result: JSONRPCResultResponse['result']): boolean =>
   [
-    Array.isArray(result.content),
+    result.content === undefined || Array.isArray(result.content),
     (result.resultType ?? 'complete') === 'complete',
-    result.task === undefined,
     result.isError !== true,
   ].every(Boolean);
 const nativeCall = (message: JSONRPCMessage): message is JSONRPCRequest =>

@@ -27,6 +27,7 @@ describe('CLI public interface', () => {
     ['tools', 'list', '--input', 'unused.json'],
     ['login', '--profile', 'a'.repeat(64)],
     ['mcp', 'serve', '--dev'],
+    ['tools', 'list', '--force'],
   ])('rejects unused arguments: %j', async (...args) => {
     await expect(exec(process.execPath, ['dist/cli.js', ...args])).rejects.toMatchObject({
       code: 1,
@@ -47,6 +48,23 @@ describe('CLI public interface', () => {
       }
     },
   );
+  it('accepts --force for logout', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'durin-cli-'));
+    try {
+      const failure = await exec(process.execPath, [
+        'dist/cli.js',
+        'logout',
+        '--force',
+        '--config-dir',
+        directory,
+      ]).catch((error: { stderr: string }) => error);
+      expect(failure).toMatchObject({
+        stderr: expect.not.stringMatching(/Unknown option|Invalid arguments/u),
+      });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
   it.each(['--agent', '-a'])('rejects the removed %s option before onboarding', async (flag) => {
     await expect(
       exec(process.execPath, ['dist/cli.js', '--help', flag, 'claude']),

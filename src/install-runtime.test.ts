@@ -67,6 +67,37 @@ it.each([
 });
 
 it.skipIf(process.platform === 'win32')(
+  'reuses a runtime staged from group- or world-writable package files',
+  async () => {
+    await chmod(join(directory, 'source/node_modules/@napi-rs/keyring/index.js'), 0o666);
+    const first = await installRuntime(join(directory, 'config'), program);
+    await expect(installRuntime(join(directory, 'config'), program)).resolves.toBe(first);
+  },
+);
+
+it.skipIf(process.platform === 'win32')(
+  'refuses to reuse a runtime that other users can modify',
+  async () => {
+    const config = join(directory, 'config');
+    await installRuntime(config, program);
+    await chmod(join(await versionDirectory(config), 'node_modules'), 0o777);
+    await expect(installRuntime(config, program)).rejects.toThrow('does not match this CLI');
+  },
+);
+
+it.skipIf(process.platform === 'win32')(
+  'refuses a runtime directory that other users can access',
+  async () => {
+    const config = join(directory, 'config');
+    await installRuntime(config, program);
+    await chmod(join(config, 'runtime'), 0o777);
+    await expect(installRuntime(config, program)).rejects.toThrow(
+      `${join(config, 'runtime')} must be a directory owned by you`,
+    );
+  },
+);
+
+it.skipIf(process.platform === 'win32')(
   'refuses to install into a directory other users can write',
   async () => {
     const config = join(directory, 'config');

@@ -9,7 +9,7 @@ const RULES: Readonly<Record<string, Rule>> = {
   signup: { positions: 1, flags: onboarding },
   install: { positions: 1, flags: onboarding },
   verify: { positions: 1, flags: profile },
-  logout: { positions: 1, flags: profile },
+  logout: { positions: 1, flags: [...profile, 'force'] },
   'tools list': { positions: 2, flags: profile },
   'tools inspect': { positions: 3, flags: profile },
   'tools call': { positions: 3, flags: [...profile, 'input', 'idempotency-key', 'approval-id'] },

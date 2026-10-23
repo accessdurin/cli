@@ -44,7 +44,7 @@ it.skipIf(!posix)(
     await mkdir(join(root, 'shared', 'config'), { recursive: true, mode: 0o700 });
     await chmod(join(root, 'shared'), 0o777);
     await expect(assertPrivateDirectory(join(root, 'shared', 'config'))).rejects.toThrow(
-      `Another user can replace ${join(root, 'shared')}`,
+      `${join(root, 'shared')}, on the path to the Durin configuration directory, is world-writable without the sticky bit`,
     );
     await chmod(join(root, 'shared'), 0o1777);
     await expect(assertPrivateDirectory(join(root, 'shared', 'config'))).resolves.toBeUndefined();
@@ -69,7 +69,7 @@ it.skipIf(!posix || process.getuid?.() !== 0)(
     await symlink(join(root, 'real'), join(root, 'link'));
     await lchown(join(root, 'link'), 4242, 4242);
     await expect(assertPrivateDirectory(join(root, 'link'))).rejects.toThrow(
-      `Another user can replace ${join(root, 'link')}`,
+      `${join(root, 'link')}, on the path to the Durin configuration directory, is a symlink owned by another user`,
     );
   },
 );

@@ -1,6 +1,16 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
-import { cp, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import {
+  chmod,
+  cp,
+  lstat,
+  mkdir,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
 import { z } from 'zod';
 import { CliError } from './cli-options.js';
@@ -44,9 +54,11 @@ export async function installRuntime(directory: string, source: string): Promise
   await mkdir(temporary, { recursive: true, mode: 0o700 });
   try {
     await assertPrivateDirectory(directory);
+    await assertPrivateDirectory(runtime);
     await writeFile(join(temporary, 'package.json'), '{"type":"module"}\n', { mode: 0o600 });
     await writeFile(join(temporary, 'cli.js'), code, { mode: 0o600 });
     await copyCredentialStore(source, temporary);
+    await restrictTree(temporary);
     const digest = await treeDigest(temporary);
     const id = createHash('sha256').update(digest).digest('hex');
     const version = join(runtime, id);
@@ -62,6 +74,23 @@ export async function installRuntime(directory: string, source: string): Promise
 }
 const ignoreExistingVersion = (error: unknown): void => {
   if (!z.object({ code: z.enum(['EEXIST', 'ENOTEMPTY']) }).safeParse(error).success) throw error;
+};
+const treePaths = async (root: string): Promise<string[]> => [
+  root,
+  ...(await readdir(root, { recursive: true, withFileTypes: true })).map((entry) =>
+    join(entry.parentPath, entry.name),
+  ),
+];
+/** Staged entries are never writable by group or others, so reuse can demand the same. */
+const restrictTree = async (root: string): Promise<void> => {
+  const paths = await treePaths(root);
+  await Promise.all(paths.map(async (path) => chmod(path, (await lstat(path)).mode & 0o755)));
+};
+const othersCanModify = async (root: string): Promise<boolean> => {
+  if (typeof process.getuid !== 'function') return false;
+  const uid = process.getuid();
+  const entries = await Promise.all((await treePaths(root)).map(async (path) => lstat(path)));
+  return entries.some((info) => info.uid !== uid || (info.mode & 0o022) !== 0);
 };
 const treeDigest = async (root: string): Promise<string> => {
   const entries = await readdir(root, { recursive: true, withFileTypes: true });
@@ -80,9 +109,9 @@ const treeDigest = async (root: string): Promise<string> => {
   );
   return files.toSorted().join('\n');
 };
-/** Runtimes are named by their content, so an existing one is reused only if it still matches. */
+/** Runtimes are named by their content; an existing one is reused only if it is still intact. */
 async function assertSameRuntime(digest: string, installed: string): Promise<void> {
-  if ((await treeDigest(installed)) !== digest)
+  if ((await othersCanModify(installed)) || (await treeDigest(installed)) !== digest)
     throw new CliError(
       `The installed Durin runtime at ${installed} does not match this CLI. Stop Durin bridges, remove that directory, then run durin again.`,
     );

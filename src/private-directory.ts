@@ -19,13 +19,17 @@ export const replaceableByOthers = (
 ): boolean =>
   info.isSymbolicLink() ? ![uid, 0].includes(info.uid) : (info.mode & 0o1002) === 0o002;
 
+const unsafeReason = (info: Stats): string =>
+  info.isSymbolicLink()
+    ? 'is a symlink owned by another user'
+    : 'is world-writable without the sticky bit';
 async function assertSafePath(directory: string, uid: number): Promise<void> {
   const paths = [...withAncestors(directory), ...withAncestors(await realpath(directory))];
   const entries = await Promise.all(paths.map(async (path) => ({ path, info: await lstat(path) })));
   const unsafe = entries.find(({ info }) => replaceableByOthers(info, uid));
   if (unsafe)
     throw new CliError(
-      `Another user can replace ${unsafe.path} on the path to the Durin configuration directory. Choose a --config-dir that only you and root control.`,
+      `${unsafe.path}, on the path to the Durin configuration directory, ${unsafeReason(unsafe.info)}, so another user could replace it. Choose another --config-dir.`,
     );
 }
 /** Agents execute the runtime stored here, so other local users must not control it. */

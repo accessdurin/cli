@@ -1,6 +1,5 @@
 import { discoverAuthorizationServerMetadata } from '@modelcontextprotocol/client';
 import { z } from 'zod';
-import { CliError } from './cli-options.js';
 import type { CliProfile } from './contracts/cli-profile.js';
 import type { CredentialStore } from './ports/credential-store.js';
 import { McpOAuthProvider } from './mcp-oauth.js';
@@ -10,6 +9,7 @@ type Options = {
   readonly profile: CliProfile;
   readonly store: CredentialStore;
   readonly request: typeof fetch;
+  readonly force?: boolean;
 };
 const revocationSchema = z.object({ revocation_endpoint: z.url().optional() });
 export type RevocationStatus = 'revoked' | 'unavailable' | 'failed';
@@ -20,11 +20,33 @@ export type SignOutResult = {
 /** The authorization server was unreachable or busy, so revocation may succeed later. */
 class TransientRevocationError extends Error {}
 const retryableStatus = (status: number): boolean => status === 429 || status >= 500;
+const TRANSIENT_NETWORK_CODES = new Set([
+  'EAI_AGAIN',
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'EHOSTDOWN',
+  'EHOSTUNREACH',
+  'ENETDOWN',
+  'ENETUNREACH',
+  'EPIPE',
+  'ETIMEDOUT',
+  'UND_ERR_BODY_TIMEOUT',
+  'UND_ERR_CONNECT_TIMEOUT',
+  'UND_ERR_HEADERS_TIMEOUT',
+  'UND_ERR_SOCKET',
+]);
+const causeCodeSchema = z.object({ cause: z.object({ code: z.string() }) });
+/** Only known-temporary failures qualify; redirects, TLS, and DNS lookup failures do not. */
+const transientNetworkFailure = (error: unknown): boolean => {
+  if (error instanceof DOMException) return error.name === 'TimeoutError';
+  const parsed = causeCodeSchema.safeParse(error);
+  return parsed.success && TRANSIENT_NETWORK_CODES.has(parsed.data.cause.code);
+};
 const transientFailures =
   (request: typeof fetch): typeof fetch =>
   async (input, init) => {
     const response = await request(input, init).catch((error: unknown) => {
-      if (error instanceof CliError) throw error;
+      if (!transientNetworkFailure(error)) throw error;
       throw new TransientRevocationError('MCP authorization server unreachable.', { cause: error });
     });
     if (!retryableStatus(response.status)) return response;
@@ -32,13 +54,13 @@ const transientFailures =
     throw new TransientRevocationError(`MCP authorization server returned ${response.status}.`);
   };
 
-/** Only a transient revocation failure keeps the grant, so that logout can retry it. */
+/** Only a transient revocation failure keeps the grant, unless forced, so logout can retry. */
 export async function signOutMcp(options: Options): Promise<SignOutResult> {
   const provider = new McpOAuthProvider({ profile: options.profile, store: options.store });
-  const remote = await revokeGrant(options, provider).catch(() => 'failed' as const);
-  if (remote === 'retry') return { remote: 'failed', local: 'retained' };
+  const outcome = await revokeGrant(options, provider).catch(() => 'failed' as const);
+  if (outcome === 'retry' && !options.force) return { remote: 'failed', local: 'retained' };
   await provider.invalidateCredentials('all');
-  return { remote, local: 'cleared' };
+  return { remote: outcome === 'retry' ? 'failed' : outcome, local: 'cleared' };
 }
 async function revokeGrant(
   options: Options,
