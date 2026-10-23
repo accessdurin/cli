@@ -5,7 +5,12 @@ import {
   type OAuthClientProvider,
 } from '@modelcontextprotocol/client';
 import type { CliMcpAccess } from './ports/cli-mcp.js';
-import { cliToolCallSchema, type CliToolCall, type CliToolCatalog } from './contracts/cli-mcp.js';
+import {
+  cliToolCallSchema,
+  cliToolNameSchema,
+  type CliToolCall,
+  type CliToolCatalog,
+} from './contracts/cli-mcp.js';
 import { mcpToolResultSchema, type McpToolResult } from './contracts/mcp-result.js';
 import { mcpToolsListSchema } from './contracts/mcp-discovery.js';
 import { safeCliUrl } from './contracts/cli-url.js';
@@ -43,7 +48,11 @@ export class RemoteMcpClient implements CliMcpAccess {
   }
 
   async listTools(): Promise<CliToolCatalog> {
-    return mcpToolsListSchema.parse(await this.client.listTools(undefined, { timeout: 15_000 }));
+    const listed = await this.client.listTools(undefined, { timeout: 15_000 });
+    return mcpToolsListSchema.parse({
+      ...listed,
+      tools: listed.tools.filter((tool) => cliToolNameSchema.safeParse(tool.name).success),
+    });
   }
 
   async callTool(input: CliToolCall): Promise<McpToolResult> {

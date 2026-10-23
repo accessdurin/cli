@@ -3,9 +3,10 @@ import type { Readable } from 'node:stream';
 import { cliToolCallSchema } from './contracts/cli-mcp.js';
 import { type CliOptions, CliError } from './cli-options.js';
 import { withProfileClient } from './profile-client.js';
+import { terminalJson } from './terminal-text.js';
 
 export const printJson = (value: unknown): void => {
-  process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
+  process.stdout.write(`${terminalJson(value)}\n`);
 };
 const inputArguments = async (path: string | undefined): Promise<unknown> => {
   if (!path) throw new CliError('Provide --input <JSON file|-> and --idempotency-key <key>.');

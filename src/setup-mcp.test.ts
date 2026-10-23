@@ -52,6 +52,42 @@ it('authorizes with the exact personal MCP resource without injecting Durin scop
   expect(redirects[0]?.searchParams.get('scope')).toBeNull();
 });
 
+it.each([
+  'file:///C:/Windows/System32/calc.exe',
+  'file://attacker.example.test/share/payload.exe',
+  'smb://attacker.example.test/share',
+  'ms-msdt:/id%20PCWDiagnostic',
+  'http://attacker.example.test/authorize',
+])('never opens a non-HTTPS authorization endpoint: %s', async (endpoint) => {
+  const opened: string[] = [];
+  const values = new Map<string, string>();
+  const store = {
+    read: async (key: string) => values.get(key) ?? null,
+    write: async (key: string, value: string) => {
+      values.set(key, value);
+    },
+    remove: async (key: string) => {
+      values.delete(key);
+    },
+  };
+  await expect(
+    authorizeMcp({
+      profile,
+      store,
+      request: (input, init) =>
+        new URL(String(input)).pathname.includes('oauth-authorization-server')
+          ? Promise.resolve(
+              Response.json({ ...metadata(), authorization_endpoint: endpoint }, { status: 200 }),
+            )
+          : oauthFixtureRequest(input, init),
+      open: async (value) => {
+        opened.push(value);
+      },
+    }),
+  ).rejects.toThrow('Unsafe MCP authorization URL.');
+  expect(opened).toEqual([]);
+});
+
 const oauthFixtureRequest: typeof fetch = async (input, init) => {
   const url = new URL(String(input));
   const route = oauthRoutes(init).find(({ match }) => match(url));

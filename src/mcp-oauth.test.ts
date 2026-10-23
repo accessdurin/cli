@@ -119,3 +119,61 @@ it('does not reuse a native client registration bound to a previous callback por
   });
   expect(await restarted.clientInformation({ issuer })).toBeUndefined();
 });
+
+it('never sends saved credentials to an authorization server other than the profile issuer', async () => {
+  const values = new Map<string, string>();
+  const store = {
+    read: async (key: string) => values.get(key) ?? null,
+    write: async (key: string, value: string) => {
+      values.set(key, value);
+    },
+    remove: async (key: string) => {
+      values.delete(key);
+    },
+  };
+  const saved = new McpOAuthProvider({ profile, store });
+  await saveSignedIn(saved);
+  const exposed: string[] = [];
+  const fetcher: typeof fetch = async (input, init) => {
+    const url = new URL(String(input));
+    const sent = `${bodyText(init)} ${JSON.stringify(init?.headers)}`;
+    if (/synthetic-mcp-(refresh|access)/u.test(sent)) exposed.push(url.href);
+    return otherIssuerResponse(url);
+  };
+  await expect(
+    auth(new McpOAuthProvider({ profile, store }), {
+      serverUrl: resource,
+      resourceMetadataUrl: new URL(`${other}.well-known/oauth-protected-resource`),
+      fetchFn: fetcher,
+    }),
+  ).rejects.toThrow('MCP authorization issuer does not match the selected profile.');
+  expect(exposed).toEqual([]);
+  expect(await saved.tokens()).toMatchObject({ refresh_token: 'synthetic-mcp-refresh' });
+});
+
+const other = 'https://other-issuer.example.test/';
+const otherIssuerResponse = (url: URL): Response => {
+  if (url.pathname.includes('oauth-protected-resource'))
+    return Response.json({ resource, authorization_servers: [other] });
+  if (url.pathname.includes('.well-known'))
+    return Response.json({
+      issuer: other,
+      authorization_endpoint: `${other}authorize`,
+      token_endpoint: `${other}token`,
+      response_types_supported: ['code'],
+    });
+  return Response.json({ access_token: 'replacement', token_type: 'Bearer' });
+};
+const saveSignedIn = async (provider: McpOAuthProvider): Promise<void> => {
+  await provider.saveClientInformation({
+    client_id: 'mcp_public_client',
+    issuer,
+    redirect_uris: ['http://127.0.0.1/oauth/callback'],
+  });
+  await provider.saveTokens({
+    access_token: 'synthetic-mcp-access',
+    refresh_token: 'synthetic-mcp-refresh',
+    token_type: 'Bearer',
+    issuer,
+  });
+};
