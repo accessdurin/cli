@@ -40,7 +40,7 @@ export async function assertPrivateDirectory(directory: string): Promise<void> {
   if (!info) return;
   if ([!info.isDirectory(), info.uid !== uid, (info.mode & 0o077) !== 0].some(Boolean))
     throw new CliError(
-      `The Durin configuration directory ${directory} must be a directory owned by you that only you can access. Run chmod 700 on it, or choose another --config-dir.`,
+      `The Durin directory ${directory} must be a directory owned by you that only you can access. Run chmod 700 on it, or choose another --config-dir.`,
     );
   await assertSafePath(directory, uid);
 }
