@@ -1,5 +1,6 @@
 import { discoverAuthorizationServerMetadata } from '@modelcontextprotocol/client';
 import { z } from 'zod';
+import { CliError } from './cli-options.js';
 import type { CliProfile } from './contracts/cli-profile.js';
 import type { CredentialStore } from './ports/credential-store.js';
 import { McpOAuthProvider } from './mcp-oauth.js';
@@ -16,7 +17,22 @@ export type SignOutResult = {
   readonly remote: RevocationStatus;
   readonly local: 'cleared' | 'retained';
 };
-/** A grant whose revocation request failed stays stored so that logout can be retried. */
+/** The authorization server was unreachable or busy, so revocation may succeed later. */
+class TransientRevocationError extends Error {}
+const retryableStatus = (status: number): boolean => status === 429 || status >= 500;
+const transientFailures =
+  (request: typeof fetch): typeof fetch =>
+  async (input, init) => {
+    const response = await request(input, init).catch((error: unknown) => {
+      if (error instanceof CliError) throw error;
+      throw new TransientRevocationError('MCP authorization server unreachable.', { cause: error });
+    });
+    if (!retryableStatus(response.status)) return response;
+    await response.body?.cancel();
+    throw new TransientRevocationError(`MCP authorization server returned ${response.status}.`);
+  };
+
+/** Only a transient revocation failure keeps the grant, so that logout can retry it. */
 export async function signOutMcp(options: Options): Promise<SignOutResult> {
   const provider = new McpOAuthProvider({ profile: options.profile, store: options.store });
   const remote = await revokeGrant(options, provider).catch(() => 'failed' as const);
@@ -32,9 +48,12 @@ async function revokeGrant(
   if (!tokens) return 'revoked';
   const client = await provider.clientInformation();
   if (!client) return 'unavailable';
-  const request = secureFetch(options.profile.development, options.request);
+  const request = transientFailures(secureFetch(options.profile.development, options.request));
   return revokeRemotely({ request, clientId: client.client_id, tokens }, options.profile).catch(
-    () => 'retry' as const,
+    (error: unknown) => {
+      if (error instanceof TransientRevocationError) return 'retry' as const;
+      throw error;
+    },
   );
 }
 async function revokeRemotely(

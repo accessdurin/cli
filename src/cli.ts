@@ -6,6 +6,7 @@ import { profileCommand, logoutCommand } from './profile-commands.js';
 import { toolCommand } from './tool-commands.js';
 import { mcpCommand, verifyProfile } from './mcp-command.js';
 import { assertPrivateDirectory } from './private-directory.js';
+import { sanitizeConsole } from './terminal-text.js';
 
 const COMMANDS: Readonly<Record<string, (options: CliOptions) => Promise<void>>> = {
   '': wizard,
@@ -18,6 +19,7 @@ const COMMANDS: Readonly<Record<string, (options: CliOptions) => Promise<void>>>
   profiles: profileCommand,
   logout: logoutCommand,
 };
+sanitizeConsole(console);
 async function main(): Promise<void> {
   const options = cliOptions(process.argv.slice(2));
   if (options.values.help) {

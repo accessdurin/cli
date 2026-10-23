@@ -43,6 +43,19 @@ it('reuses an identical installed runtime', async () => {
   await expect(installRuntime(join(directory, 'config'), program)).resolves.toBe(first);
 });
 
+it('installs a different credential-store build beside the existing runtime', async () => {
+  const config = join(directory, 'config');
+  await installRuntime(config, program);
+  await writeFile(
+    join(directory, 'source/node_modules/@napi-rs/keyring/index.js'),
+    'exports.AsyncEntry = class Rebuilt {};',
+  );
+  const installed = await installRuntime(config, program);
+  const versions = (await readdir(join(config, 'runtime'))).filter((name) => name !== 'cli.mjs');
+  expect(versions).toHaveLength(2);
+  expect((await promisify(execFile)(process.execPath, [installed])).stdout).toBe('function');
+});
+
 it.each([
   ['a modified file', 'cli.js'],
   ['an added file', 'node_modules/@napi-rs/keyring/planted.js'],

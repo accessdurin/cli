@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { terminalJson, terminalText } from './terminal-text.js';
+import { sanitizeConsole, terminalJson, terminalText } from './terminal-text.js';
 
 const CONTROL = /[\p{Cc}\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/u;
 
@@ -24,9 +24,23 @@ it('keeps ordinary international names unchanged', () => {
   );
 });
 
-it('prints JSON that round-trips without raw control characters', () => {
-  const value = { text: 'a\u001b[2Jb\u009b2Jc\u007fd\u0085e', name: 'Café' };
+it('prints JSON that round-trips without raw control or bidi characters', () => {
+  const value = { text: 'a\u001b[2Jb\u009b2Jc\u007fd\u0085e\u202ef\u2066g', name: 'Café' };
   const printed = terminalJson(value);
-  expect(printed.replaceAll('\n', '')).not.toMatch(/\p{Cc}/u);
+  expect(printed.replaceAll('\n', '')).not.toMatch(CONTROL);
   expect(JSON.parse(printed)).toEqual(value);
+});
+
+it('keeps console line layout while removing control sequences', () => {
+  const written: string[] = [];
+  const target = Object.fromEntries(
+    ['debug', 'error', 'info', 'log', 'warn'].map((method) => [
+      method,
+      (text: string) => written.push(`${method}:${text}`),
+    ]),
+  ) as unknown as Console;
+  sanitizeConsole(target);
+  target.warn('[mcp-sdk] Cause: %s', '"\u009b2J\u001b]52;c;eA==\u0007\u202ebad"\n\tnext');
+  target.log({ text: 'ok\u001b[31m' });
+  expect(written).toEqual([`warn:[mcp-sdk] Cause: "bad"\n\tnext`, "log:{ text: 'ok\\x1B[31m' }"]);
 });

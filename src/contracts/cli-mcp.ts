@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { mcpToolsListSchema } from './mcp-discovery.js';
 
-const identifier = z
+export const cliIdentifierSchema = z
   .string()
   .min(1)
   .max(128)
@@ -14,8 +14,8 @@ export const cliToolCallSchema = z
   .object({
     name: cliToolNameSchema,
     arguments: z.record(z.string(), z.json()),
-    idempotencyKey: identifier,
-    approvalId: identifier.optional(),
+    idempotencyKey: cliIdentifierSchema,
+    approvalId: cliIdentifierSchema.optional(),
   })
   .strict();
 export type CliToolCall = z.infer<typeof cliToolCallSchema>;

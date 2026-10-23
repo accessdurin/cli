@@ -12,6 +12,7 @@ import {
 import type { CliCallLedger, PendingCliCall } from './ports/cli-call-ledger.js';
 import { canonicalJson as canonicalArguments } from './canonical-json.js';
 import { cliProfileIdSchema } from './contracts/cli-profile.js';
+import { cliIdentifierSchema } from './contracts/cli-mcp.js';
 
 const controlKey = 'io.durin/control';
 /** An unresolved operation is resumed only this long after its last state change. */
@@ -133,21 +134,36 @@ export class BridgeCalls {
   ): Promise<boolean> {
     const approval = approvalContentSchema.safeParse(result.structuredContent);
     if (approval.success) {
-      await this.ledger.save(tracked.fingerprint, {
-        ...tracked.control,
-        approvalId: approval.data.approvalId,
-      });
+      await this.ledger.save(
+        tracked.fingerprint,
+        withApproval(tracked.control, approval.data.approvalId),
+      );
       return false;
     }
-    if (result.isError !== true) return true;
-    if (tracked.control.approvalId)
-      await this.ledger.save(tracked.fingerprint, {
-        idempotencyKey: tracked.control.idempotencyKey,
-      });
+    if (finalSuccess(result)) return true;
+    if (result.isError === true) await this.consumeApproval(tracked);
     return false;
+  }
+  /** An approval covers one attempt: a failed approved call keeps its key but not its approval. */
+  private async consumeApproval({ fingerprint, control }: TrackedCall): Promise<void> {
+    if (control.approvalId)
+      await this.ledger.save(fingerprint, { idempotencyKey: control.idempotencyKey });
   }
 }
 
+/** Agents pass approval IDs on command lines, so only shell-inert identifiers are resumed. */
+const withApproval = (control: PendingCliCall, approvalId: string): PendingCliCall =>
+  cliIdentifierSchema.safeParse(approvalId).success
+    ? { ...control, approvalId }
+    : { idempotencyKey: control.idempotencyKey };
+/** Multi-round-trip (`input_required`) and task results are not the operation's outcome. */
+const finalSuccess = (result: JSONRPCResultResponse['result']): boolean =>
+  [
+    Array.isArray(result.content),
+    (result.resultType ?? 'complete') === 'complete',
+    result.task === undefined,
+    result.isError !== true,
+  ].every(Boolean);
 const nativeCall = (message: JSONRPCMessage): message is JSONRPCRequest =>
   isJSONRPCRequest(message) && message.method === 'tools/call';
 const callFingerprint = (params: NonNullable<JSONRPCRequest['params']>): string =>

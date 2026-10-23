@@ -91,3 +91,55 @@ it('clears saved credentials that cannot be read, since they cannot be revoked',
   });
   expect(values.size).toBe(0);
 });
+
+it.each([
+  ['a busy server', () => new Response(null, { status: 503 })],
+  ['rate limiting', () => new Response(null, { status: 429 })],
+  [
+    'a network failure',
+    () => {
+      throw new TypeError('fetch failed');
+    },
+  ],
+])('keeps the grant after %s', async (_name, revoke) => {
+  const values = new Map<string, string>();
+  await signedIn(values);
+  expect(
+    await signOutMcp({ profile, store: memoryStore(values), request: authorizationServer(revoke) }),
+  ).toEqual({ remote: 'failed', local: 'retained' });
+  expect(values.size).toBe(2);
+});
+
+const metadataWith = (revocationEndpoint: string) => ({
+  issuer: profile.mcpIssuer,
+  authorization_endpoint: 'https://issuer.example.test/authorize',
+  token_endpoint: 'https://issuer.example.test/token',
+  response_types_supported: ['code'],
+  revocation_endpoint: revocationEndpoint,
+});
+it.each([
+  [
+    'an unsupported token type',
+    authorizationServer(() => Response.json({ error: 'unsupported_token_type' }, { status: 400 })),
+  ],
+  [
+    'a deleted client',
+    authorizationServer(() => Response.json({ error: 'invalid_client' }, { status: 401 })),
+  ],
+  ['missing metadata', async () => new Response(null, { status: 404 })],
+  [
+    'an insecure revocation endpoint',
+    async (url: string | URL | Request) =>
+      String(url).includes('.well-known')
+        ? Response.json(metadataWith('http://issuer.example.test/revoke'))
+        : new Response(null, { status: 200 }),
+  ],
+] as const)('clears the grant when revocation cannot succeed: %s', async (_name, request) => {
+  const values = new Map<string, string>();
+  await signedIn(values);
+  expect(await signOutMcp({ profile, store: memoryStore(values), request })).toEqual({
+    remote: 'failed',
+    local: 'cleared',
+  });
+  expect(values.size).toBe(0);
+});

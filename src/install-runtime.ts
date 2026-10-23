@@ -39,9 +39,7 @@ async function copyCredentialStore(source: string, target: string): Promise<void
 
 export async function installRuntime(directory: string, source: string): Promise<string> {
   const code = await readFile(source);
-  const id = createHash('sha256').update(code).digest('hex');
   const runtime = join(directory, 'runtime');
-  const version = join(runtime, id);
   const temporary = join(runtime, `.install-${randomUUID()}`);
   await mkdir(temporary, { recursive: true, mode: 0o700 });
   try {
@@ -49,9 +47,12 @@ export async function installRuntime(directory: string, source: string): Promise
     await writeFile(join(temporary, 'package.json'), '{"type":"module"}\n', { mode: 0o600 });
     await writeFile(join(temporary, 'cli.js'), code, { mode: 0o600 });
     await copyCredentialStore(source, temporary);
+    const digest = await treeDigest(temporary);
+    const id = createHash('sha256').update(digest).digest('hex');
+    const version = join(runtime, id);
     await rename(temporary, version).catch(async (error: unknown) => {
       ignoreExistingVersion(error);
-      await assertSameRuntime(temporary, version);
+      await assertSameRuntime(digest, version);
     });
     await publishLauncher(runtime, id);
     return join(runtime, 'cli.mjs');
@@ -79,9 +80,9 @@ const treeDigest = async (root: string): Promise<string> => {
   );
   return files.toSorted().join('\n');
 };
-/** An existing runtime is reused only when it is byte-for-byte the runtime just staged. */
-async function assertSameRuntime(staged: string, installed: string): Promise<void> {
-  if ((await treeDigest(staged)) !== (await treeDigest(installed)))
+/** Runtimes are named by their content, so an existing one is reused only if it still matches. */
+async function assertSameRuntime(digest: string, installed: string): Promise<void> {
+  if ((await treeDigest(installed)) !== digest)
     throw new CliError(
       `The installed Durin runtime at ${installed} does not match this CLI. Stop Durin bridges, remove that directory, then run durin again.`,
     );

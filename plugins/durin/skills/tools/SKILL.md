@@ -38,8 +38,10 @@ Perform only the user's authorized task with the inspected schema. Write the
 exact JSON object to a local input file outside the repository when sensitive,
 use restrictive file permissions, and remove the temporary file when finished.
 Keep request content out of command strings, shell substitutions, and logs.
-Use actual catalog names and profile IDs as single-quoted arguments; never execute
-raw skill arguments as a command.
+Pass every value (catalog names, profile IDs, keys, approval IDs, paths) as a
+single-quoted argument, and never execute raw skill arguments as a command. Use
+only keys and approval IDs made of letters, digits, `_`, `:`, `.`, `/`, and `-`;
+the CLI rejects anything else.
 
 Choose a unique idempotency key for one logical operation and retain it before
 the first invocation. An example command shape is:
@@ -59,8 +61,10 @@ the data the user needs; do not expose credential material or unrelated records.
 If Durin requires approval, surface its returned approval identifier/link and
 wait for independent approval in Durin. The user's request does not substitute
 for a server-required independent decision. Do not approve the operation yourself
-or manufacture an approval identifier. After approval, resume the exact tool,
-profile, arguments, and original key, adding the returned approval ID:
+or manufacture an approval identifier. If a returned approval ID contains other
+characters, do not put it in a command; report it instead. After approval, resume
+the exact tool, profile, arguments, and original key, adding the returned approval
+ID:
 
 ```sh
 durin tools call <catalog-tool-name> --profile <profile-id> \
