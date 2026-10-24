@@ -6,6 +6,12 @@ activity. This plugin teaches Claude how to set up the Durin CLI, verify an
 organization profile, discover authorized tools, and preserve operation identity
 when a call needs approval or returns an uncertain result.
 
+The CLI connects Claude to governed MCP tools. The separately installed Durin
+Endpoint Client checks local tool activity and uses its own device enrollment.
+This plugin does not install Endpoint or its hooks. See the CLI's
+[product boundaries](../../README.md#product-boundaries) for authorization, data
+handling and harness coverage.
+
 ## Install the plugin
 
 In Claude Code, run:

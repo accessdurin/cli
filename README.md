@@ -8,6 +8,32 @@ agent conversation. Agent selection is interactive; `--agent` and `-a` are rejec
 Requires Node 24.15 or later in the Node 24 release line and an unlocked OS
 credential store. This repository contains the standalone CLI and the client contracts it consumes.
 
+## Product boundaries
+
+Use the CLI to connect an agent to your organization's governed MCP tools. The
+separately installed Durin Endpoint Client checks supported tool activity on a Mac.
+You can use either client independently, or configure both for the same organization.
+
+| Responsibility   | CLI and Durin gateway                                                                                                    | Durin Endpoint Client                                                                                                                               |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Tool access      | The CLI configures an MCP bridge and invokes tools; the gateway checks access, policy and required independent approval. | Local policies record violations. Default rules flag activity; an optional custom checker can reject a call through a supported harness hook.       |
+| Authorization    | Account login and organization-specific MCP consent establish the CLI profile and tool grant.                            | Separate device enrollment authorizes organization reporting; it does not grant MCP tool access.                                                    |
+| Harness coverage | Setup adapters for Claude Code, Codex, Cursor, Windsurf and OpenCode.                                                    | Local Claude Code and Codex activity; Codex desktop hook execution remains unverified. CLI support for a harness does not imply Endpoint coverage.  |
+| Data sent        | Invoked tool arguments go to the selected Durin gateway and, on execution, the provider.                                 | Organization reporting sends violation metadata, not commands, arguments, paths, prompts or transcripts. Without enrollment, violations stay local. |
+
+Gateway authorization applies to requests routed through Durin. Unrelated shell
+commands, file operations and direct provider connections are outside that boundary.
+A gateway-authorized call can still trigger an Endpoint violation: the two checks
+answer different questions. An Endpoint flag is not a gateway denial, and an absence
+of flags does not authorize a tool call.
+
+CLI onboarding does not install Endpoint or its hooks, and Endpoint sign-in does
+not configure a CLI profile. Their grants and credentials are separate; choose the
+intended organization in each client. `durin verify` checks the selected profile's
+authenticated MCP catalog, not Endpoint enrollment, hook execution or device health.
+The CLI's `durin mcp endpoint` command prints an MCP resource URL; it does not start
+or configure the native Endpoint Client.
+
 ## Run from this repository
 
 ```sh
