@@ -39,7 +39,7 @@
     "prettier": "3.6.2"
   },
   "engines": {
-    "node": ">=24.15.0 <25"
+    "node": ">=24.22.1 <25"
   },
   "description": "Durin organization onboarding, governed tools, and MCP bridge CLI",
   "packageManager": "pnpm@11.21.0",
