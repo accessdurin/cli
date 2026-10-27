@@ -4,7 +4,10 @@ import { CliError } from './cli-options.js';
 import type { CliProfile } from './contracts/cli-profile.js';
 import type { CredentialStore } from './ports/credential-store.js';
 import type { RevocationMarker } from './ports/revocation-marker.js';
+import type { PendingRevocations, UnrevokedGrant } from './ports/pending-revocations.js';
 import { McpOAuthProvider } from './mcp-oauth.js';
+import { withProfileLock } from './profile-lock.js';
+import { FilePendingRevocations } from './revocation-marker.js';
 import { secureFetch } from './safe-fetch.js';
 
 type Options = {
@@ -52,7 +55,9 @@ const unparseable = (error: unknown): boolean =>
  */
 export async function signOutMcp(options: Options): Promise<SignOutResult> {
   const provider = new McpOAuthProvider({ profile: options.profile, store: options.store });
-  const outcome = await revokeGrant(options, provider).catch(() => 'failed' as const);
+  const outcome = await storedGrant(provider)
+    .then((grant) => (grant ? revokeGrant(options.profile, grant, options.request) : 'unavailable'))
+    .catch(() => 'failed' as const);
   if (outcome === 'retry' && !options.force) {
     await options.marker.mark();
     return { remote: 'failed', local: 'retained' };
@@ -61,28 +66,91 @@ export async function signOutMcp(options: Options): Promise<SignOutResult> {
   await options.marker.clear();
   return { remote: outcome === 'retry' ? 'failed' : outcome, local: 'cleared' };
 }
-async function revokeGrant(
-  options: Options,
-  provider: McpOAuthProvider,
-): Promise<RevocationStatus | 'retry'> {
+
+/**
+ * Runs before a sign-in that replaces a grant an unfinished logout kept. The kept grant is
+ * revoked, or handed to the pending list when the server cannot confirm that, and then deleted,
+ * so the new sign-in can never refresh or reuse it.
+ */
+export async function retireKeptGrant(options: {
+  readonly profile: CliProfile;
+  readonly store: CredentialStore;
+  readonly pending: PendingRevocations;
+  readonly request: typeof fetch;
+}): Promise<void> {
+  const provider = new McpOAuthProvider({ profile: options.profile, store: options.store });
+  const grant = await storedGrant(provider).catch(() => undefined);
+  if (grant && !(await revocationFinished(options.profile, grant, options.request)))
+    await options.pending.add(grant);
+  await provider.invalidateCredentials('all');
+}
+
+/** A command spends at most this long on the pending list, so it is never held up for long. */
+const PENDING_RETRY_DEADLINE = 10_000;
+const withDeadline =
+  (request: typeof fetch, deadline: AbortSignal): typeof fetch =>
+  (input, init) =>
+    request(input, {
+      ...init,
+      signal: init?.signal ? AbortSignal.any([init.signal, deadline]) : deadline,
+    });
+/**
+ * Best effort, run by commands that use a profile: retries revoking grants that an earlier
+ * sign-in replaced, and forgets each one only once the server revokes it or offers no
+ * revocation. It never waits for a busy profile and never fails the command.
+ */
+export async function retryPendingRevocations(
+  directory: string,
+  profile: CliProfile,
+  request: typeof fetch = fetch,
+): Promise<void> {
+  const pending = new FilePendingRevocations(directory, profile.id);
+  const retry = async () => {
+    const deadline = AbortSignal.timeout(PENDING_RETRY_DEADLINE);
+    const remaining: UnrevokedGrant[] = [];
+    for (const grant of await pending.entries())
+      if (!(await revocationFinished(profile, grant, withDeadline(request, deadline))))
+        remaining.push(grant);
+    await pending.replace(remaining);
+  };
+  const waiting = await pending.entries().catch(() => []);
+  if (waiting.length > 0) await withProfileLock(directory, profile.id, retry, 0).catch(() => {});
+}
+
+async function storedGrant(provider: McpOAuthProvider): Promise<UnrevokedGrant | undefined> {
   const tokens = await provider.tokens();
-  if (!tokens) return 'unavailable';
+  if (!tokens) return undefined;
   const client = await provider.clientInformation();
-  if (!client) return 'unavailable';
-  const request = transientFailures(secureFetch(options.profile.development, options.request));
-  return revokeRemotely({ request, clientId: client.client_id, tokens }, options.profile).catch(
-    (error: unknown) => {
-      if (error instanceof TransientRevocationError) return 'retry' as const;
-      throw error;
-    },
+  if (!client) return undefined;
+  return {
+    clientId: client.client_id,
+    accessToken: tokens.access_token,
+    ...(tokens.refresh_token ? { refreshToken: tokens.refresh_token } : {}),
+  };
+}
+/** Only a revoked grant, or a server without revocation, can be forgotten safely. */
+const revocationFinished = (
+  profile: CliProfile,
+  grant: UnrevokedGrant,
+  request: typeof fetch,
+): Promise<boolean> =>
+  revokeGrant(profile, grant, request).then(
+    (outcome) => outcome === 'revoked' || outcome === 'unavailable',
+    () => false,
   );
+async function revokeGrant(
+  profile: CliProfile,
+  grant: UnrevokedGrant,
+  request: typeof fetch,
+): Promise<RevocationStatus | 'retry'> {
+  const guarded = transientFailures(secureFetch(profile.development, request));
+  return revokeRemotely({ request: guarded, grant }, profile).catch((error: unknown) => {
+    if (error instanceof TransientRevocationError) return 'retry' as const;
+    throw error;
+  });
 }
 async function revokeRemotely(
-  input: {
-    request: typeof fetch;
-    clientId: string;
-    tokens: { refresh_token?: string | undefined; access_token: string };
-  },
+  input: { request: typeof fetch; grant: UnrevokedGrant },
   profile: CliProfile,
 ): Promise<RevocationStatus> {
   const metadata = await discoverAuthorizationServerMetadata(profile.mcpIssuer, {
@@ -95,9 +163,9 @@ async function revokeRemotely(
   });
   const endpoint = revocationSchema.parse(metadata).revocation_endpoint;
   if (!endpoint) return 'unavailable';
-  const target = { request: input.request, endpoint, clientId: input.clientId };
-  await revokeToken({ ...target, token: input.tokens.refresh_token, hint: 'refresh_token' });
-  await revokeToken({ ...target, token: input.tokens.access_token, hint: 'access_token' });
+  const target = { request: input.request, endpoint, clientId: input.grant.clientId };
+  await revokeToken({ ...target, token: input.grant.refreshToken, hint: 'refresh_token' });
+  await revokeToken({ ...target, token: input.grant.accessToken, hint: 'access_token' });
   return 'revoked';
 }
 async function revokeToken(input: {

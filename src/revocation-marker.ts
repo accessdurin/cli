@@ -1,10 +1,11 @@
-import { randomUUID } from 'node:crypto';
-import { mkdir, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { readFile, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { CliError } from './cli-options.js';
 import { cliProfileIdSchema } from './contracts/cli-profile.js';
+import { atomicWrite } from './profiles.js';
 import type { RevocationMarker } from './ports/revocation-marker.js';
+import type { PendingRevocations, UnrevokedGrant } from './ports/pending-revocations.js';
 
 const SIGN_OUT_UNFINISHED =
   'Signing out of this durin profile hasn’t finished: the authorization server could not confirm that access was revoked, so MCP calls and durin tools are blocked for this profile. Run durin logout again to finish, or durin logout --force to sign out on this computer without the server.';
@@ -14,10 +15,8 @@ const missingFile = (error: unknown): boolean =>
 /** Only the marker's presence matters, so a damaged or unreadable marker still blocks the profile. */
 export class FileRevocationMarker implements RevocationMarker {
   readonly path: string;
-  private readonly directory: string;
   constructor(directory: string, profileId: string) {
-    this.directory = join(directory, 'revocations');
-    this.path = join(this.directory, `${cliProfileIdSchema.parse(profileId)}.pending`);
+    this.path = join(directory, 'revocations', `${cliProfileIdSchema.parse(profileId)}.pending`);
   }
   async pending(): Promise<boolean> {
     return stat(this.path).then(
@@ -26,20 +25,68 @@ export class FileRevocationMarker implements RevocationMarker {
     );
   }
   async mark(): Promise<void> {
-    await mkdir(this.directory, { recursive: true, mode: 0o700 });
-    const temporary = `${this.path}.${randomUUID()}.tmp`;
-    try {
-      await writeFile(temporary, `${JSON.stringify({ markedAt: new Date().toISOString() })}\n`, {
-        mode: 0o600,
-        flag: 'wx',
-      });
-      await rename(temporary, this.path);
-    } finally {
-      await rm(temporary, { force: true });
-    }
+    await atomicWrite(this.path, `${JSON.stringify({ markedAt: new Date().toISOString() })}\n`);
   }
   async clear(): Promise<void> {
     await rm(this.path, { force: true });
+  }
+}
+
+const unrevokedGrantSchema = z
+  .object({
+    clientId: z.string().min(1),
+    accessToken: z.string().min(1),
+    refreshToken: z.string().min(1).optional(),
+  })
+  .strict();
+const pendingListSchema = z.object({ grants: z.array(unrevokedGrantSchema) }).strict();
+const parseJson = (raw: string): unknown => {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+};
+const sameGrant =
+  (grant: UnrevokedGrant) =>
+  (entry: UnrevokedGrant): boolean =>
+    entry.clientId === grant.clientId &&
+    entry.accessToken === grant.accessToken &&
+    entry.refreshToken === grant.refreshToken;
+
+/**
+ * Holds live tokens, so it is private to this user. Callers hold the profile lock. A list that
+ * cannot be read is kept as it is rather than overwritten, so no grant is silently forgotten.
+ */
+export class FilePendingRevocations implements PendingRevocations {
+  readonly path: string;
+  constructor(directory: string, profileId: string) {
+    this.path = join(
+      directory,
+      'revocations',
+      `${cliProfileIdSchema.parse(profileId)}.unrevoked.json`,
+    );
+  }
+  async entries(): Promise<readonly UnrevokedGrant[]> {
+    const raw = await readFile(this.path, 'utf8').catch((error: unknown) => {
+      if (missingFile(error)) return null;
+      throw error;
+    });
+    if (raw === null) return [];
+    const parsed = pendingListSchema.safeParse(parseJson(raw));
+    if (!parsed.success)
+      throw new CliError(
+        `durin can’t read its list of earlier sign-ins that still need to be revoked (${this.path}). Move that file aside, then run durin again.`,
+      );
+    return parsed.data.grants;
+  }
+  async add(grant: UnrevokedGrant): Promise<void> {
+    const grants = await this.entries();
+    if (!grants.some(sameGrant(grant))) await this.replace([...grants, grant]);
+  }
+  async replace(grants: readonly UnrevokedGrant[]): Promise<void> {
+    if (grants.length === 0) return rm(this.path, { force: true });
+    await atomicWrite(this.path, `${JSON.stringify({ grants })}\n`);
   }
 }
 

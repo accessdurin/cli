@@ -13,7 +13,8 @@ import { authorizeMcp, mcpIssuer } from './setup-mcp.js';
 import { pollingClock } from './polling-clock.js';
 import { secureFetch } from './safe-fetch.js';
 import { withProfileLock } from './profile-lock.js';
-import { FileRevocationMarker } from './revocation-marker.js';
+import { FilePendingRevocations, FileRevocationMarker } from './revocation-marker.js';
+import { retryPendingRevocations } from './logout.js';
 import { installRuntime } from './install-runtime.js';
 import { verifySavedBridge } from './verify-bridge.js';
 import { CliError } from './cli-options.js';
@@ -110,16 +111,22 @@ async function setupAgent(
     toolCount,
   });
 }
-const signInMcp = (options: Awaited<ReturnType<typeof setupContext>>, profile: CliProfile) =>
-  withProfileLock(options.directory, profile.id, () =>
+async function signInMcp(
+  options: Awaited<ReturnType<typeof setupContext>>,
+  profile: CliProfile,
+): Promise<void> {
+  await retryPendingRevocations(options.directory, profile, options.request);
+  await withProfileLock(options.directory, profile.id, () =>
     authorizeMcp({
       profile,
       store: options.store,
       marker: new FileRevocationMarker(options.directory, profile.id),
+      pending: new FilePendingRevocations(options.directory, profile.id),
       request: options.request,
       open: options.ui.openAuthorization,
     }),
   );
+}
 async function chosenAgent(options: Options): Promise<AgentConfig> {
   const key = await options.ui.agent.choose();
   const agents = setupAgents(options);

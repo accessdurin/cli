@@ -7,6 +7,7 @@ import { RemoteMcpClient } from './remote-mcp.js';
 import { withProfileLock } from './profile-lock.js';
 import { assertSignOutFinished, FileRevocationMarker } from './revocation-marker.js';
 import { secureFetch } from './safe-fetch.js';
+import { retryPendingRevocations } from './logout.js';
 
 /** Checked under the profile lock, so no request slips past a logout that is still revoking. */
 const withSignedInProfile = <T>(directory: string, profileId: string, work: () => Promise<T>) =>
@@ -23,6 +24,7 @@ export async function profileConnection(options: CliOptions) {
         'No valid organization profile. Run durin in a terminal to complete setup.',
       );
     });
+  await retryPendingRevocations(options.directory, profile);
   return {
     profile,
     resource: profile.resource,

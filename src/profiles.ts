@@ -63,7 +63,8 @@ export class FileProfiles implements CliProfiles {
   }
 }
 
-async function atomicWrite(path: string, value: string): Promise<void> {
+/** Writes a private file so that readers see either the old or the new contents, never a mix. */
+export async function atomicWrite(path: string, value: string): Promise<void> {
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
   const temporary = `${path}.${randomUUID()}.tmp`;
   try {
