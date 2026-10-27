@@ -6,7 +6,7 @@ OAuth discovery, and approval responses. npm currently offers 1.0.0; use the
 public source below until 1.0.1 is released. Do not substitute an unpinned
 package launcher for this installation.
 
-In your own terminal, with Node 24.15 or later in the Node 24 release line and
+In your own terminal, with Node 24.22.1 or later in the Node 24 release line and
 pnpm 11.21.0, build the reviewed source revision in a fresh directory:
 
 ```sh
