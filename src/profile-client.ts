@@ -5,7 +5,15 @@ import { NativeCredentialStore } from './credentials.js';
 import { McpOAuthProvider } from './mcp-oauth.js';
 import { RemoteMcpClient } from './remote-mcp.js';
 import { withProfileLock } from './profile-lock.js';
+import { assertSignOutFinished, FileRevocationMarker } from './revocation-marker.js';
 import { secureFetch } from './safe-fetch.js';
+
+/** Checked under the profile lock, so no request slips past a logout that is still revoking. */
+const withSignedInProfile = <T>(directory: string, profileId: string, work: () => Promise<T>) =>
+  withProfileLock(directory, profileId, async () => {
+    await assertSignOutFinished(new FileRevocationMarker(directory, profileId));
+    return work();
+  });
 
 export async function profileConnection(options: CliOptions) {
   const profile = await new FileProfiles(options.directory)
@@ -21,7 +29,8 @@ export async function profileConnection(options: CliOptions) {
     development: profile.development,
     authorization: new McpOAuthProvider({ profile, store: new NativeCredentialStore() }),
     fetch: secureFetch(profile.development),
-    serialize: (work: () => Promise<void>) => withProfileLock(options.directory, profile.id, work),
+    serialize: (work: () => Promise<void>) =>
+      withSignedInProfile(options.directory, profile.id, work),
   };
 }
 export async function withProfileClient<T>(
@@ -29,7 +38,7 @@ export async function withProfileClient<T>(
   work: (client: RemoteMcpClient) => Promise<T>,
 ): Promise<T> {
   const connection = await profileConnection(options);
-  return withProfileLock(options.directory, connection.profile.id, async () => {
+  return withSignedInProfile(options.directory, connection.profile.id, async () => {
     const client = new RemoteMcpClient(connection);
     try {
       await client.connect();

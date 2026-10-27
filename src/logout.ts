@@ -3,12 +3,14 @@ import { z } from 'zod';
 import { CliError } from './cli-options.js';
 import type { CliProfile } from './contracts/cli-profile.js';
 import type { CredentialStore } from './ports/credential-store.js';
+import type { RevocationMarker } from './ports/revocation-marker.js';
 import { McpOAuthProvider } from './mcp-oauth.js';
 import { secureFetch } from './safe-fetch.js';
 
 type Options = {
   readonly profile: CliProfile;
   readonly store: CredentialStore;
+  readonly marker: RevocationMarker;
   readonly request: typeof fetch;
   readonly force?: boolean;
 };
@@ -40,12 +42,23 @@ const transientFailures =
     throw new TransientRevocationError(`MCP authorization server returned ${response.status}.`);
   };
 
-/** Only a transient revocation failure keeps the grant, unless forced, so logout can retry. */
+/** A 2xx body that is not metadata may come from a portal or proxy rather than the server. */
+const unparseable = (error: unknown): boolean =>
+  error instanceof SyntaxError || (error instanceof Error && error.name === 'ZodError');
+
+/**
+ * Only a transient revocation failure keeps the grant, unless forced, so logout can retry.
+ * A kept grant is marked so that the profile stays blocked until sign-out finishes.
+ */
 export async function signOutMcp(options: Options): Promise<SignOutResult> {
   const provider = new McpOAuthProvider({ profile: options.profile, store: options.store });
   const outcome = await revokeGrant(options, provider).catch(() => 'failed' as const);
-  if (outcome === 'retry' && !options.force) return { remote: 'failed', local: 'retained' };
+  if (outcome === 'retry' && !options.force) {
+    await options.marker.mark();
+    return { remote: 'failed', local: 'retained' };
+  }
   await provider.invalidateCredentials('all');
+  await options.marker.clear();
   return { remote: outcome === 'retry' ? 'failed' : outcome, local: 'cleared' };
 }
 async function revokeGrant(
@@ -74,6 +87,11 @@ async function revokeRemotely(
 ): Promise<RevocationStatus> {
   const metadata = await discoverAuthorizationServerMetadata(profile.mcpIssuer, {
     fetchFn: input.request,
+  }).catch((error: unknown) => {
+    if (!unparseable(error)) throw error;
+    throw new TransientRevocationError('MCP authorization server metadata was unreadable.', {
+      cause: error,
+    });
   });
   const endpoint = revocationSchema.parse(metadata).revocation_endpoint;
   if (!endpoint) return 'unavailable';

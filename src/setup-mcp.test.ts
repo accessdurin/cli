@@ -1,6 +1,11 @@
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { expect, it, vi } from 'vitest';
 import { authorizeMcp } from './setup-mcp.js';
 import { createProfile } from './profiles.js';
+import { FileRevocationMarker } from './revocation-marker.js';
+import type { RevocationMarker } from './ports/revocation-marker.js';
 
 vi.mock('./remote-mcp.js', () => ({
   RemoteMcpClient: class {
@@ -25,6 +30,58 @@ const profile = createProfile({
   development: false,
 });
 
+const memoryMarker = (initial = false) => {
+  let pending = initial;
+  return {
+    pending: async () => pending,
+    mark: async () => {
+      pending = true;
+    },
+    clear: async () => {
+      pending = false;
+    },
+  };
+};
+const memoryStore = (values = new Map<string, string>()) => ({
+  read: async (key: string) => values.get(key) ?? null,
+  write: async (key: string, value: string) => {
+    values.set(key, value);
+  },
+  remove: async (key: string) => {
+    values.delete(key);
+  },
+});
+const signIn = (marker: RevocationMarker) =>
+  authorizeMcp({
+    profile,
+    store: memoryStore(),
+    marker,
+    request: oauthFixtureRequest,
+    open: async (value) => {
+      await fetch(callbackUrl(new URL(value)));
+    },
+  });
+
+it('finishes an unfinished sign-out when this profile signs in again', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'durin-revocation-sign-in-'));
+  try {
+    await new FileRevocationMarker(directory, profile.id).mark();
+    expect(await new FileRevocationMarker(directory, profile.id).pending()).toBe(true);
+    expect(await signIn(new FileRevocationMarker(directory, profile.id))).toBe(1);
+    expect(await new FileRevocationMarker(directory, profile.id).pending()).toBe(false);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+it('clears an unfinished sign-out once the new sign-in is authorized', async () => {
+  const marker = memoryMarker(true);
+  const cleared = vi.spyOn(marker, 'clear');
+  expect(await signIn(marker)).toBe(1);
+  expect(cleared).toHaveBeenCalledOnce();
+  expect(await marker.pending()).toBe(false);
+});
+
 it('authorizes with the exact personal MCP resource without injecting Durin scopes', async () => {
   const redirects: URL[] = [];
   const values = new Map<string, string>();
@@ -40,6 +97,7 @@ it('authorizes with the exact personal MCP resource without injecting Durin scop
   const tools = await authorizeMcp({
     profile,
     store,
+    marker: memoryMarker(),
     request: oauthFixtureRequest,
     open: async (value) => {
       const authorization = new URL(value);
@@ -60,6 +118,7 @@ it.each([
   'http://attacker.example.test/authorize',
 ])('never opens a non-HTTPS authorization endpoint: %s', async (endpoint) => {
   const opened: string[] = [];
+  const marker = memoryMarker(true);
   const values = new Map<string, string>();
   const store = {
     read: async (key: string) => values.get(key) ?? null,
@@ -74,6 +133,7 @@ it.each([
     authorizeMcp({
       profile,
       store,
+      marker,
       request: (input, init) =>
         new URL(String(input)).pathname.includes('oauth-authorization-server')
           ? Promise.resolve(
@@ -86,6 +146,7 @@ it.each([
     }),
   ).rejects.toThrow('Unsafe MCP authorization URL.');
   expect(opened).toEqual([]);
+  expect(await marker.pending()).toBe(true);
 });
 
 const oauthFixtureRequest: typeof fetch = async (input, init) => {

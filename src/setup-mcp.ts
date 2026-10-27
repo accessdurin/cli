@@ -1,5 +1,6 @@
 import { auth, discoverOAuthProtectedResourceMetadata } from '@modelcontextprotocol/client';
 import type { CredentialStore } from './ports/credential-store.js';
+import type { RevocationMarker } from './ports/revocation-marker.js';
 import type { CliProfile } from './contracts/cli-profile.js';
 import { safeCliUrl } from './contracts/cli-url.js';
 import { McpOAuthProvider } from './mcp-oauth.js';
@@ -28,6 +29,7 @@ export async function mcpIssuer(
 type Options = {
   readonly profile: CliProfile;
   readonly store: CredentialStore;
+  readonly marker: RevocationMarker;
   readonly request: typeof fetch;
   readonly open: (url: string) => Promise<void>;
 };
@@ -48,6 +50,7 @@ export async function authorizeMcp(options: Options): Promise<number> {
       fetchFn: options.request,
     });
     if (result === 'REDIRECT') await exchangeCode(options, provider, callback.result);
+    await options.marker.clear();
     return await authenticatedCatalog(options, provider);
   } finally {
     await callback.close();

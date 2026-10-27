@@ -1,3 +1,4 @@
+import type { CliProfile } from './contracts/cli-profile.js';
 import type { CredentialStore } from './ports/credential-store.js';
 import type { PollingClock } from './ports/cli-auth.js';
 import type { AccountIntent, SetupUi } from './ports/cli-setup.js';
@@ -12,6 +13,7 @@ import { authorizeMcp, mcpIssuer } from './setup-mcp.js';
 import { pollingClock } from './polling-clock.js';
 import { secureFetch } from './safe-fetch.js';
 import { withProfileLock } from './profile-lock.js';
+import { FileRevocationMarker } from './revocation-marker.js';
 import { installRuntime } from './install-runtime.js';
 import { verifySavedBridge } from './verify-bridge.js';
 import { CliError } from './cli-options.js';
@@ -67,7 +69,7 @@ async function setupAgent(
   options: Awaited<ReturnType<typeof setupContext>>,
   account: Awaited<ReturnType<typeof setupAccount>>,
 ): Promise<void> {
-  const { request, store } = options;
+  const { request } = options;
   const workspace = await account.api.workspace();
   assertWorkspace(account.identity, workspace);
   const agent = await chosenAgent(options);
@@ -97,9 +99,7 @@ async function setupAgent(
   await writeBridgeConfig(agent, bridge);
   options.ui.agent.configured(agent.configPath);
   options.ui.stage('Sign in to this organization’s Durin MCP');
-  await withProfileLock(options.directory, profile.id, () =>
-    authorizeMcp({ profile, store, request, open: options.ui.openAuthorization }),
-  );
+  await signInMcp(options, profile);
   options.ui.stage('Verify the saved agent bridge');
   const toolCount = await verifySavedBridge(agent, bridge);
   await profiles.activate(profile.id);
@@ -110,6 +110,16 @@ async function setupAgent(
     toolCount,
   });
 }
+const signInMcp = (options: Awaited<ReturnType<typeof setupContext>>, profile: CliProfile) =>
+  withProfileLock(options.directory, profile.id, () =>
+    authorizeMcp({
+      profile,
+      store: options.store,
+      marker: new FileRevocationMarker(options.directory, profile.id),
+      request: options.request,
+      open: options.ui.openAuthorization,
+    }),
+  );
 async function chosenAgent(options: Options): Promise<AgentConfig> {
   const key = await options.ui.agent.choose();
   const agents = setupAgents(options);
