@@ -23,16 +23,15 @@ export type SignOutResult = {
   readonly remote: RevocationStatus;
   readonly local: 'cleared' | 'retained';
 };
-/** The authorization server was unreachable or busy, so revocation may succeed later. */
+/**
+ * The authorization server did not confirm the revocation, so the grant may still be honoured
+ * and revocation should be retried. Captive portals and proxies answer with redirects and
+ * 4xx pages, so only a 2xx from the revocation endpoint counts as revoked.
+ */
 class TransientRevocationError extends Error {}
 const retryableStatus = (status: number): boolean => status === 429 || status >= 500;
-const redirected = (error: unknown): boolean =>
-  error instanceof TypeError &&
-  error.cause instanceof Error &&
-  error.cause.message === 'unexpected redirect';
-/** Without an HTTP answer the server may still honour the grant; a refused redirect is an answer. */
-const transientNetworkFailure = (error: unknown): boolean =>
-  !(error instanceof CliError) && !redirected(error);
+/** Only a refused unsafe destination is final; anything else, a refused redirect included, is not. */
+const transientNetworkFailure = (error: unknown): boolean => !(error instanceof CliError);
 const transientFailures =
   (request: typeof fetch): typeof fetch =>
   async (input, init) => {
@@ -160,6 +159,10 @@ async function revokeRemotely(
       cause: error,
     });
   });
+  // Discovery gives up when every metadata URL answers 4xx, which a portal or proxy may send.
+  if (!metadata)
+    throw new TransientRevocationError('MCP authorization server metadata was not found.');
+  // Only the server's own metadata can say that it offers no revocation.
   const endpoint = revocationSchema.parse(metadata).revocation_endpoint;
   if (!endpoint) return 'unavailable';
   const target = { request: input.request, endpoint, clientId: input.grant.clientId };
@@ -185,5 +188,6 @@ async function revokeToken(input: {
     }),
   });
   await response.body?.cancel();
-  if (!response.ok) throw new Error('MCP grant revocation failed.');
+  if (!response.ok)
+    throw new TransientRevocationError(`MCP grant revocation returned ${response.status}.`);
 }

@@ -180,6 +180,15 @@ it.each([
     }),
   ],
   ['rate limiting (429)', authorizationServer(() => new Response(null, { status: 429 }))],
+  ['a rejected request (400)', authorizationServer(() => new Response(null, { status: 400 }))],
+  ['a forbidden request (403)', authorizationServer(() => new Response(null, { status: 403 }))],
+  ['a missing endpoint (404)', authorizationServer(() => new Response(null, { status: 404 }))],
+  [
+    'a captive portal redirect',
+    authorizationServer(() => {
+      throw new TypeError('fetch failed', { cause: new Error('unexpected redirect') });
+    }),
+  ],
   ['a server error (5xx)', busy],
   ['a DNS failure (ENOTFOUND)', offline],
   ['a reset connection (ECONNRESET)', unreachable(networkFailure('ECONNRESET'))],
