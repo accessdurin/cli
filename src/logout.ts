@@ -9,6 +9,7 @@ import { McpOAuthProvider } from './mcp-oauth.js';
 import { withProfileLock } from './profile-lock.js';
 import { FilePendingRevocations } from './revocation-marker.js';
 import { secureFetch } from './safe-fetch.js';
+import { profileHostAllowlist } from './contracts/cli-host.js';
 
 type Options = {
   readonly profile: CliProfile;
@@ -147,7 +148,7 @@ async function revokeGrant(
   grant: UnrevokedGrant,
   request: typeof fetch,
 ): Promise<RevocationStatus | 'retry'> {
-  const guarded = transientFailures(secureFetch(profile.development, request));
+  const guarded = transientFailures(secureFetch(profileHostAllowlist(profile), request));
   return revokeRemotely({ request: guarded, grant }, profile).catch((error: unknown) => {
     if (error instanceof TransientRevocationError) return 'retry' as const;
     throw error;

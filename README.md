@@ -33,6 +33,12 @@ Any other `--app-url` deployment must serve both from its own host. Hosts match
 exactly, never by suffix. Loopback hosts (`localhost`, `127.0.0.1`, `[::1]`) need
 `--dev`. Saved profiles are checked again whenever they load; one that points
 elsewhere is refused until you run `durin` to set it up again.
+Every request is checked against these hosts before anything is sent, including
+the token, registration and revocation endpoints that the sign-in server's
+metadata names and any metadata address an MCP server's `401` answer points to.
+Setup reaches only the app, its MCP endpoint and sign-in server, and the account
+API (`api.workos.com`). A saved profile reaches only its MCP endpoint and sign-in
+server. durin refuses any other host and names it in the error.
 
 ## Claude Code plugin
 
@@ -196,8 +202,8 @@ tools …`, `durin verify`, `durin logout`, and `durin` sign-ins for that profil
 those revocations for up to 10 seconds without waiting for a busy profile, and forget
 each old grant once it is revoked or the server says it offers no revocation. A failed
 retry never stops the command. Sign-out finishes without revoking only when the server's
-own metadata lists no revocation endpoint, or when it lists an unsafe one that durin
-will never call; then the grant is cleared locally. If the authorization server revokes
+own metadata lists no revocation endpoint, or when it lists an unsafe one, or one on
+another host, that durin will never call; then the grant is cleared locally. If the authorization server revokes
 the grant itself, the next MCP call through a bridge or `durin tools …` is refused after
 one refused refresh, the stored tokens are deleted rather than retried, and durin asks
 you to sign in again with `durin`. Other clients' OAuth grants and browser sessions are

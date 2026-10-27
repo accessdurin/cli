@@ -18,6 +18,7 @@ import { retryPendingRevocations } from './logout.js';
 import { installRuntime } from './install-runtime.js';
 import { verifySavedBridge } from './verify-bridge.js';
 import { CliError } from './cli-options.js';
+import { deploymentHostAllowlist } from './contracts/cli-host.js';
 
 type Options = {
   readonly appOrigin: string;
@@ -61,7 +62,7 @@ async function setupContext(options: Options) {
   return {
     ...options,
     intent,
-    request: secureFetch(options.development, options.request ?? fetch),
+    request: secureFetch(deploymentHostAllowlist(options), options.request ?? fetch),
     store: options.store ?? new NativeCredentialStore(),
     clock: setupClock(options),
   };

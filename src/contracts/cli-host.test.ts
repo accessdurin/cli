@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { untrustedCliHost, type CliHostRole } from './cli-host.js';
+import {
+  deploymentHostAllowlist,
+  profileHostAllowlist,
+  untrustedCliHost,
+  type CliHostRole,
+} from './cli-host.js';
 
 const personal = `/mcp/u/${'a'.repeat(64)}`;
 const production = { appOrigin: 'https://app.getdurin.com', development: false };
@@ -188,4 +193,39 @@ describe('MCP host pinning', () => {
       expect(untrustedCliHost('resource', value, production)).toBeDefined();
     },
   );
+});
+
+describe('request allowlists', () => {
+  it.each([
+    [production, ['app.getdurin.com', 'mcp.getdurin.com', 'auth.getdurin.com', 'api.workos.com']],
+    [
+      staging,
+      [
+        'moria.app.getdurin.com',
+        'moria.mcp.getdurin.com',
+        'resilient-tiger-64-staging.authkit.app',
+        'api.workos.com',
+      ],
+    ],
+    [custom, ['durin.acme.test', 'api.workos.com']],
+    [{ appOrigin: 'https://127.0.0.1:5270', development: false }, ['api.workos.com']],
+  ])('lets setup for %o reach only its app, MCP and account hosts', (scope, hosts) => {
+    const allowlist = deploymentHostAllowlist(scope);
+    expect(allowlist.hosts.toSorted()).toEqual(hosts.toSorted());
+    expect(allowlist.development).toBe(scope.development);
+  });
+
+  it('keeps loopback for development in a setup allowlist', () => {
+    expect(deploymentHostAllowlist(local)).toMatchObject({ development: true });
+  });
+
+  it('limits a saved profile to its MCP endpoint and sign-in server', () => {
+    expect(
+      profileHostAllowlist({
+        resource: `https://MCP.getdurin.com${personal}`,
+        mcpIssuer: 'https://auth.getdurin.com/',
+        development: false,
+      }),
+    ).toEqual({ hosts: ['mcp.getdurin.com', 'auth.getdurin.com'], development: false });
+  });
 });

@@ -4,12 +4,18 @@ import type { RevocationMarker } from './ports/revocation-marker.js';
 import type { PendingRevocations } from './ports/pending-revocations.js';
 import type { CliProfile } from './contracts/cli-profile.js';
 import { safeCliUrl } from './contracts/cli-url.js';
-import { untrustedCliHost, type CliHostRole, type CliHostScope } from './contracts/cli-host.js';
+import {
+  profileHostAllowlist,
+  untrustedCliHost,
+  type CliHostRole,
+  type CliHostScope,
+} from './contracts/cli-host.js';
 import { McpOAuthProvider } from './mcp-oauth.js';
 import { listenForAuthorization } from './oauth-callback.js';
 import { CliError } from './cli-options.js';
 import { RemoteMcpClient } from './remote-mcp.js';
 import { retireKeptGrant } from './logout.js';
+import { secureFetch } from './safe-fetch.js';
 
 export async function mcpIssuer(
   resource: string,
@@ -44,8 +50,16 @@ type Options = {
   readonly request: typeof fetch;
   readonly open: (url: string) => Promise<void>;
 };
-/** Runs under the profile lock. A grant kept by an unfinished logout is retired, never reused. */
-export async function authorizeMcp(options: Options): Promise<number> {
+/**
+ * Runs under the profile lock. A grant kept by an unfinished logout is retired, never reused.
+ * Every request, including those to endpoints the server's metadata names, stays on the
+ * profile's own hosts.
+ */
+export async function authorizeMcp(input: Options): Promise<number> {
+  const options = {
+    ...input,
+    request: secureFetch(profileHostAllowlist(input.profile), input.request),
+  };
   if (await options.marker.pending()) await retireKeptGrant(options);
   const callback = await listenForAuthorization({ issuer: options.profile.mcpIssuer });
   const provider = new McpOAuthProvider({
