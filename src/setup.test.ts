@@ -212,4 +212,44 @@ describe('setup MCP host pinning', () => {
       expect(result.configuredAgent).toBe(false);
     },
   );
+
+  describe('staging', () => {
+    const appOrigin = 'https://moria.app.getdurin.com';
+    const endpoint = `https://moria.mcp.getdurin.com${personal}`;
+    const stagingIssuer = 'https://resilient-tiger-64-staging.authkit.app';
+
+    it('saves a profile for the staging MCP gateway and its sign-in server', async () => {
+      const result = await setupWith(endpoint, { appOrigin, issuer: stagingIssuer });
+      expect(String(result.outcome)).not.toContain('sign-in server');
+      expect(new Set(result.requested)).toEqual(new Set(['moria.mcp.getdurin.com']));
+      expect(result.savedProfile).toBe(true);
+    });
+
+    it.each([
+      ['another staging AuthKit tenant', 'https://evil-tiger-99-staging.authkit.app'],
+      ['the bare AuthKit domain', 'https://authkit.app'],
+      ['the production sign-in server', 'https://auth.getdurin.com'],
+    ])(
+      'stops before saving or configuring anything when staging discovery names %s',
+      async (_case, issuer) => {
+        const result = await setupWith(endpoint, { appOrigin, issuer });
+        expect(result.outcome).toBeInstanceOf(Error);
+        expect(String(result.outcome)).toContain(new URL(issuer).hostname);
+        expect(String(result.outcome)).toContain('resilient-tiger-64-staging.authkit.app');
+        expect(result.savedProfile).toBe(false);
+        expect(result.configuredAgent).toBe(false);
+      },
+    );
+
+    it('stops when production discovery names the staging sign-in server', async () => {
+      const result = await setupWith(`https://mcp.getdurin.com${personal}`, {
+        issuer: stagingIssuer,
+      });
+      expect(result.outcome).toBeInstanceOf(Error);
+      expect(String(result.outcome)).toContain('resilient-tiger-64-staging.authkit.app');
+      expect(String(result.outcome)).toContain('auth.getdurin.com');
+      expect(result.savedProfile).toBe(false);
+      expect(result.configuredAgent).toBe(false);
+    });
+  });
 });

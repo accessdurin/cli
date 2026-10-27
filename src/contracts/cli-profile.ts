@@ -32,6 +32,9 @@ export const cliProfileScopeSchema = z
     (scope) => /\/mcp\/u\/[a-f0-9]{64}$/u.test(scope.resource),
     'Use the resolved personal MCP resource.',
   )
+  // TODO: pin accountIssuer like the MCP hosts once production's AuthKit account issuer
+  // (WORKOS_AUTHKIT_ISSUER, set only at release time) is confirmed; staging's is
+  // resilient-tiger-64-staging.authkit.app.
   .superRefine((scope, context) => {
     for (const role of cliHostRoles) {
       const problem = untrustedCliHost(role, scope[role], scope);

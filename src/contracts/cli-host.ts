@@ -7,8 +7,15 @@ export const cliHostRoles: readonly CliHostRole[] = ['resource', 'mcpIssuer'];
 /** Exact hosts each known app uses besides its own. Never match by suffix. */
 const DEPLOYMENT_HOSTS = new Map<string, Readonly<Record<CliHostRole, readonly string[]>>>([
   ['app.getdurin.com', { resource: ['mcp.getdurin.com'], mcpIssuer: ['auth.getdurin.com'] }],
-  // Fill mcpIssuer once the staging MCP issuer exists; until then staging setup fails closed.
-  ['moria.app.getdurin.com', { resource: ['moria.mcp.getdurin.com'], mcpIssuer: [] }],
+  // Gateway: durin infra/durin.config.json (staging mcpGateway).
+  // Issuer: the staging AuthKit tenant that signs staging MCP grants.
+  [
+    'moria.app.getdurin.com',
+    {
+      resource: ['moria.mcp.getdurin.com'],
+      mcpIssuer: ['resilient-tiger-64-staging.authkit.app'],
+    },
+  ],
 ]);
 const ROLE_NAMES: Readonly<Record<CliHostRole, string>> = {
   resource: 'MCP endpoint',

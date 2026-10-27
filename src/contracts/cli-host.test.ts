@@ -29,6 +29,39 @@ describe('MCP host pinning', () => {
     ).toBeUndefined();
   });
 
+  it.each([
+    'https://resilient-tiger-64-staging.authkit.app',
+    'https://resilient-tiger-64-staging.authkit.app/',
+    'https://Resilient-Tiger-64-Staging.AuthKit.app/',
+  ])('accepts the staging MCP sign-in server for the staging app: %s', (value) => {
+    expect(untrustedCliHost('mcpIssuer', value, staging)).toBeUndefined();
+  });
+
+  it.each([
+    'https://evil-tiger-99-staging.authkit.app',
+    'https://authkit.app',
+    'https://attacker.resilient-tiger-64-staging.authkit.app',
+    'https://resilient-tiger-64-staging.authkit.app.evil.test',
+    'https://resilient-tiger-64.authkit.app',
+  ])(
+    'rejects a staging MCP sign-in server that is not exactly the staging issuer: %s',
+    (origin) => {
+      const problem = untrustedCliHost('mcpIssuer', `${origin}/`, staging);
+      expect(problem).toContain(new URL(origin).hostname);
+      expect(problem).toContain('resilient-tiger-64-staging.authkit.app');
+    },
+  );
+
+  it('does not accept the staging sign-in server as the staging MCP endpoint', () => {
+    expect(
+      untrustedCliHost(
+        'resource',
+        `https://resilient-tiger-64-staging.authkit.app${personal}`,
+        staging,
+      ),
+    ).toBeDefined();
+  });
+
   it.each(['resource', 'mcpIssuer'] as const)(
     'accepts a %s on the app origin host for a deployment without an allowlist',
     (role) => {
@@ -84,6 +117,9 @@ describe('MCP host pinning', () => {
       untrustedCliHost('resource', `https://mcp.getdurin.com${personal}`, staging),
     ).toBeDefined();
     expect(untrustedCliHost('mcpIssuer', 'https://auth.getdurin.com/', staging)).toBeDefined();
+    expect(
+      untrustedCliHost('mcpIssuer', 'https://resilient-tiger-64-staging.authkit.app/', production),
+    ).toBeDefined();
   });
 
   it.each(

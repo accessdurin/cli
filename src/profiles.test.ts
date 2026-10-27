@@ -87,15 +87,34 @@ describe('organization profile MCP hosts', () => {
     mcpIssuer: 'http://127.0.0.1:5272/',
     development: true,
   };
+  const staging = {
+    ...scope,
+    appOrigin: 'https://moria.app.getdurin.com',
+    accountIssuer: 'https://resilient-tiger-64-staging.authkit.app/',
+    resource: `https://moria.mcp.getdurin.com${personal}`,
+    mcpIssuer: 'https://resilient-tiger-64-staging.authkit.app/',
+  };
   const bindingId = (value: object) =>
     createHash('sha256').update(JSON.stringify(value)).digest('hex');
 
   it.each([
     ['production', production],
+    ['staging', staging],
     ['same-host', scope],
     ['local development', local],
   ])('accepts a %s profile', (_name, value) => {
     expect(createProfile(value)).toMatchObject(value);
+  });
+
+  it.each([
+    { mcpIssuer: 'https://evil-tiger-99-staging.authkit.app/' },
+    { mcpIssuer: 'https://authkit.app/' },
+    { mcpIssuer: 'https://auth.getdurin.com/' },
+    { resource: `https://mcp.getdurin.com${personal}` },
+  ])('rejects a staging profile with an MCP host it does not use: %j', (changes) => {
+    expect(() => createProfile({ ...staging, ...changes })).toThrow(
+      new URL(Object.values(changes)[0]!).hostname,
+    );
   });
 
   it.each([
@@ -108,6 +127,7 @@ describe('organization profile MCP hosts', () => {
     { mcpIssuer: 'https://getdurin.com.evil.test/' },
     { mcpIssuer: 'https://evil.getdurin.com/' },
     { mcpIssuer: 'https://mcp.getdurin.com/' },
+    { mcpIssuer: 'https://resilient-tiger-64-staging.authkit.app/' },
     { mcpIssuer: 'https://localhost/' },
   ])('rejects a production profile with an MCP host it does not use: %j', (changes) => {
     expect(() => createProfile({ ...production, ...changes })).toThrow(

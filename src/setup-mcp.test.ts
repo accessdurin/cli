@@ -205,6 +205,37 @@ describe('MCP issuer discovery host pinning', () => {
     await expect(failure).rejects.toThrow('auth.getdurin.com');
   });
 
+  describe('staging', () => {
+    const staging = { appOrigin: 'https://moria.app.getdurin.com', development: false };
+    const value = `https://moria.mcp.getdurin.com${personal}`;
+    const stagingIssuer = 'https://resilient-tiger-64-staging.authkit.app';
+
+    it('accepts the staging MCP gateway and its sign-in server', async () => {
+      const { request, requested } = discovery(value, stagingIssuer);
+      await expect(mcpIssuer(value, request, staging)).resolves.toBe(stagingIssuer);
+      expect(new Set(requested)).toEqual(new Set(['moria.mcp.getdurin.com']));
+    });
+
+    it.each([
+      ['another staging AuthKit tenant', 'https://evil-tiger-99-staging.authkit.app'],
+      ['the bare AuthKit domain', 'https://authkit.app'],
+      ['the production sign-in server', 'https://auth.getdurin.com'],
+    ])('rejects a staging MCP sign-in server on %s', async (_case, authorizationServer) => {
+      const { request } = discovery(value, authorizationServer);
+      const failure = mcpIssuer(value, request, staging);
+      await expect(failure).rejects.toThrow(new URL(authorizationServer).hostname);
+      await expect(failure).rejects.toThrow('resilient-tiger-64-staging.authkit.app');
+    });
+
+    it('rejects the staging sign-in server for the production app', async () => {
+      const productionEndpoint = `https://mcp.getdurin.com${personal}`;
+      const { request } = discovery(productionEndpoint, stagingIssuer);
+      const failure = mcpIssuer(productionEndpoint, request, production);
+      await expect(failure).rejects.toThrow('resilient-tiger-64-staging.authkit.app');
+      await expect(failure).rejects.toThrow('auth.getdurin.com');
+    });
+  });
+
   it('accepts a loopback MCP gateway and sign-in server in development', async () => {
     const value = `http://127.0.0.1:5272${personal}`;
     const { request } = discovery(value, 'http://127.0.0.1:5272/');
