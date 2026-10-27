@@ -5,7 +5,7 @@ agent, and authorize that organization's Durin MCP. Setup verifies the saved MCP
 bridge before recommending that you open the selected harness. It never starts an
 agent conversation. Agent selection is interactive; `--agent` and `-a` are rejected.
 
-Requires Node 24.15 or later in the Node 24 release line and an unlocked OS
+Requires Node 24.22.1 or later in the Node 24 release line and an unlocked OS
 credential store. This repository contains the standalone CLI and the client contracts it consumes.
 
 ## Run from this repository
@@ -232,7 +232,7 @@ on a clean source checkout and review all findings before publishing.
 
 ## Publish to npm
 
-Publish from this standalone repository using Node 24.15 or later in the Node 24
+Publish from this standalone repository using Node 24.22.1 or later in the Node 24
 release line and pnpm 11.21.0. The monorepo workspace package remains private.
 You need access to the `@accessdurin` npm scope, either as its account owner or
 through the `accessdurin` npm organization. Browser login does not authenticate
