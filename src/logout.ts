@@ -52,14 +52,19 @@ const unparseable = (error: unknown): boolean =>
  * Only a transient revocation failure keeps the grant, unless forced, so logout can retry.
  * The profile is marked before any request and cleared only once its credentials are gone, so
  * a logout that is interrupted or throws leaves the profile blocked until sign-out finishes.
+ * A profile that cannot be marked cannot be blocked, so its grant is never kept.
  */
 export async function signOutMcp(options: Options): Promise<SignOutResult> {
   const provider = new McpOAuthProvider({ profile: options.profile, store: options.store });
-  await options.marker.mark();
+  const blocked = await options.marker.mark().then(
+    () => true,
+    () => false,
+  );
   const outcome = await storedGrant(provider)
     .then((grant) => (grant ? revokeGrant(options.profile, grant, options.request) : 'unavailable'))
     .catch(() => 'failed' as const);
-  if (outcome === 'retry' && !options.force) return { remote: 'failed', local: 'retained' };
+  if ([outcome === 'retry', blocked, !options.force].every(Boolean))
+    return { remote: 'failed', local: 'retained' };
   await provider.invalidateCredentials('all');
   await options.marker.clear();
   return { remote: outcome === 'retry' ? 'failed' : outcome, local: 'cleared' };
