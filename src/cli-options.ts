@@ -13,7 +13,7 @@ Usage:
   durin verify                  Verify authenticated MCP access
   durin profiles list           Show saved organization profiles
   durin profiles use <id>       Change the terminal profile
-  durin logout                 Revoke and clear this profile’s MCP grant
+  durin logout [--force]        Revoke and clear this profile’s MCP grant
   durin tools list              List authorized tools as JSON
   durin tools inspect <name>    Print a tool's native schema
   durin tools call <name> --input <file|-> --idempotency-key <key>
@@ -25,6 +25,7 @@ Options:
   --profile <id>                Select an explicit organization profile
   --config-dir <path>           Profile directory (default: ~/.config/durin)
   --approval-id <id>            Resume a tool call after approval
+  --force                       logout: clear the local grant even if revocation fails
   --app-url <origin>            Durin app origin (default: https://app.getdurin.com)
   --dev                        Allow loopback HTTP for local development
   -h, --help                   Show this help
@@ -44,6 +45,7 @@ function parseCliArgs(args: readonly string[]) {
       'approval-id': { type: 'string' },
       'app-url': { type: 'string' },
       dev: { type: 'boolean' },
+      force: { type: 'boolean' },
     },
   });
   return { values, positionals };

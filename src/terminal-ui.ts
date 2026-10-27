@@ -10,6 +10,7 @@ import { organizationCreateSchema } from './contracts/account.js';
 import { guard } from './prompts.js';
 import { agentOptions } from './agents.js';
 import { openBrowser } from './browser.js';
+import { terminalText } from './terminal-text.js';
 
 const openAuthorization = async (url: string): Promise<void> => {
   p.note(url, 'Continue in your browser; this terminal will wait');
@@ -90,7 +91,7 @@ const account: SetupUi['account'] = {
       intent === 'signup'
         ? 'Choose Create an account in the browser, then authorize this device.'
         : 'Sign in and authorize this device.';
-    p.note(`${action}\nDevice code: ${prompt.code}`, 'Account authorization');
+    p.note(`${action}\nDevice code: ${terminalText(prompt.code)}`, 'Account authorization');
     await openAuthorization(prompt.url);
   },
 };
@@ -104,7 +105,7 @@ export const terminalUi = (): SetupUi => ({
           message: 'Which organization should this agent use?',
           options: organizations.map((organization) => ({
             value: organization.id,
-            label: organization.name,
+            label: terminalText(organization.name),
           })),
         }),
       ),
@@ -114,7 +115,7 @@ export const terminalUi = (): SetupUi => ({
     answer,
     payment: async (organizationId) => {
       p.log.info(
-        `Complete payment setup for ${organizationId} in the browser. Waiting for verified payment and provisioning.`,
+        `Complete payment setup for ${terminalText(organizationId)} in the browser. Waiting for verified payment and provisioning.`,
       );
     },
   },
@@ -126,7 +127,7 @@ export const terminalUi = (): SetupUi => ({
     configured: (path) => p.note(`Config: ${path}\nMCP sign-in is pending.`, 'Agent configured'),
     ready: ({ organization, agent, profileId, toolCount }) => {
       p.note(
-        `Organization: ${organization}\nAgent: ${agent}\nProfile: ${profileId}\nDurin MCP: signed in and verified\nAvailable tools: ${toolCount}`,
+        `Organization: ${terminalText(organization)}\nAgent: ${agent}\nProfile: ${profileId}\nDurin MCP: signed in and verified\nAvailable tools: ${toolCount}`,
         'Setup complete',
       );
       if (toolCount === 0)

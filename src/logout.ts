@@ -1,5 +1,6 @@
 import { discoverAuthorizationServerMetadata } from '@modelcontextprotocol/client';
 import { z } from 'zod';
+import { CliError } from './cli-options.js';
 import type { CliProfile } from './contracts/cli-profile.js';
 import type { CredentialStore } from './ports/credential-store.js';
 import { McpOAuthProvider } from './mcp-oauth.js';
@@ -9,36 +10,76 @@ type Options = {
   readonly profile: CliProfile;
   readonly store: CredentialStore;
   readonly request: typeof fetch;
+  readonly force?: boolean;
 };
 const revocationSchema = z.object({ revocation_endpoint: z.url().optional() });
 export type RevocationStatus = 'revoked' | 'unavailable' | 'failed';
-export async function signOutMcp(options: Options): Promise<RevocationStatus> {
+export type SignOutResult = {
+  readonly remote: RevocationStatus;
+  readonly local: 'cleared' | 'retained';
+};
+/** The authorization server was unreachable or busy, so revocation may succeed later. */
+class TransientRevocationError extends Error {}
+const retryableStatus = (status: number): boolean => status === 429 || status >= 500;
+const redirected = (error: unknown): boolean =>
+  error instanceof TypeError &&
+  error.cause instanceof Error &&
+  error.cause.message === 'unexpected redirect';
+/** Without an HTTP answer the server may still honour the grant; a refused redirect is an answer. */
+const transientNetworkFailure = (error: unknown): boolean =>
+  !(error instanceof CliError) && !redirected(error);
+const transientFailures =
+  (request: typeof fetch): typeof fetch =>
+  async (input, init) => {
+    const response = await request(input, init).catch((error: unknown) => {
+      if (!transientNetworkFailure(error)) throw error;
+      throw new TransientRevocationError('MCP authorization server unreachable.', { cause: error });
+    });
+    if (!retryableStatus(response.status)) return response;
+    await response.body?.cancel();
+    throw new TransientRevocationError(`MCP authorization server returned ${response.status}.`);
+  };
+
+/** Only a transient revocation failure keeps the grant, unless forced, so logout can retry. */
+export async function signOutMcp(options: Options): Promise<SignOutResult> {
   const provider = new McpOAuthProvider({ profile: options.profile, store: options.store });
-  try {
-    return await revokeGrant(options, provider);
-  } catch {
-    return 'failed';
-  } finally {
-    await provider.invalidateCredentials('all');
-  }
+  const outcome = await revokeGrant(options, provider).catch(() => 'failed' as const);
+  if (outcome === 'retry' && !options.force) return { remote: 'failed', local: 'retained' };
+  await provider.invalidateCredentials('all');
+  return { remote: outcome === 'retry' ? 'failed' : outcome, local: 'cleared' };
 }
 async function revokeGrant(
   options: Options,
   provider: McpOAuthProvider,
-): Promise<RevocationStatus> {
+): Promise<RevocationStatus | 'retry'> {
   const tokens = await provider.tokens();
-  if (!tokens) return 'revoked';
+  if (!tokens) return 'unavailable';
   const client = await provider.clientInformation();
   if (!client) return 'unavailable';
-  const request = secureFetch(options.profile.development, options.request);
-  const metadata = await discoverAuthorizationServerMetadata(options.profile.mcpIssuer, {
-    fetchFn: request,
+  const request = transientFailures(secureFetch(options.profile.development, options.request));
+  return revokeRemotely({ request, clientId: client.client_id, tokens }, options.profile).catch(
+    (error: unknown) => {
+      if (error instanceof TransientRevocationError) return 'retry' as const;
+      throw error;
+    },
+  );
+}
+async function revokeRemotely(
+  input: {
+    request: typeof fetch;
+    clientId: string;
+    tokens: { refresh_token?: string | undefined; access_token: string };
+  },
+  profile: CliProfile,
+): Promise<RevocationStatus> {
+  const metadata = await discoverAuthorizationServerMetadata(profile.mcpIssuer, {
+    fetchFn: input.request,
   });
   const endpoint = revocationSchema.parse(metadata).revocation_endpoint;
   if (!endpoint) return 'unavailable';
-  const input = { request, endpoint, clientId: client.client_id };
-  await revokeToken({ ...input, token: tokens.refresh_token, hint: 'refresh_token' });
-  await revokeToken({ ...input, token: tokens.access_token, hint: 'access_token' });
+  const target = { request: input.request, endpoint, clientId: input.clientId };
+  await revokeToken({ ...target, token: input.tokens.refresh_token, hint: 'refresh_token' });
+  await revokeToken({ ...target, token: input.tokens.access_token, hint: 'access_token' });
   return 'revoked';
 }
 async function revokeToken(input: {

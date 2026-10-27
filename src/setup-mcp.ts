@@ -45,7 +45,6 @@ export async function authorizeMcp(options: Options): Promise<number> {
   try {
     const result = await auth(provider, {
       serverUrl: options.profile.resource,
-      scope: 'durin:read durin:write durin:execute',
       fetchFn: options.request,
     });
     if (result === 'REDIRECT') await exchangeCode(options, provider, callback.result);
