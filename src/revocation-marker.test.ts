@@ -1,18 +1,18 @@
 // MAR-552: a logout that could not revoke the grant blocks the profile until sign-out finishes.
-import { chmod, cp, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, cp, lstat, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { PassThrough } from 'node:stream';
 import { setTimeout } from 'node:timers/promises';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { cliOptions, CliError } from './cli-options.js';
-import { signOutMcp } from './logout.js';
+import { retryPendingRevocations, signOutMcp } from './logout.js';
 import { McpOAuthProvider } from './mcp-oauth.js';
 import { McpStdioBridge } from './mcp-bridge.js';
 import { profileConnection } from './profile-client.js';
 import { withProfileLock } from './profile-lock.js';
 import { createProfile, FileProfiles } from './profiles.js';
-import { FileRevocationMarker } from './revocation-marker.js';
+import { FilePendingRevocations, FileRevocationMarker } from './revocation-marker.js';
 import { toolCommand } from './tool-commands.js';
 
 const remote = vi.hoisted(() => ({ connect: vi.fn<() => Promise<void>>(async () => {}) }));
@@ -180,6 +180,15 @@ it.each([
     }),
   ],
   ['rate limiting (429)', authorizationServer(() => new Response(null, { status: 429 }))],
+  ['a rejected request (400)', authorizationServer(() => new Response(null, { status: 400 }))],
+  ['a forbidden request (403)', authorizationServer(() => new Response(null, { status: 403 }))],
+  ['a missing endpoint (404)', authorizationServer(() => new Response(null, { status: 404 }))],
+  [
+    'a captive portal redirect',
+    authorizationServer(() => {
+      throw new TypeError('fetch failed', { cause: new Error('unexpected redirect') });
+    }),
+  ],
   ['a server error (5xx)', busy],
   ['a DNS failure (ENOTFOUND)', offline],
   ['a reset connection (ECONNRESET)', unreachable(networkFailure('ECONNRESET'))],
@@ -302,6 +311,76 @@ it('refuses a bridge call that waited for the profile lock while logout failed',
   }
 });
 
+// MAR-552: the block is on disk before logout touches the network, so a dying logout keeps it.
+const hungRevocation = () => {
+  let arrived = () => {};
+  const reached = new Promise<void>((resolve) => {
+    arrived = resolve;
+  });
+  let release = (_response: Response) => {};
+  const answer = new Promise<Response>((resolve) => {
+    release = resolve;
+  });
+  const request: typeof fetch = async (url, init) => {
+    if (String(url).includes('.well-known')) return revoked(url, init);
+    arrived();
+    return answer;
+  };
+  return { request, reached, release };
+};
+const lockPath = () => join(directory, 'locks', `${profile.id}.lock`);
+
+it('leaves the profile blocked when logout dies while its revocation request is in flight', async () => {
+  const hung = hungRevocation();
+  const signingOut = logout({ store: await signedInStore(), request: hung.request });
+  await hung.reached;
+  // The process dies here (Ctrl-C or a kill during the 60-second timeout): only disk state is left.
+  expect(await new FileRevocationMarker(directory, profile.id).pending()).toBe(true);
+  // As the abandoned-lock message instructs, the user removes the dead process's lock.
+  await rm(lockPath(), { force: true });
+  await expectBlocked();
+  hung.release(new Response(null, { status: 503 }));
+  await signingOut;
+});
+
+it('leaves the profile blocked when logout throws before its credentials are wiped', async () => {
+  const store = await signedInStore();
+  const withoutRevocation: typeof fetch = async () =>
+    Response.json({
+      issuer: profile.mcpIssuer,
+      authorization_endpoint: 'https://issuer.example.test/authorize',
+      token_endpoint: 'https://issuer.example.test/token',
+      response_types_supported: ['code'],
+    });
+  const failing = {
+    ...store,
+    remove: async () => {
+      throw new CliError('OS credential store unavailable.');
+    },
+  };
+  await expect(logout({ store: failing, request: withoutRevocation })).rejects.toThrow(
+    'OS credential store unavailable.',
+  );
+  expect(await new FileRevocationMarker(directory, profile.id).pending()).toBe(true);
+  await expectBlocked();
+});
+
+it('marks the profile before revoking and clears the mark once a logout succeeds', async () => {
+  const observed: boolean[] = [];
+  const request: typeof fetch = async (url, init) => {
+    observed.push(await new FileRevocationMarker(directory, profile.id).pending());
+    return revoked(url, init);
+  };
+  expect(await logout({ store: await signedInStore(), request })).toEqual({
+    remote: 'revoked',
+    local: 'cleared',
+  });
+  expect(observed.length).toBeGreaterThan(0);
+  expect(observed.every(Boolean)).toBe(true);
+  expect(await new FileRevocationMarker(directory, profile.id).pending()).toBe(false);
+  await expectUnblocked();
+});
+
 it('records one unfinished sign-out when two processes mark and read it at once', async () => {
   const first = new FileRevocationMarker(directory, profile.id);
   const second = new FileRevocationMarker(directory, profile.id);
@@ -331,5 +410,37 @@ it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
     } finally {
       await chmod(dirname(marker.path), 0o700);
     }
+  },
+);
+
+// MAR-552: a symlink in place of the marker or the pending list is never read as absent.
+const danglingSymlink = async (path: string) => {
+  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+  await symlink(join(directory, 'nowhere'), path);
+};
+it.skipIf(process.platform === 'win32')(
+  'treats a dangling symlink at the marker path as an unfinished sign-out',
+  async () => {
+    const marker = new FileRevocationMarker(directory, profile.id);
+    await danglingSymlink(marker.path);
+    expect(await marker.pending()).toBe(true);
+    await expectBlocked();
+  },
+);
+
+it.skipIf(process.platform === 'win32')(
+  'never reads a dangling symlink at the pending list path as an empty list',
+  async () => {
+    const store = await signedInStore();
+    const pending = new FilePendingRevocations(directory, profile.id, store);
+    await danglingSymlink(pending.path);
+    await expect(pending.entries()).rejects.toThrow(CliError);
+    await expect(
+      pending.add({ clientId: 'client_one', accessToken: 'synthetic-access' }),
+    ).rejects.toThrow(CliError);
+    const request = vi.fn<typeof fetch>(revoked);
+    await retryPendingRevocations(directory, profile, store, request);
+    expect(request).not.toHaveBeenCalled();
+    expect((await lstat(pending.path)).isSymbolicLink()).toBe(true);
   },
 );

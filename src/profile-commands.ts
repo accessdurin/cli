@@ -1,7 +1,7 @@
 import { CliError, type CliOptions } from './cli-options.js';
 import { FileProfiles } from './profiles.js';
 import { NativeCredentialStore } from './credentials.js';
-import { signOutMcp } from './logout.js';
+import { retryPendingRevocations, signOutMcp } from './logout.js';
 import { withProfileLock } from './profile-lock.js';
 import { FileRevocationMarker } from './revocation-marker.js';
 import { printJson } from './tool-commands.js';
@@ -18,10 +18,12 @@ export async function profileCommand(options: CliOptions): Promise<void> {
 }
 export async function logoutCommand(options: CliOptions): Promise<void> {
   const profile = await new FileProfiles(options.directory).load(options.values.profile);
+  const store = new NativeCredentialStore();
+  await retryPendingRevocations(options.directory, profile, store);
   const { remote, local } = await withProfileLock(options.directory, profile.id, () =>
     signOutMcp({
       profile,
-      store: new NativeCredentialStore(),
+      store,
       marker: new FileRevocationMarker(options.directory, profile.id),
       request: fetch,
       force: options.values.force ?? false,
