@@ -8,14 +8,18 @@ import { setTimeout } from 'node:timers/promises';
 import { expect, it, vi } from 'vitest';
 import { secureFetch } from './safe-fetch.js';
 import { signOutMcp } from './logout.js';
-import { authorizeMcp } from './setup-mcp.js';
+import { authorizeMcp, mcpIssuer } from './setup-mcp.js';
 import { setupAccount } from './setup-account.js';
 import { McpOAuthProvider } from './mcp-oauth.js';
 import { McpStdioBridge } from './mcp-bridge.js';
 import { createProfile, FileProfiles } from './profiles.js';
 import { profileConnection } from './profile-client.js';
 import { cliOptions } from './cli-options.js';
-import { deploymentHostAllowlist, profileHostAllowlist } from './contracts/cli-host.js';
+import {
+  deploymentHostAllowlist,
+  profileHostAllowlist,
+  untrustedCliHost,
+} from './contracts/cli-host.js';
 
 vi.mock('./remote-mcp.js', () => ({
   RemoteMcpClient: class {
@@ -322,4 +326,28 @@ it('SETH-8-M2b: setup itself never contacts a lookalike providerOrigin, even ung
     intent: 'sign-in' as never,
   }).catch(() => undefined);
   expect(evilHit(hosts)).toEqual([]);
+});
+
+it('SETH-8-L: an MCP endpoint/issuer on a non-default port (:8443) is rejected', async () => {
+  const production = { appOrigin: 'https://app.getdurin.com', development: false };
+  expect(
+    untrustedCliHost(
+      'resource',
+      `https://mcp.getdurin.com:8443/mcp/u/${'a'.repeat(64)}`,
+      production,
+    ),
+  ).toBeDefined();
+  expect(
+    untrustedCliHost('mcpIssuer', 'https://auth.getdurin.com:8443/', production),
+  ).toBeDefined();
+  const r8443 = `https://mcp.getdurin.com:8443/mcp/u/${'a'.repeat(64)}`;
+  const accepted = await mcpIssuer(
+    r8443,
+    async () => Response.json({ resource: r8443, authorization_servers: [issuer] }),
+    production,
+  ).then(
+    () => true,
+    () => false,
+  );
+  expect(accepted).toBe(false);
 });

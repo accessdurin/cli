@@ -28,7 +28,9 @@ does not make the package available on npm.
 The default app origin is `https://app.getdurin.com`. That deployment must have
 AuthKit CLI authentication and MCP authorization configured before onboarding works.
 Setup accepts each host it is given only if the selected app uses it. Hosts match
-exactly, never by suffix:
+exactly, never by suffix, and so do ports: the hosts below are allowed only on the
+default HTTPS port (443, written out or not), and the app's own host only on the
+app's port:
 
 | app                      | MCP endpoint             | MCP sign-in server                       | account sign-in issuer                   | account sign-in service |
 | ------------------------ | ------------------------ | ---------------------------------------- | ---------------------------------------- | ----------------------- |

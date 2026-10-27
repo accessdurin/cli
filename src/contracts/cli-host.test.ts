@@ -71,10 +71,53 @@ describe('host pinning', () => {
     (role) => {
       expect(untrustedCliHost(role, url(role, 'https://durin.acme.test'), custom)).toBeUndefined();
       expect(
-        untrustedCliHost(role, url(role, 'https://durin.acme.test:8443'), custom),
+        untrustedCliHost(role, url(role, 'https://durin.acme.test:443'), custom),
       ).toBeUndefined();
     },
   );
+
+  it.each(cliHostRoles)(
+    'requires the %s on the app’s own host to use the app’s own port as well',
+    (role) => {
+      const onPort = { appOrigin: 'https://durin.acme.test:8443', development: false };
+      expect(
+        untrustedCliHost(role, url(role, 'https://durin.acme.test:8443'), onPort),
+      ).toBeUndefined();
+      expect(untrustedCliHost(role, url(role, 'https://durin.acme.test'), onPort)).toContain(
+        'durin.acme.test',
+      );
+      expect(untrustedCliHost(role, url(role, 'https://durin.acme.test:8443'), custom)).toContain(
+        'durin.acme.test:8443',
+      );
+    },
+  );
+
+  it.each(
+    (
+      [
+        ['resource', 'https://mcp.getdurin.com', production],
+        ['mcpIssuer', 'https://auth.getdurin.com', production],
+        ['resource', 'https://app.getdurin.com', production],
+        ['resource', 'https://moria.mcp.getdurin.com', staging],
+        ['mcpIssuer', 'https://resilient-tiger-64-staging.authkit.app', staging],
+        ['accountIssuer', 'https://resilient-tiger-64-staging.authkit.app', staging],
+        ['accountProvider', 'https://api.workos.com', production],
+      ] as const
+    ).flatMap(([role, origin, scope]) =>
+      [':8443', ':444', ':80', ':1'].map((port) => [role, `${origin}${port}`, scope] as const),
+    ),
+  )('rejects an allowed %s host on a non-default port: %s', (role, origin, scope) => {
+    const problem = untrustedCliHost(role, url(role, origin), scope);
+    expect(problem).toContain(new URL(origin).host);
+  });
+
+  it.each([
+    ['resource', `https://mcp.getdurin.com:443${personal}`],
+    ['mcpIssuer', 'https://auth.getdurin.com:443/'],
+    ['accountProvider', 'https://api.workos.com:443'],
+  ] as const)('accepts an allowed %s host with its default port written out: %s', (role, value) => {
+    expect(untrustedCliHost(role, value, production)).toBeUndefined();
+  });
 
   it.each(
     roles([
@@ -223,6 +266,20 @@ describe('request allowlists', () => {
         development: false,
       }),
     ).toEqual({ hosts: ['mcp.getdurin.com', 'auth.getdurin.com'], development: false });
+  });
+
+  it('keeps the port in a saved profile’s allowlist', () => {
+    expect(
+      profileHostAllowlist({
+        resource: `https://durin.acme.test:8443${personal}`,
+        mcpIssuer: 'https://durin.acme.test:443/',
+        development: false,
+      }).hosts,
+    ).toEqual(['durin.acme.test:8443', 'durin.acme.test']);
+    expect(
+      deploymentHostAllowlist({ appOrigin: 'https://durin.acme.test:8443', development: false })
+        .hosts,
+    ).toEqual(['durin.acme.test:8443']);
   });
 });
 

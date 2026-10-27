@@ -19,12 +19,13 @@ it.each([
   'https://evil-issuer.example.test/token',
   'https://attacker.issuer.example.test/token',
   'https://example.test/token',
+  'https://issuer.example.test:8443/token',
   'https://localhost/token',
   'https://127.0.0.1/token',
 ])('refuses %s, a host not on the allowlist, before sending anything', async (url) => {
   const request = secureFetch(allowlist, mustNotSend);
   await expect(request(url, { method: 'POST', body: 'secret' })).rejects.toThrow(
-    `durin didn’t contact ${new URL(url).hostname}`,
+    `durin didn’t contact ${new URL(url).host}`,
   );
   await expect(request(new Request(url, { method: 'POST', body: 'secret' }))).rejects.toThrow(
     'didn’t contact',
@@ -41,6 +42,7 @@ it('explains a refused host in plain language', async () => {
 it('reaches a listed host whatever its case', async () => {
   const request = secureFetch(allowlist, async () => Response.json({ ok: true }));
   expect((await request('https://ISSUER.Example.test/token')).status).toBe(200);
+  expect((await request('https://issuer.example.test:443/token')).status).toBe(200);
 });
 it('reaches loopback hosts only in development', async () => {
   const ok = async () => Response.json({ ok: true });

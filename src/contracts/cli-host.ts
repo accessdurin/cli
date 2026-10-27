@@ -50,20 +50,22 @@ const ROLE_NAMES: Readonly<Record<CliHostRole, string>> = {
   accountProvider: 'account sign-in service',
 };
 
-const hostname = (value: string): string => (URL.canParse(value) ? new URL(value).hostname : '');
+/** Hostname and port, which a URL leaves out when it is the default for its scheme. */
+const hostOf = (value: string): string => (URL.canParse(value) ? new URL(value).host : '');
+const loopback = (host: string): boolean => loopbackCliHost(new URL(`http://${host}`).hostname);
 const expectedHosts = (role: CliHostRole, scope: CliHostScope): readonly string[] => {
-  const app = hostname(scope.appOrigin);
+  const app = hostOf(scope.appOrigin);
   const listed = DEPLOYMENT_HOSTS.get(app)?.[role] ?? [];
-  return [...listed, app].filter((host) => host && (scope.development || !loopbackCliHost(host)));
+  return [...listed, app].filter((host) => host && (scope.development || !loopback(host)));
 };
 const allowedHost = (role: CliHostRole, host: string, scope: CliHostScope): boolean =>
-  loopbackCliHost(host) ? scope.development : expectedHosts(role, scope).includes(host);
+  loopback(host) ? scope.development : expectedHosts(role, scope).includes(host);
 const describeProblem = (role: CliHostRole, host: string, scope: CliHostScope): string => {
   const expected = expectedHosts(role, scope);
   const uses = expected.length
-    ? `, but the durin app at ${hostname(scope.appOrigin)} uses ${expected.join(' or ')}`
+    ? `, but the durin app at ${hostOf(scope.appOrigin)} uses ${expected.join(' or ')}`
     : '';
-  const local = loopbackCliHost(host) ? ' Local addresses are only allowed with --dev.' : '';
+  const local = loopback(host) ? ' Local addresses are only allowed with --dev.' : '';
   return `The ${ROLE_NAMES[role]} is on ${host}${uses}.${local}`;
 };
 
@@ -76,7 +78,7 @@ export function untrustedCliHost(
   url: string,
   scope: CliHostScope,
 ): string | undefined {
-  const host = hostname(url);
+  const host = hostOf(url);
   if (!host) return `The ${ROLE_NAMES[role]} is not a valid web address.`;
   return allowedHost(role, host, scope) ? undefined : describeProblem(role, host, scope);
 }
@@ -94,18 +96,18 @@ export const profileHostAllowlist = (profile: {
   readonly mcpIssuer: string;
   readonly development: boolean;
 }): CliHostAllowlist => ({
-  hosts: [...new Set([hostname(profile.resource), hostname(profile.mcpIssuer)])],
+  hosts: [...new Set([hostOf(profile.resource), hostOf(profile.mcpIssuer)])],
   development: profile.development,
 });
 const listedHost = (host: string, allowlist: CliHostAllowlist): boolean =>
-  loopbackCliHost(host) ? allowlist.development : allowlist.hosts.includes(host);
+  loopback(host) ? allowlist.development : allowlist.hosts.includes(host);
 const unlistedReason = (host: string, allowlist: CliHostAllowlist): string =>
-  loopbackCliHost(host)
+  loopback(host)
     ? 'Local addresses are only allowed with --dev.'
     : `It isn’t one of the hosts this durin deployment uses (${allowlist.hosts.join(', ')}).`;
 /** Explains, in plain language, why `url` is not on `allowlist`; undefined when it is. */
 export function unlistedCliHost(url: string, allowlist: CliHostAllowlist): string | undefined {
-  const host = hostname(url);
+  const host = hostOf(url);
   if (!host) return 'durin didn’t send the request: its address is not a valid web address.';
   if (listedHost(host, allowlist)) return undefined;
   return `durin didn’t contact ${host}. ${unlistedReason(host, allowlist)} Nothing was sent to it.`;
