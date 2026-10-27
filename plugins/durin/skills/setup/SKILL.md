@@ -7,7 +7,7 @@ Connect the user's chosen Durin organization to Claude Code through the CLI's
 existing profile-pinned MCP bridge.
 
 1. Check `node --version`, `claude --version`, and whether `durin --help` works.
-   Durin requires Node >=24.15.0 <25 and an unlocked OS credential store. If the
+   durin requires Node >=24.22.1 <25 and an unlocked OS credential store. If the
    CLI is absent or predates the 1.0.1 setup fixes, read
    [the installation reference](../../references/cli-installation.md) and guide
    the user through it. `durin` has no version flag; do not invent one. Inspect
