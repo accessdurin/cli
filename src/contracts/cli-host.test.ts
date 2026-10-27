@@ -301,12 +301,14 @@ describe('account host pinning', () => {
       expect(untrustedCliHost(role, url(role, scope.appOrigin), scope)).toBeUndefined();
   });
 
-  it.each(['https://auth.getdurin.com/', 'https://api.workos.com/'])(
-    'accepts only the app’s own host as production’s account issuer until it is confirmed: %s',
-    (value) => {
-      expect(untrustedCliHost('accountIssuer', value, production)).toContain('app.getdurin.com');
-    },
-  );
+  it('accepts auth.getdurin.com, but not api.workos.com, as production’s account issuer', () => {
+    expect(
+      untrustedCliHost('accountIssuer', 'https://auth.getdurin.com/', production),
+    ).toBeUndefined();
+    expect(untrustedCliHost('accountIssuer', 'https://api.workos.com/', production)).toContain(
+      'auth.getdurin.com',
+    );
+  });
 
   it.each(
     (['accountIssuer', 'accountProvider'] as const).flatMap((role) =>

@@ -3,7 +3,12 @@ import type { AccountSession, DeviceAccountAuth, PollingClock } from './ports/cl
 import type { AccountIntent, SetupUi } from './ports/cli-setup.js';
 import { cliAuthConfigSchema } from './contracts/cli-auth.js';
 import { safeCliUrl } from './contracts/cli-url.js';
-import { untrustedCliHost } from './contracts/cli-host.js';
+import {
+  deploymentHostAllowlist,
+  untrustedCliHost,
+  type CliHostScope,
+} from './contracts/cli-host.js';
+import { secureFetch } from './safe-fetch.js';
 import { WorkosDeviceAuth } from './device-auth.js';
 import { DurinAccountApi } from './account-api.js';
 import { selectOrganization } from './select-organization.js';
@@ -45,14 +50,32 @@ function assertAccountHosts(
   config: { readonly issuer: string; readonly providerOrigin: string },
   scope: Pick<Options, 'appOrigin' | 'development'>,
 ): void {
+  const account = accountScope(scope, config);
   const problem =
-    untrustedCliHost('accountIssuer', config.issuer, scope) ??
-    untrustedCliHost('accountProvider', config.providerOrigin, scope);
+    untrustedCliHost('accountIssuer', config.issuer, account) ??
+    untrustedCliHost('accountProvider', config.providerOrigin, account);
   if (problem) throw new CliError(`${problem} Check --app-url, or ask your durin administrator.`);
 }
+const accountScope = (
+  scope: Pick<Options, 'appOrigin' | 'development'>,
+  config: { readonly issuer: string },
+): CliHostScope => ({
+  appOrigin: scope.appOrigin,
+  development: scope.development,
+  accountIssuer: config.issuer,
+});
+const guarded = (options: Options, scope: CliHostScope): Options => ({
+  ...options,
+  request: secureFetch(deploymentHostAllowlist(scope), options.request),
+});
 
-export async function setupAccount(options: Options) {
-  const config = await nativeConfiguration(options);
+/**
+ * Requests reach only the hosts the deployment uses, and api.workos.com for a self-hosted app
+ * only once its account issuer is known to be a WorkOS issuer. `request` may be unguarded.
+ */
+export async function setupAccount(unguarded: Options) {
+  const config = await nativeConfiguration(guarded(unguarded, unguarded));
+  const options = guarded(unguarded, accountScope(unguarded, config));
   const auth = new WorkosDeviceAuth({
     clientId: config.clientId,
     origin: config.providerOrigin,

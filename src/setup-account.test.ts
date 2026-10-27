@@ -34,6 +34,11 @@ describe('account sign-in hosts', () => {
   it.each([
     [production, { issuer: `${production}/`, providerOrigin: workos }, 'api.workos.com'],
     [
+      production,
+      { issuer: 'https://auth.getdurin.com/', providerOrigin: workos },
+      'api.workos.com',
+    ],
+    [
       staging,
       { issuer: 'https://resilient-tiger-64-staging.authkit.app/', providerOrigin: workos },
       'api.workos.com',
@@ -94,7 +99,6 @@ describe('account sign-in hosts', () => {
   it.each([
     [production, 'https://api.workos.com.evil.example/'],
     [production, 'https://resilient-tiger-64-staging.authkit.app/'],
-    [production, 'https://auth.getdurin.com/'],
     [staging, 'https://other-tenant.authkit.app/'],
     [staging, 'https://auth.getdurin.com/'],
   ])('stops %s before sign-in when the account issuer is %s', async (app, issuer) => {

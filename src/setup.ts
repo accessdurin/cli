@@ -34,9 +34,15 @@ type Options = {
 };
 export async function runSetup(options: Options): Promise<void> {
   const context = await setupContext(options);
-  const { intent, request, clock } = context;
+  const { intent, clock } = context;
   options.ui.stage('Authenticate your Durin account');
-  const account = await setupAccount({ ...options, request, intent, clock });
+  // setupAccount guards its own requests: its hosts depend on the account issuer it learns.
+  const account = await setupAccount({
+    ...options,
+    request: options.request ?? fetch,
+    intent,
+    clock,
+  });
   options.ui.stage('Complete organization onboarding');
   await onboardOrganization({
     api: account.api,

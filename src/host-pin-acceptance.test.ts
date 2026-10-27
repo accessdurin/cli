@@ -10,6 +10,7 @@ import { secureFetch } from './safe-fetch.js';
 import { signOutMcp } from './logout.js';
 import { authorizeMcp, mcpIssuer } from './setup-mcp.js';
 import { setupAccount } from './setup-account.js';
+import { runSetup } from './setup.js';
 import { McpOAuthProvider } from './mcp-oauth.js';
 import { McpStdioBridge } from './mcp-bridge.js';
 import { createProfile, FileProfiles } from './profiles.js';
@@ -32,11 +33,11 @@ vi.mock('./remote-mcp.js', () => ({
 const EVIL = 'evil.example';
 const resource = `https://mcp.getdurin.com/mcp/u/${'a'.repeat(64)}`;
 const issuer = 'https://auth.getdurin.com/';
-// QA used https://api.workos.com/; production's account issuer is not confirmed, so only the app's
-// own host is pinned for it.
+// QA used https://api.workos.com/; production signs both MCP grants and accounts on
+// auth.getdurin.com.
 const profile = createProfile({
   appOrigin: 'https://app.getdurin.com',
-  accountIssuer: 'https://app.getdurin.com/',
+  accountIssuer: issuer,
   accountClientId: 'account',
   principalId: 'user_one',
   workosOrganizationId: 'org_one',
@@ -273,11 +274,11 @@ it('SETH-8-M2a: a saved/created profile with a lookalike accountIssuer is reject
 it('SETH-8-M2b: device auth never contacts a lookalike providerOrigin from /auth/cli/config', async () => {
   const appOrigin = 'https://app.getdurin.com';
   const { hosts, request: raw } = recorder((url) => {
-    // QA's issuer was https://api.workos.com/; the app's own host keeps this about providerOrigin.
+    // QA's issuer was https://api.workos.com/; production's own keeps this about providerOrigin.
     if (url.pathname === '/auth/cli/config')
       return Response.json({
         clientId: 'client',
-        issuer: `${appOrigin}/`,
+        issuer,
         providerOrigin: `https://api.workos.com.${EVIL}`,
         appOrigin,
       });
@@ -310,7 +311,7 @@ it('SETH-8-M2b: setup itself never contacts a lookalike providerOrigin, even ung
       url.pathname === '/auth/cli/config'
         ? Response.json({
             clientId: 'client',
-            issuer: `${appOrigin}/`,
+            issuer,
             providerOrigin: `https://api.workos.com.${EVIL}`,
             appOrigin,
           })
@@ -350,4 +351,154 @@ it('SETH-8-L: an MCP endpoint/issuer on a non-default port (:8443) is rejected',
     () => false,
   );
   expect(accepted).toBe(false);
+});
+
+const workos = 'https://api.workos.com';
+const selfHosted = 'https://durin.acme.test';
+/** Runs setup, unguarded as the CLI calls it, against an app whose config names these hosts. */
+const setupSignIn = async (appOrigin: string, accountIssuer: string, providerOrigin = workos) => {
+  const { hosts, request } = recorder(
+    (url) =>
+      url.pathname === '/auth/cli/config'
+        ? Response.json({ clientId: 'client', appOrigin, issuer: accountIssuer, providerOrigin })
+        : new Response(null, { status: 503 }),
+    false,
+  );
+  const outcome = await runSetup({
+    appOrigin,
+    development: false,
+    directory: '/tmp/durin-unused-test',
+    programPath: '/tmp/durin.js',
+    intent: 'login',
+    request,
+    store: memoryStore(),
+    clock: { now: () => 0, sleep: async () => {} },
+    ui: { account: { authorize: async () => {} }, stage: () => {} } as never,
+  }).then(
+    () => 'finished',
+    (error: unknown) => String(error),
+  );
+  return { hosts, outcome };
+};
+const configOnly = (appOrigin: string) => [`GET ${new URL(appOrigin).host}/auth/cli/config`];
+const deviceSignIn = (appOrigin: string, provider: string) => [
+  ...configOnly(appOrigin),
+  `POST ${provider}/user_management/authorize/device`,
+];
+
+it.each([
+  'https://auth.getdurin.com/',
+  'https://auth.getdurin.com:443/',
+  'https://AUTH.getdurin.com',
+])('production signs accounts in with the account issuer %s on api.workos.com', async (value) => {
+  const { hosts, outcome } = await setupSignIn('https://app.getdurin.com', value);
+  expect(hosts).toEqual(deviceSignIn('https://app.getdurin.com', 'api.workos.com'));
+  expect(outcome).toContain('Unable to start account sign-in.');
+});
+
+it.each([
+  'https://auth.getdurin.com.evil.example/',
+  'https://evil-auth.getdurin.com/',
+  'https://login.auth.getdurin.com/',
+  'https://getdurin.com/',
+  'https://auth.getdurin.com:8443/',
+  'https://resilient-tiger-64-staging.authkit.app/',
+  'https://api.workos.com/',
+])('production refuses the account issuer %s before sign-in', async (value) => {
+  const { hosts, outcome } = await setupSignIn('https://app.getdurin.com', value);
+  expect(hosts).toEqual(configOnly('https://app.getdurin.com'));
+  expect(outcome).toContain(`The account sign-in issuer is on ${new URL(value).host}`);
+  expect(outcome).toContain('uses auth.getdurin.com or app.getdurin.com');
+});
+
+it.each([
+  ['https://app.getdurin.com', 'http://auth.getdurin.com/'],
+  [selfHosted, 'http://acme-tenant.authkit.app/'],
+  [selfHosted, 'http://api.workos.com/'],
+])('%s refuses the account issuer %s, which is not HTTPS, before sign-in', async (app, value) => {
+  const { hosts, outcome } = await setupSignIn(app, value);
+  expect(hosts).toEqual(configOnly(app));
+  expect(outcome).toContain('does not match this deployment');
+});
+
+it.each([
+  'https://acme-tenant.authkit.app/',
+  'https://resilient-tiger-64-staging.authkit.app/',
+  'https://acme-tenant.authkit.app:443',
+  'https://api.workos.com/user_management/client_acme',
+])(
+  'a self-hosted app with the WorkOS account issuer %s signs in on api.workos.com',
+  async (value) => {
+    const { hosts, outcome } = await setupSignIn(selfHosted, value);
+    expect(hosts).toEqual(deviceSignIn(selfHosted, 'api.workos.com'));
+    expect(outcome).toContain('Unable to start account sign-in.');
+  },
+);
+
+it.each(['https://api.workos.com:8443', `https://api.workos.com.${EVIL}`, 'https://workos.com'])(
+  'a self-hosted app with a WorkOS account issuer never contacts the account API %s',
+  async (providerOrigin) => {
+    const { hosts, outcome } = await setupSignIn(
+      selfHosted,
+      'https://acme-tenant.authkit.app/',
+      providerOrigin,
+    );
+    expect(hosts).toEqual(configOnly(selfHosted));
+    expect(outcome).toContain(`The account sign-in service is on ${new URL(providerOrigin).host}`);
+    expect(outcome).toContain('uses api.workos.com or durin.acme.test');
+  },
+);
+
+it('a self-hosted app with its own account issuer signs in on its own host only', async () => {
+  const { hosts, outcome } = await setupSignIn(selfHosted, `${selfHosted}/`, selfHosted);
+  expect(hosts).toEqual(deviceSignIn(selfHosted, 'durin.acme.test'));
+  expect(outcome).toContain('Unable to start account sign-in.');
+});
+
+it('a self-hosted app with its own account issuer never contacts api.workos.com', async () => {
+  const { hosts, outcome } = await setupSignIn(selfHosted, `${selfHosted}/`);
+  expect(hosts).toEqual(configOnly(selfHosted));
+  expect(outcome).toContain('The account sign-in service is on api.workos.com');
+  expect(outcome).toContain('only when its account sign-in issuer is a WorkOS issuer');
+});
+
+it.each([
+  'https://api.workos.com.evil.example/',
+  'https://authkit.app.evil.example/',
+  'https://acme-tenant.authkit.app.evil.example/',
+  'https://authkit.app/',
+  'https://attacker.acme-tenant.authkit.app/',
+  'https://acme-tenant.authkit.app:8443/',
+  'https://api.workos.com:8443/',
+  'https://auth.getdurin.com/',
+  `https://${EVIL}/`,
+])('a self-hosted app refuses the account issuer %s before sign-in', async (value) => {
+  const { hosts, outcome } = await setupSignIn(selfHosted, value);
+  expect(hosts).toEqual(configOnly(selfHosted));
+  expect(outcome).toContain(`The account sign-in issuer is on ${new URL(value).host}`);
+  expect(outcome).toContain('uses durin.acme.test or a WorkOS issuer');
+});
+
+it('keeps a self-hosted profile with a WorkOS account issuer, and refuses a lookalike', async () => {
+  const { id: _id, version: _v, ...production } = profile;
+  const scope = {
+    ...production,
+    appOrigin: selfHosted,
+    accountIssuer: 'https://acme-tenant.authkit.app/',
+    resource: `${selfHosted}/mcp/u/${'a'.repeat(64)}`,
+    mcpIssuer: `${selfHosted}/`,
+  };
+  const directory = await mkdtemp(join(tmpdir(), 'durin-host-pin-'));
+  try {
+    const profiles = new FileProfiles(directory);
+    const saved = createProfile(scope);
+    await profiles.save(saved);
+    expect(await profiles.load(saved.id)).toEqual(saved);
+    expect(profileHostAllowlist(saved).hosts).toEqual(['durin.acme.test']);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+  expect(() =>
+    createProfile({ ...scope, accountIssuer: 'https://acme-tenant.authkit.app.evil.example/' }),
+  ).toThrow('acme-tenant.authkit.app.evil.example');
 });

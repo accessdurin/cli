@@ -136,7 +136,7 @@ describe('organization profile hosts', () => {
     { accountIssuer: 'https://evil-durin.com/' },
     { accountIssuer: 'https://app.getdurin.com.evil.test/' },
     { accountIssuer: 'https://resilient-tiger-64-staging.authkit.app/' },
-    { accountIssuer: 'https://auth.getdurin.com/' },
+    { accountIssuer: 'https://api.workos.com/' },
     { accountIssuer: 'https://localhost/' },
   ])('rejects a production profile with a host it does not use: %j', (changes) => {
     expect(() => createProfile({ ...production, ...changes })).toThrow(

@@ -34,17 +34,22 @@ app's port:
 
 | app                      | MCP endpoint             | MCP sign-in server                       | account sign-in issuer                   | account sign-in service |
 | ------------------------ | ------------------------ | ---------------------------------------- | ---------------------------------------- | ----------------------- |
-| `app.getdurin.com`       | `mcp.getdurin.com`       | `auth.getdurin.com`                      | the app's own host only, for now         | `api.workos.com`        |
+| `app.getdurin.com`       | `mcp.getdurin.com`       | `auth.getdurin.com`                      | `auth.getdurin.com`                      | `api.workos.com`        |
 | `moria.app.getdurin.com` | `moria.mcp.getdurin.com` | `resilient-tiger-64-staging.authkit.app` | `resilient-tiger-64-staging.authkit.app` | `api.workos.com`        |
 
-The app's own host is also accepted for every role, and any other `--app-url`
-deployment must serve all of them from its own host. Loopback hosts need `--dev`,
-both as an MCP or sign-in host and as the `--app-url`. That covers `localhost` and
-its subdomains, all of `127.0.0.0/8`, `[::1]`, IPv4-mapped `[::ffff:127.x.x.x]` in
-any spelling, and `0.0.0.0` and `[::]`, ignoring case and one trailing dot. The
-account hosts come from the app's `/auth/cli/config` and are checked before device
-sign-in starts. Saved profiles are checked again whenever they load; one that points
-elsewhere is refused until you run `durin` to sign in again.
+The app's own host is also accepted for every role. Any other `--app-url`
+deployment is self-hosted and must serve every role from its own host, with one
+exception: its account sign-in issuer may instead be a WorkOS issuer, which is an
+HTTPS address on exactly `api.workos.com` or on a single-label AuthKit tenant such
+as `acme.authkit.app` (not `authkit.app` itself or deeper names). Only then may
+setup reach `api.workos.com` as its account sign-in service. A self-hosted
+deployment with any other account issuer never contacts `api.workos.com`. Loopback
+hosts need `--dev`, both as an MCP or sign-in host and as the `--app-url`. That
+covers `localhost` and its subdomains, all of `127.0.0.0/8`, `[::1]`, IPv4-mapped
+`[::ffff:127.x.x.x]` in any spelling, and `0.0.0.0` and `[::]`, ignoring case and
+one trailing dot. The account hosts come from the app's `/auth/cli/config` and are
+checked before device sign-in starts. Saved profiles are checked again whenever they
+load; one that points elsewhere is refused until you run `durin` to sign in again.
 Every request is checked against these hosts before anything is sent, including
 the token, registration and revocation endpoints that the sign-in server's
 metadata names and any metadata address an MCP server's `401` answer points to.
