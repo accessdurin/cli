@@ -74,7 +74,7 @@ describe('setup MCP host pinning', () => {
     ({
       scope: {
         appOrigin,
-        accountIssuer: 'https://auth.getdurin.com/',
+        accountIssuer: `${appOrigin}/`,
         accountClientId: 'client_account',
         principalId: 'user_one',
       },

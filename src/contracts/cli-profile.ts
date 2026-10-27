@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { safeCliUrl } from './cli-url.js';
-import { cliHostRoles, untrustedCliHost } from './cli-host.js';
+import { cliProfileHostRoles, untrustedCliHost } from './cli-host.js';
 
 export const cliProfileIdSchema = z.string().regex(/^[a-f0-9]{64}$/u);
 export const cliProfileScopeSchema = z
@@ -32,11 +32,8 @@ export const cliProfileScopeSchema = z
     (scope) => /\/mcp\/u\/[a-f0-9]{64}$/u.test(scope.resource),
     'Use the resolved personal MCP resource.',
   )
-  // TODO: pin accountIssuer like the MCP hosts once production's AuthKit account issuer
-  // (WORKOS_AUTHKIT_ISSUER, set only at release time) is confirmed; staging's is
-  // resilient-tiger-64-staging.authkit.app.
   .superRefine((scope, context) => {
-    for (const role of cliHostRoles) {
+    for (const role of cliProfileHostRoles) {
       const problem = untrustedCliHost(role, scope[role], scope);
       if (problem) context.addIssue({ code: 'custom', message: problem, path: [role] });
     }

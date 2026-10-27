@@ -11,7 +11,7 @@ import { FileRevocationMarker } from './revocation-marker.js';
 
 const profile = createProfile({
   appOrigin: 'https://app.example.test',
-  accountIssuer: 'https://account.example.test',
+  accountIssuer: 'https://app.example.test',
   accountClientId: 'account',
   principalId: 'user_one',
   workosOrganizationId: 'org_one',

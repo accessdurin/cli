@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  cliHostRoles,
   deploymentHostAllowlist,
   profileHostAllowlist,
   untrustedCliHost,
@@ -14,11 +15,9 @@ const local = { appOrigin: 'http://127.0.0.1:5270', development: true };
 const url = (role: CliHostRole, origin: string) =>
   role === 'resource' ? `${origin}${personal}` : `${origin}/`;
 const roles = (origins: readonly string[]) =>
-  (['resource', 'mcpIssuer'] as const).flatMap((role) =>
-    origins.map((origin) => [role, origin] as const),
-  );
+  cliHostRoles.flatMap((role) => origins.map((origin) => [role, origin] as const));
 
-describe('MCP host pinning', () => {
+describe('host pinning', () => {
   it.each([
     ['resource', `https://mcp.getdurin.com${personal}`],
     ['resource', `https://MCP.GetDurin.com${personal}`],
@@ -67,7 +66,7 @@ describe('MCP host pinning', () => {
     ).toBeDefined();
   });
 
-  it.each(['resource', 'mcpIssuer'] as const)(
+  it.each(cliHostRoles)(
     'accepts a %s on the app origin host for a deployment without an allowlist',
     (role) => {
       expect(untrustedCliHost(role, url(role, 'https://durin.acme.test'), custom)).toBeUndefined();
@@ -159,18 +158,15 @@ describe('MCP host pinning', () => {
     expect(untrustedCliHost(role, url(role, origin), local)).toBeUndefined();
   });
 
-  it.each(['resource', 'mcpIssuer'] as const)(
-    'does not widen non-loopback %s hosts in development',
-    (role) => {
-      expect(untrustedCliHost(role, url(role, 'https://evil.test'), local)).toBeDefined();
-      expect(
-        untrustedCliHost(role, url(role, 'https://evil-durin.com'), {
-          ...production,
-          development: true,
-        }),
-      ).toBeDefined();
-    },
-  );
+  it.each(cliHostRoles)('does not widen non-loopback %s hosts in development', (role) => {
+    expect(untrustedCliHost(role, url(role, 'https://evil.test'), local)).toBeDefined();
+    expect(
+      untrustedCliHost(role, url(role, 'https://evil-durin.com'), {
+        ...production,
+        development: true,
+      }),
+    ).toBeDefined();
+  });
 
   it.each([
     ['resource', `https://evil-durin.com${personal}`, 'evil-durin.com', 'mcp.getdurin.com'],
@@ -207,8 +203,8 @@ describe('request allowlists', () => {
         'api.workos.com',
       ],
     ],
-    [custom, ['durin.acme.test', 'api.workos.com']],
-    [{ appOrigin: 'https://127.0.0.1:5270', development: false }, ['api.workos.com']],
+    [custom, ['durin.acme.test']],
+    [{ appOrigin: 'https://127.0.0.1:5270', development: false }, []],
   ])('lets setup for %o reach only its app, MCP and account hosts', (scope, hosts) => {
     const allowlist = deploymentHostAllowlist(scope);
     expect(allowlist.hosts.toSorted()).toEqual(hosts.toSorted());
@@ -227,5 +223,85 @@ describe('request allowlists', () => {
         development: false,
       }),
     ).toEqual({ hosts: ['mcp.getdurin.com', 'auth.getdurin.com'], development: false });
+  });
+});
+
+describe('account host pinning', () => {
+  it.each([production, staging])('accepts the WorkOS account API for $appOrigin', (scope) => {
+    for (const value of ['https://api.workos.com', 'https://API.WorkOS.com/'])
+      expect(untrustedCliHost('accountProvider', value, scope)).toBeUndefined();
+  });
+
+  it.each([
+    'https://resilient-tiger-64-staging.authkit.app/',
+    'https://Resilient-Tiger-64-Staging.AuthKit.app/',
+  ])('accepts the staging account issuer for the staging app: %s', (value) => {
+    expect(untrustedCliHost('accountIssuer', value, staging)).toBeUndefined();
+  });
+
+  it.each(cliHostRoles)('accepts a %s on the app’s own host', (role) => {
+    for (const scope of [production, staging, custom])
+      expect(untrustedCliHost(role, url(role, scope.appOrigin), scope)).toBeUndefined();
+  });
+
+  it.each(['https://auth.getdurin.com/', 'https://api.workos.com/'])(
+    'accepts only the app’s own host as production’s account issuer until it is confirmed: %s',
+    (value) => {
+      expect(untrustedCliHost('accountIssuer', value, production)).toContain('app.getdurin.com');
+    },
+  );
+
+  it.each(
+    (['accountIssuer', 'accountProvider'] as const).flatMap((role) =>
+      [production, staging].flatMap((scope) =>
+        [
+          'https://api.workos.com.evil.example',
+          'https://evil-workos.com',
+          'https://workos.com',
+          'https://api.workos.co',
+          'https://attacker.api.workos.com',
+          'https://other-tenant.authkit.app',
+          'https://authkit.app',
+          'https://resilient-tiger-64-staging.authkit.app.evil.example',
+          'https://app.getdurin.com.evil.example',
+        ].map((origin) => [role, origin, scope.appOrigin, scope] as const),
+      ),
+    ),
+  )('rejects a lookalike %s host %s for %s', (role, origin, _app, scope) => {
+    const problem = untrustedCliHost(role, `${origin}/`, scope);
+    expect(problem).toContain(new URL(origin).hostname);
+    expect(problem).toContain('durin');
+  });
+
+  it('keeps production and staging account issuers apart', () => {
+    expect(
+      untrustedCliHost(
+        'accountIssuer',
+        'https://resilient-tiger-64-staging.authkit.app/',
+        production,
+      ),
+    ).toBeDefined();
+    expect(untrustedCliHost('accountIssuer', 'https://app.getdurin.com/', staging)).toBeDefined();
+  });
+
+  it('gives a deployment without an allowlist only its own host for its account API', () => {
+    expect(untrustedCliHost('accountProvider', 'https://api.workos.com', custom)).toBeDefined();
+  });
+
+  it.each(['accountIssuer', 'accountProvider'] as const)(
+    'accepts a loopback %s host only in development',
+    (role) => {
+      expect(untrustedCliHost(role, 'http://127.0.0.1:4567', local)).toBeUndefined();
+      expect(untrustedCliHost(role, 'https://127.0.0.1:4567', production)).toContain('--dev');
+    },
+  );
+
+  it.each([
+    ['accountIssuer', 'account sign-in issuer'],
+    ['accountProvider', 'account sign-in service'],
+  ] as const)('names the %s in plain language', (role, name) => {
+    const problem = untrustedCliHost(role, 'https://api.workos.com.evil.example/', production);
+    expect(problem).toContain(name);
+    expect(problem).not.toMatch(/Durin|https?:\/\//u);
   });
 });

@@ -3,6 +3,7 @@ import type { AccountSession, DeviceAccountAuth, PollingClock } from './ports/cl
 import type { AccountIntent, SetupUi } from './ports/cli-setup.js';
 import { cliAuthConfigSchema } from './contracts/cli-auth.js';
 import { safeCliUrl } from './contracts/cli-url.js';
+import { untrustedCliHost } from './contracts/cli-host.js';
 import { WorkosDeviceAuth } from './device-auth.js';
 import { DurinAccountApi } from './account-api.js';
 import { selectOrganization } from './select-organization.js';
@@ -36,7 +37,18 @@ async function nativeConfiguration(options: Options) {
   ].every(Boolean);
   if (!trusted)
     throw new CliError('Native authentication configuration does not match this deployment.');
+  assertAccountHosts(config, options);
   return config;
+}
+/** Fails before device sign-in when the account hosts aren't ones this deployment uses. */
+function assertAccountHosts(
+  config: { readonly issuer: string; readonly providerOrigin: string },
+  scope: Pick<Options, 'appOrigin' | 'development'>,
+): void {
+  const problem =
+    untrustedCliHost('accountIssuer', config.issuer, scope) ??
+    untrustedCliHost('accountProvider', config.providerOrigin, scope);
+  if (problem) throw new CliError(`${problem} Check --app-url, or ask your durin administrator.`);
 }
 
 export async function setupAccount(options: Options) {

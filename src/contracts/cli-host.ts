@@ -1,30 +1,53 @@
 import { loopbackCliHost } from './cli-url.js';
 
-export type CliHostRole = 'resource' | 'mcpIssuer';
+export type CliHostRole = 'resource' | 'mcpIssuer' | 'accountIssuer' | 'accountProvider';
 export type CliHostScope = { readonly appOrigin: string; readonly development: boolean };
-export const cliHostRoles: readonly CliHostRole[] = ['resource', 'mcpIssuer'];
+export const cliHostRoles: readonly CliHostRole[] = [
+  'resource',
+  'mcpIssuer',
+  'accountIssuer',
+  'accountProvider',
+];
+/** The roles a saved profile records a URL for. */
+export const cliProfileHostRoles = ['resource', 'mcpIssuer', 'accountIssuer'] as const;
+/** The roles setup sends requests to. The account issuer only names who signs account tokens. */
+const contactedRoles: readonly CliHostRole[] = ['resource', 'mcpIssuer', 'accountProvider'];
 
+/**
+ * The account API for device sign-in. durin's server returns exactly this as providerOrigin
+ * outside loopback development (durin workers/api/src/cli-auth.ts).
+ */
+const WORKOS_API = 'api.workos.com';
 /** Exact hosts each known app uses besides its own. Never match by suffix. */
 const DEPLOYMENT_HOSTS = new Map<string, Readonly<Record<CliHostRole, readonly string[]>>>([
-  ['app.getdurin.com', { resource: ['mcp.getdurin.com'], mcpIssuer: ['auth.getdurin.com'] }],
+  // Production's account issuer (WORKOS_AUTHKIT_ISSUER) is set only at release time and isn't
+  // recorded in this repo or durin's, so only the app's own host is accepted until it is added.
+  [
+    'app.getdurin.com',
+    {
+      resource: ['mcp.getdurin.com'],
+      mcpIssuer: ['auth.getdurin.com'],
+      accountIssuer: [],
+      accountProvider: [WORKOS_API],
+    },
+  ],
   // Gateway: durin infra/durin.config.json (staging mcpGateway).
-  // Issuer: the staging AuthKit tenant that signs staging MCP grants.
+  // Issuers: the staging AuthKit tenant, which signs both staging MCP grants and account tokens.
   [
     'moria.app.getdurin.com',
     {
       resource: ['moria.mcp.getdurin.com'],
       mcpIssuer: ['resilient-tiger-64-staging.authkit.app'],
+      accountIssuer: ['resilient-tiger-64-staging.authkit.app'],
+      accountProvider: [WORKOS_API],
     },
   ],
 ]);
-/**
- * The account API that setup's device sign-in uses. durin's server returns exactly this as
- * providerOrigin outside loopback development (durin workers/api/src/cli-auth.ts).
- */
-const ACCOUNT_PROVIDER_HOSTS: readonly string[] = ['api.workos.com'];
 const ROLE_NAMES: Readonly<Record<CliHostRole, string>> = {
   resource: 'MCP endpoint',
   mcpIssuer: 'MCP sign-in server',
+  accountIssuer: 'account sign-in issuer',
+  accountProvider: 'account sign-in service',
 };
 
 const hostname = (value: string): string => (URL.canParse(value) ? new URL(value).hostname : '');
@@ -62,12 +85,7 @@ export function untrustedCliHost(
 export type CliHostAllowlist = { readonly hosts: readonly string[]; readonly development: boolean };
 /** Every host setup may contact for the deployment at `scope.appOrigin`. */
 export const deploymentHostAllowlist = (scope: CliHostScope): CliHostAllowlist => ({
-  hosts: [
-    ...new Set([
-      ...cliHostRoles.flatMap((role) => expectedHosts(role, scope)),
-      ...ACCOUNT_PROVIDER_HOSTS,
-    ]),
-  ],
+  hosts: [...new Set(contactedRoles.flatMap((role) => expectedHosts(role, scope)))],
   development: scope.development,
 });
 /** A saved profile's MCP requests reach only its endpoint and sign-in server. */

@@ -9,12 +9,13 @@ import { expect, it, vi } from 'vitest';
 import { secureFetch } from './safe-fetch.js';
 import { signOutMcp } from './logout.js';
 import { authorizeMcp } from './setup-mcp.js';
+import { setupAccount } from './setup-account.js';
 import { McpOAuthProvider } from './mcp-oauth.js';
 import { McpStdioBridge } from './mcp-bridge.js';
 import { createProfile, FileProfiles } from './profiles.js';
 import { profileConnection } from './profile-client.js';
 import { cliOptions } from './cli-options.js';
-import { profileHostAllowlist } from './contracts/cli-host.js';
+import { deploymentHostAllowlist, profileHostAllowlist } from './contracts/cli-host.js';
 
 vi.mock('./remote-mcp.js', () => ({
   RemoteMcpClient: class {
@@ -27,9 +28,11 @@ vi.mock('./remote-mcp.js', () => ({
 const EVIL = 'evil.example';
 const resource = `https://mcp.getdurin.com/mcp/u/${'a'.repeat(64)}`;
 const issuer = 'https://auth.getdurin.com/';
+// QA used https://api.workos.com/; production's account issuer is not confirmed, so only the app's
+// own host is pinned for it.
 const profile = createProfile({
   appOrigin: 'https://app.getdurin.com',
-  accountIssuer: 'https://api.workos.com/',
+  accountIssuer: 'https://app.getdurin.com/',
   accountClientId: 'account',
   principalId: 'user_one',
   workosOrganizationId: 'org_one',
@@ -249,4 +252,74 @@ it('gives a saved profile’s MCP connection a fetch that reaches only that prof
     vi.restoreAllMocks();
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+it('SETH-8-M2a: a saved/created profile with a lookalike accountIssuer is rejected', () => {
+  const { id: _id, version: _v, ...scope } = profile;
+  let error: unknown;
+  try {
+    createProfile({ ...scope, accountIssuer: 'https://api.workos.com.evil.example/' });
+  } catch (e) {
+    error = e;
+  }
+  expect(error).toBeDefined();
+  expect(String(error)).toContain('api.workos.com.evil.example');
+});
+
+it('SETH-8-M2b: device auth never contacts a lookalike providerOrigin from /auth/cli/config', async () => {
+  const appOrigin = 'https://app.getdurin.com';
+  const { hosts, request: raw } = recorder((url) => {
+    // QA's issuer was https://api.workos.com/; the app's own host keeps this about providerOrigin.
+    if (url.pathname === '/auth/cli/config')
+      return Response.json({
+        clientId: 'client',
+        issuer: `${appOrigin}/`,
+        providerOrigin: `https://api.workos.com.${EVIL}`,
+        appOrigin,
+      });
+    if (url.pathname.endsWith('/authorize/device'))
+      return Response.json({
+        device_code: 'd',
+        user_code: 'U',
+        verification_uri: `https://api.workos.com.${EVIL}/device`,
+        expires_in: 600,
+        interval: 1,
+      });
+    return new Response(null, { status: 500 });
+  }, false);
+  const outcome = await setupAccount({
+    appOrigin,
+    development: false,
+    request: secureFetch(deploymentHostAllowlist({ appOrigin, development: false }), raw),
+    clock: { now: () => 0, sleep: async () => {} } as never,
+    ui: { account: { authorize: async () => {} } } as never,
+    intent: 'sign-in' as never,
+  }).catch((error: unknown) => error);
+  expect(evilHit(hosts)).toEqual([]);
+  expect(String(outcome)).toContain(`api.workos.com.${EVIL}`);
+});
+
+it('SETH-8-M2b: setup itself never contacts a lookalike providerOrigin, even unguarded', async () => {
+  const appOrigin = 'https://app.getdurin.com';
+  const { hosts, request } = recorder(
+    (url) =>
+      url.pathname === '/auth/cli/config'
+        ? Response.json({
+            clientId: 'client',
+            issuer: `${appOrigin}/`,
+            providerOrigin: `https://api.workos.com.${EVIL}`,
+            appOrigin,
+          })
+        : new Response(null, { status: 500 }),
+    false,
+  );
+  await setupAccount({
+    appOrigin,
+    development: false,
+    request,
+    clock: { now: () => 0, sleep: async () => {} } as never,
+    ui: { account: { authorize: async () => {} } } as never,
+    intent: 'sign-in' as never,
+  }).catch(() => undefined);
+  expect(evilHit(hosts)).toEqual([]);
 });

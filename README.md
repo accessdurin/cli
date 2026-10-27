@@ -27,18 +27,26 @@ with `npm install --global @accessdurin/cli`. Publishing this Git repository alo
 does not make the package available on npm.
 The default app origin is `https://app.getdurin.com`. That deployment must have
 AuthKit CLI authentication and MCP authorization configured before onboarding works.
-Setup accepts a personal MCP endpoint and MCP sign-in server only on hosts the
-selected app uses: `mcp.getdurin.com` and `auth.getdurin.com` for the default app.
-Any other `--app-url` deployment must serve both from its own host. Hosts match
-exactly, never by suffix. Loopback hosts (`localhost`, `127.0.0.1`, `[::1]`) need
-`--dev`. Saved profiles are checked again whenever they load; one that points
-elsewhere is refused until you run `durin` to set it up again.
+Setup accepts each host it is given only if the selected app uses it. Hosts match
+exactly, never by suffix:
+
+| app                      | MCP endpoint             | MCP sign-in server                       | account sign-in issuer                   | account sign-in service |
+| ------------------------ | ------------------------ | ---------------------------------------- | ---------------------------------------- | ----------------------- |
+| `app.getdurin.com`       | `mcp.getdurin.com`       | `auth.getdurin.com`                      | the app's own host only, for now         | `api.workos.com`        |
+| `moria.app.getdurin.com` | `moria.mcp.getdurin.com` | `resilient-tiger-64-staging.authkit.app` | `resilient-tiger-64-staging.authkit.app` | `api.workos.com`        |
+
+The app's own host is also accepted for every role, and any other `--app-url`
+deployment must serve all of them from its own host. Loopback hosts (`localhost`,
+`127.0.0.1`, `[::1]`) need `--dev`. The account hosts come from the app's
+`/auth/cli/config` and are checked before device sign-in starts. Saved profiles are
+checked again whenever they load; one that points elsewhere is refused until you run
+`durin` to sign in again.
 Every request is checked against these hosts before anything is sent, including
 the token, registration and revocation endpoints that the sign-in server's
 metadata names and any metadata address an MCP server's `401` answer points to.
-Setup reaches only the app, its MCP endpoint and sign-in server, and the account
-API (`api.workos.com`). A saved profile reaches only its MCP endpoint and sign-in
-server. durin refuses any other host and names it in the error.
+Setup reaches only the app, its MCP endpoint and sign-in server, and its account
+sign-in service. A saved profile reaches only its MCP endpoint and sign-in server.
+durin refuses any other host and names it in the error.
 
 ## Claude Code plugin
 

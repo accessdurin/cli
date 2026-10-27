@@ -7,7 +7,7 @@ import { FileProfiles, createProfile } from './profiles.js';
 
 const scope = {
   appOrigin: 'https://app.example.test',
-  accountIssuer: 'https://accounts.example.test/',
+  accountIssuer: 'https://app.example.test/',
   accountClientId: 'client_account',
   principalId: 'user_one',
   workosOrganizationId: 'org_provider_one',
@@ -70,12 +70,12 @@ describe('organization profiles', () => {
   });
 });
 
-describe('organization profile MCP hosts', () => {
+describe('organization profile hosts', () => {
   const personal = `/mcp/u/${'a'.repeat(64)}`;
   const production = {
     ...scope,
     appOrigin: 'https://app.getdurin.com',
-    accountIssuer: 'https://auth.getdurin.com/',
+    accountIssuer: 'https://app.getdurin.com/',
     resource: `https://mcp.getdurin.com${personal}`,
     mcpIssuer: 'https://auth.getdurin.com/',
   };
@@ -111,7 +111,10 @@ describe('organization profile MCP hosts', () => {
     { mcpIssuer: 'https://authkit.app/' },
     { mcpIssuer: 'https://auth.getdurin.com/' },
     { resource: `https://mcp.getdurin.com${personal}` },
-  ])('rejects a staging profile with an MCP host it does not use: %j', (changes) => {
+    { accountIssuer: 'https://other-tenant.authkit.app/' },
+    { accountIssuer: 'https://auth.getdurin.com/' },
+    { accountIssuer: 'https://app.getdurin.com/' },
+  ])('rejects a staging profile with a host it does not use: %j', (changes) => {
     expect(() => createProfile({ ...staging, ...changes })).toThrow(
       new URL(Object.values(changes)[0]!).hostname,
     );
@@ -129,7 +132,13 @@ describe('organization profile MCP hosts', () => {
     { mcpIssuer: 'https://mcp.getdurin.com/' },
     { mcpIssuer: 'https://resilient-tiger-64-staging.authkit.app/' },
     { mcpIssuer: 'https://localhost/' },
-  ])('rejects a production profile with an MCP host it does not use: %j', (changes) => {
+    { accountIssuer: 'https://api.workos.com.evil.example/' },
+    { accountIssuer: 'https://evil-durin.com/' },
+    { accountIssuer: 'https://app.getdurin.com.evil.test/' },
+    { accountIssuer: 'https://resilient-tiger-64-staging.authkit.app/' },
+    { accountIssuer: 'https://auth.getdurin.com/' },
+    { accountIssuer: 'https://localhost/' },
+  ])('rejects a production profile with a host it does not use: %j', (changes) => {
     expect(() => createProfile({ ...production, ...changes })).toThrow(
       new URL(Object.values(changes)[0]!).hostname,
     );
@@ -152,8 +161,9 @@ describe('organization profile MCP hosts', () => {
   it.each([
     { resource: `https://evil-durin.com${personal}` },
     { mcpIssuer: 'https://getdurin.com.evil.test/' },
+    { accountIssuer: 'https://api.workos.com.evil.example/' },
   ])(
-    'refuses to load a saved profile whose binding is intact but whose MCP host is not used: %j',
+    'refuses to load a saved profile whose binding is intact but whose host is not used: %j',
     async (changes) => {
       const directory = await mkdtemp(join(tmpdir(), 'durin-profiles-'));
       directories.push(directory);
@@ -167,6 +177,9 @@ describe('organization profile MCP hosts', () => {
       await writeFile(join(directory, 'active'), `${id}\n`);
       const host = new URL(Object.values(changes)[0]!).hostname;
       await expect(new FileProfiles(directory).load(id)).rejects.toThrow(host);
+      await expect(new FileProfiles(directory).load(id)).rejects.toThrow(
+        'Run durin to sign in again.',
+      );
       await expect(new FileProfiles(directory).load()).rejects.toThrow(host);
       await expect(new FileProfiles(directory).list()).rejects.toThrow(host);
     },
