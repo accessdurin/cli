@@ -1,18 +1,18 @@
 // MAR-552: a logout that could not revoke the grant blocks the profile until sign-out finishes.
-import { chmod, cp, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, cp, lstat, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { PassThrough } from 'node:stream';
 import { setTimeout } from 'node:timers/promises';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { cliOptions, CliError } from './cli-options.js';
-import { signOutMcp } from './logout.js';
+import { retryPendingRevocations, signOutMcp } from './logout.js';
 import { McpOAuthProvider } from './mcp-oauth.js';
 import { McpStdioBridge } from './mcp-bridge.js';
 import { profileConnection } from './profile-client.js';
 import { withProfileLock } from './profile-lock.js';
 import { createProfile, FileProfiles } from './profiles.js';
-import { FileRevocationMarker } from './revocation-marker.js';
+import { FilePendingRevocations, FileRevocationMarker } from './revocation-marker.js';
 import { toolCommand } from './tool-commands.js';
 
 const remote = vi.hoisted(() => ({ connect: vi.fn<() => Promise<void>>(async () => {}) }));
@@ -410,5 +410,36 @@ it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
     } finally {
       await chmod(dirname(marker.path), 0o700);
     }
+  },
+);
+
+// MAR-552: a symlink in place of the marker or the pending list is never read as absent.
+const danglingSymlink = async (path: string) => {
+  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+  await symlink(join(directory, 'nowhere'), path);
+};
+it.skipIf(process.platform === 'win32')(
+  'treats a dangling symlink at the marker path as an unfinished sign-out',
+  async () => {
+    const marker = new FileRevocationMarker(directory, profile.id);
+    await danglingSymlink(marker.path);
+    expect(await marker.pending()).toBe(true);
+    await expectBlocked();
+  },
+);
+
+it.skipIf(process.platform === 'win32')(
+  'never reads a dangling symlink at the pending list path as an empty list',
+  async () => {
+    const pending = new FilePendingRevocations(directory, profile.id);
+    await danglingSymlink(pending.path);
+    await expect(pending.entries()).rejects.toThrow(CliError);
+    await expect(
+      pending.add({ clientId: 'client_one', accessToken: 'synthetic-access' }),
+    ).rejects.toThrow(CliError);
+    const request = vi.fn<typeof fetch>(revoked);
+    await retryPendingRevocations(directory, profile, request);
+    expect(request).not.toHaveBeenCalled();
+    expect((await lstat(pending.path)).isSymbolicLink()).toBe(true);
   },
 );

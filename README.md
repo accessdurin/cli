@@ -171,11 +171,12 @@ these too), and metadata that is missing or unreadable. Only a 2xx answer counts
 revoked. `durin logout` marks the profile in `<config-dir>/revocations/` before it
 contacts the server and removes the mark only after the local credentials are gone, so a
 logout that is interrupted (for example with Ctrl-C) or fails partway still counts as
-unfinished. Until sign-out finishes, every MCP call through `durin mcp serve`, `durin
-tools …`, and `durin verify` is refused, and the grant is neither used nor refreshed. A
-bridge that was already running closes within about a second, ending its event stream; a
-bridge started while sign-out is unfinished stays open so that each call explains why it
-is refused. The block lifts when a retried `durin logout` succeeds, when `durin logout
+unfinished. Anything left at the mark's path counts, even a damaged file or a broken
+symlink. Until sign-out finishes, every MCP call through `durin mcp serve`, `durin tools
+…`, and `durin verify` is refused, and the grant is neither used nor refreshed. A bridge
+that was already running closes within about a second, ending its event stream; a bridge
+started while sign-out is unfinished stays open so that each call explains why it is
+refused. The block lifts when a retried `durin logout` succeeds, when `durin logout
 --force` clears the grant locally (it works offline), or when you sign in to the profile
 again with `durin`. Signing in again never reuses the kept grant: durin first retries
 revoking it, then deletes it. If the authorization server still can't confirm the

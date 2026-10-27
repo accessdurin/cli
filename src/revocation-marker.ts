@@ -1,4 +1,4 @@
-import { readFile, rm, stat } from 'node:fs/promises';
+import { lstat, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { CliError } from './cli-options.js';
@@ -12,14 +12,17 @@ export const SIGN_OUT_UNFINISHED =
 const missingFile = (error: unknown): boolean =>
   z.object({ code: z.literal('ENOENT') }).safeParse(error).success;
 
-/** Only the marker's presence matters, so a damaged or unreadable marker still blocks the profile. */
+/**
+ * Only the marker's presence matters, so a damaged or unreadable marker still blocks the profile,
+ * and so does a symlink in its place, even one whose target is missing.
+ */
 export class FileRevocationMarker implements RevocationMarker {
   readonly path: string;
   constructor(directory: string, profileId: string) {
     this.path = join(directory, 'revocations', `${cliProfileIdSchema.parse(profileId)}.pending`);
   }
   async pending(): Promise<boolean> {
-    return stat(this.path).then(
+    return lstat(this.path).then(
       () => true,
       (error: unknown) => !missingFile(error),
     );
@@ -68,16 +71,10 @@ export class FilePendingRevocations implements PendingRevocations {
     );
   }
   async entries(): Promise<readonly UnrevokedGrant[]> {
-    const raw = await readFile(this.path, 'utf8').catch((error: unknown) => {
-      if (missingFile(error)) return null;
-      throw error;
-    });
+    const raw = await this.read();
     if (raw === null) return [];
     const parsed = pendingListSchema.safeParse(parseJson(raw));
-    if (!parsed.success)
-      throw new CliError(
-        `durin can’t read its list of earlier sign-ins that still need to be revoked (${this.path}). Move that file aside, then run durin again.`,
-      );
+    if (!parsed.success) throw this.unreadable();
     return parsed.data.grants;
   }
   async add(grant: UnrevokedGrant): Promise<void> {
@@ -87,6 +84,21 @@ export class FilePendingRevocations implements PendingRevocations {
   async replace(grants: readonly UnrevokedGrant[]): Promise<void> {
     if (grants.length === 0) return rm(this.path, { force: true });
     await atomicWrite(this.path, `${JSON.stringify({ grants })}\n`);
+  }
+  /** Anything but a regular file here, a dangling symlink included, is unreadable, not absent. */
+  private async read(): Promise<string | null> {
+    const info = await lstat(this.path).catch((error: unknown) => {
+      if (missingFile(error)) return null;
+      throw error;
+    });
+    if (!info) return null;
+    if (!info.isFile()) throw this.unreadable();
+    return readFile(this.path, 'utf8');
+  }
+  private unreadable(): CliError {
+    return new CliError(
+      `durin can’t read its list of earlier sign-ins that still need to be revoked (${this.path}). Move that file aside, then run durin again.`,
+    );
   }
 }
 
