@@ -71,26 +71,23 @@ const ROLE_NAMES: Readonly<Record<CliHostRole, string>> = {
 /** Hostname and port, which a URL leaves out when it is the default for its scheme. */
 const hostOf = (value: string): string => (URL.canParse(value) ? new URL(value).host : '');
 const loopback = (host: string): boolean => loopbackCliHost(new URL(`http://${host}`).hostname);
-/** The app's host without one trailing dot, so app.getdurin.com. is still production. */
-const appHostOf = (appOrigin: string): string => {
-  if (!URL.canParse(appOrigin)) return '';
-  const { hostname, port } = new URL(appOrigin);
-  return `${hostname.replace(/\.$/u, '')}${port ? `:${port}` : ''}`;
-};
-const selfHosted = (scope: CliHostScope): boolean =>
-  !DEPLOYMENT_HOSTS.has(appHostOf(scope.appOrigin));
+/**
+ * cliOptions strips --app-url's one trailing dot, so an app host still ending in one names no
+ * deployment: durin trusts no host for it, and never treats it as self-hosted.
+ */
+const dottedApp = (scope: CliHostScope): boolean =>
+  URL.parse(scope.appOrigin)?.hostname.endsWith('.') ?? false;
+const selfHosted = (scope: CliHostScope): boolean => !DEPLOYMENT_HOSTS.has(hostOf(scope.appOrigin));
 /** A self-hosted app may sign accounts in with WorkOS; only then may it reach WorkOS's API. */
 const selfHostedHosts = (role: CliHostRole, scope: CliHostScope): readonly string[] =>
   role === 'accountProvider' && workosIssuer(scope.accountIssuer) ? [WORKOS_API] : [];
 /** A known app's own host is never one of its issuers. A self-hosted app's serves every role. */
 const APP_HOST_ROLES = new Set<CliHostRole>(['resource', 'accountProvider']);
-/** The app's own host, both as written in --app-url and without its trailing dot. */
 const appHosts = (role: CliHostRole, scope: CliHostScope): readonly string[] =>
-  selfHosted(scope) || APP_HOST_ROLES.has(role)
-    ? [appHostOf(scope.appOrigin), hostOf(scope.appOrigin)]
-    : [];
+  selfHosted(scope) || APP_HOST_ROLES.has(role) ? [hostOf(scope.appOrigin)] : [];
 const expectedHosts = (role: CliHostRole, scope: CliHostScope): readonly string[] => {
-  const app = appHostOf(scope.appOrigin);
+  if (dottedApp(scope)) return [];
+  const app = hostOf(scope.appOrigin);
   const listed = DEPLOYMENT_HOSTS.get(app)?.[role] ?? selfHostedHosts(role, scope);
   return [...new Set([...listed, ...appHosts(role, scope)])].filter(
     (host) => host && (scope.development || !loopback(host)),
@@ -100,9 +97,12 @@ const allowsWorkosIssuer = (role: CliHostRole, scope: CliHostScope): boolean =>
   role === 'accountIssuer' && selfHosted(scope);
 const pinnedIssuer = (role: CliHostRole, scope: CliHostScope): boolean =>
   (role === 'mcpIssuer' || role === 'accountIssuer') && !selfHosted(scope);
-/** Exactly https://<host>, with at most one trailing slash: no path, query, fragment or user. */
+/**
+ * Exactly https://<host> or https://<host>/, compared as written: no uppercase, port, path, query,
+ * fragment, user, or other spelling that only parses to the same address.
+ */
 const exactIssuer = (url: string, host: string): boolean =>
-  URL.parse(url)?.href === `https://${host}/`;
+  url === `https://${host}` || url === `https://${host}/`;
 const allowedRemote = (role: CliHostRole, url: string, scope: CliHostScope): boolean =>
   pinnedIssuer(role, scope)
     ? expectedHosts(role, scope).some((expected) => exactIssuer(url, expected))
@@ -116,7 +116,7 @@ const describeExpected = (role: CliHostRole, scope: CliHostScope): string => {
     : [];
   const expected = [...expectedHosts(role, scope), ...workosIssuers];
   return expected.length
-    ? `, but the durin app at ${appHostOf(scope.appOrigin)} uses ${expected.join(' or ')}`
+    ? `, but the durin app at ${hostOf(scope.appOrigin)} uses ${expected.join(' or ')}`
     : '';
 };
 const workosProviderHint = (role: CliHostRole, host: string, scope: CliHostScope): string =>
@@ -125,7 +125,7 @@ const workosProviderHint = (role: CliHostRole, host: string, scope: CliHostScope
     : '';
 const describeProblem = (role: CliHostRole, host: string, scope: CliHostScope): string => {
   if (pinnedIssuer(role, scope) && expectedHosts(role, scope).includes(host))
-    return `The ${ROLE_NAMES[role]} must be exactly ${host} over HTTPS, with no path, query or user name.`;
+    return `The ${ROLE_NAMES[role]} must be exactly ${host} over HTTPS, in lowercase, with no port, path, query or user name.`;
   const local = loopback(host) ? ' Local addresses are only allowed with --dev.' : '';
   const uses = describeExpected(role, scope);
   return `The ${ROLE_NAMES[role]} is on ${host}${uses}.${local}${workosProviderHint(role, host, scope)}`;
@@ -143,6 +143,17 @@ export function untrustedCliHost(
   const host = hostOf(url);
   if (!host) return `The ${ROLE_NAMES[role]} is not a valid web address.`;
   return allowedHost(role, url, scope) ? undefined : describeProblem(role, host, scope);
+}
+
+/**
+ * The issuer to save and compare for `role`. A known app's pinned issuer is https://<host> with no
+ * trailing slash, as its sign-in server names itself in RFC 8414 metadata and the callback's iss.
+ * Any other issuer, including a self-hosted app's, is returned as written.
+ */
+export function canonicalIssuer(role: CliHostRole, url: string, scope: CliHostScope): string {
+  if (!pinnedIssuer(role, scope)) return url;
+  const host = expectedHosts(role, scope).find((expected) => exactIssuer(url, expected));
+  return host ? `https://${host}` : url;
 }
 
 /** The hosts a request may reach. Loopback hosts are reachable only in development. */

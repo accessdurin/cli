@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  canonicalIssuer,
   cliHostRoles,
   deploymentHostAllowlist,
   profileHostAllowlist,
@@ -36,7 +37,6 @@ describe('host pinning', () => {
   it.each([
     'https://resilient-tiger-64-staging.authkit.app',
     'https://resilient-tiger-64-staging.authkit.app/',
-    'https://Resilient-Tiger-64-Staging.AuthKit.app/',
   ])('accepts the staging MCP sign-in server for the staging app: %s', (value) => {
     expect(untrustedCliHost('mcpIssuer', value, staging)).toBeUndefined();
   });
@@ -113,7 +113,6 @@ describe('host pinning', () => {
 
   it.each([
     ['resource', `https://mcp.getdurin.com:443${personal}`],
-    ['mcpIssuer', 'https://auth.getdurin.com:443/'],
     ['accountProvider', 'https://api.workos.com:443'],
   ] as const)('accepts an allowed %s host with its default port written out: %s', (role, value) => {
     expect(untrustedCliHost(role, value, production)).toBeUndefined();
@@ -254,6 +253,19 @@ describe('request allowlists', () => {
     expect(allowlist.development).toBe(scope.development);
   });
 
+  it.each(['https://app.getdurin.com.', 'https://app.getdurin.com..', 'https://durin.acme.test.'])(
+    'trusts no host for an app origin %s that still ends in a dot',
+    (appOrigin) => {
+      const scope = { appOrigin, development: false };
+      expect(deploymentHostAllowlist(scope).hosts).toEqual([]);
+      for (const role of cliHostRoles)
+        expect(untrustedCliHost(role, url(role, new URL(appOrigin).origin), scope)).toBeDefined();
+      expect(
+        untrustedCliHost('resource', `https://mcp.getdurin.com${personal}`, scope),
+      ).toBeDefined();
+    },
+  );
+
   it('keeps loopback for development in a setup allowlist', () => {
     expect(deploymentHostAllowlist(local)).toMatchObject({ development: true });
   });
@@ -290,8 +302,8 @@ describe('account host pinning', () => {
   });
 
   it.each([
+    'https://resilient-tiger-64-staging.authkit.app',
     'https://resilient-tiger-64-staging.authkit.app/',
-    'https://Resilient-Tiger-64-Staging.AuthKit.app/',
   ])('accepts the staging account issuer for the staging app: %s', (value) => {
     expect(untrustedCliHost('accountIssuer', value, staging)).toBeUndefined();
   });
@@ -325,12 +337,53 @@ describe('account host pinning', () => {
         'https://user@auth.getdurin.com/',
         'https://user:secret@auth.getdurin.com/',
         'http://auth.getdurin.com/',
+        'https://AUTH.getdurin.com',
+        'https://auth.getdurin.com:443/',
+        'https:///auth.getdurin.com',
+        'https:auth.getdurin.com',
+        'https://auth%2egetdurin.com/',
+        'https://auth.getdurin.com/x/..',
+        'https://:@auth.getdurin.com',
       ].map((value) => [role, value] as const),
     ),
   )('accepts only the exact production %s value, not %s', (role, value) => {
     const problem = untrustedCliHost(role, value, production);
     expect(problem).toContain('must be exactly auth.getdurin.com over HTTPS');
     expect(problem).not.toContain('secret');
+  });
+
+  it.each(
+    (['mcpIssuer', 'accountIssuer'] as const).flatMap((role) =>
+      (
+        [
+          [production, 'auth.getdurin.com'],
+          [staging, 'resilient-tiger-64-staging.authkit.app'],
+        ] as const
+      ).map(([scope, host]) => [role, scope.appOrigin, scope, host] as const),
+    ),
+  )('refuses a %s for %s that only parses to its issuer', (role, _app, scope, host) => {
+    for (const value of [`https://${host.toUpperCase()}/`, `https://${host}:443`])
+      expect(untrustedCliHost(role, value, scope)).toContain(`must be exactly ${host}`);
+  });
+
+  it.each(['mcpIssuer', 'accountIssuer'] as const)(
+    'gives a known app’s %s as https://<host>, without a trailing slash',
+    (role) => {
+      for (const value of ['https://auth.getdurin.com', 'https://auth.getdurin.com/'])
+        expect(canonicalIssuer(role, value, production)).toBe('https://auth.getdurin.com');
+      expect(
+        canonicalIssuer(role, 'https://resilient-tiger-64-staging.authkit.app/', staging),
+      ).toBe('https://resilient-tiger-64-staging.authkit.app');
+    },
+  );
+
+  it('keeps a self-hosted app’s issuers as written', () => {
+    expect(canonicalIssuer('mcpIssuer', 'https://durin.acme.test/', custom)).toBe(
+      'https://durin.acme.test/',
+    );
+    expect(canonicalIssuer('accountIssuer', 'https://acme.authkit.app/', custom)).toBe(
+      'https://acme.authkit.app/',
+    );
   });
 
   it('accepts auth.getdurin.com, but not api.workos.com, as production’s account issuer', () => {

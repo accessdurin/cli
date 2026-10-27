@@ -29,7 +29,8 @@ The default app origin is `https://app.getdurin.com`. That deployment must have
 AuthKit CLI authentication and MCP authorization configured before onboarding works.
 Setup accepts each host it is given only if the selected app uses it. Hosts match
 exactly, never by suffix, and so do ports: the hosts below are allowed only on the
-default HTTPS port (443, written out or not), and the app's own host only on the
+default HTTPS port (443, written out or not, except in an issuer, which must leave
+it out), and the app's own host only on the
 app's port:
 
 | app                      | MCP endpoint             | MCP sign-in server                       | account sign-in issuer                   | account sign-in service |
@@ -38,16 +39,20 @@ app's port:
 | `moria.app.getdurin.com` | `moria.mcp.getdurin.com` | `resilient-tiger-64-staging.authkit.app` | `resilient-tiger-64-staging.authkit.app` | `api.workos.com`        |
 
 - **Issuers are exact.** On these two apps, each sign-in server and account
-  sign-in issuer must be exactly the origin in the table, such as
-  `https://auth.getdurin.com`, with at most one trailing slash. A path, query,
-  fragment or user name is refused.
+  sign-in issuer must be written exactly as the origin in the table, such as
+  `https://auth.getdurin.com`, with at most one trailing slash. Anything else is
+  refused, even when it parses to the same address: uppercase, a port (even
+  `:443`), a path, query, fragment or user name, or an encoded or unusual
+  spelling. durin saves and uses it as `https://<host>`, without the slash, as
+  the sign-in server names itself.
 - **The app's own host.** These two apps also accept their own host as the MCP
   endpoint and the account sign-in service, but never as a sign-in server or
   account sign-in issuer. So production refuses `https://app.getdurin.com` as its
   account issuer.
 - **Trailing dot.** The `--app-url` host is matched without one trailing dot, so
   `https://app.getdurin.com.` follows production's rules and is never treated as
-  self-hosted.
+  self-hosted. A host with more than one trailing dot, such as
+  `https://app.getdurin.com..`, is refused.
 - **Self-hosted apps.** Any other `--app-url` is a self-hosted deployment. It must
   serve every role from its own host, with one exception: its account sign-in
   issuer may instead be a WorkOS issuer. That is an HTTPS address on exactly

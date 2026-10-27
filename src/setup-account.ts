@@ -4,6 +4,7 @@ import type { AccountIntent, SetupUi } from './ports/cli-setup.js';
 import { cliAuthConfigSchema } from './contracts/cli-auth.js';
 import { safeCliUrl } from './contracts/cli-url.js';
 import {
+  canonicalIssuer,
   deploymentHostAllowlist,
   untrustedCliHost,
   type CliHostScope,
@@ -43,7 +44,7 @@ async function nativeConfiguration(options: Options) {
   if (!trusted)
     throw new CliError('Native authentication configuration does not match this deployment.');
   assertAccountHosts(config, options);
-  return config;
+  return { ...config, issuer: canonicalIssuer('accountIssuer', config.issuer, options) };
 }
 /** Fails before device sign-in when the account hosts aren't ones this deployment uses. */
 function assertAccountHosts(

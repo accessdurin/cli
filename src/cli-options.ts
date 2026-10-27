@@ -65,10 +65,17 @@ function resolvedOptions(values: ReturnType<typeof parseCliArgs>['values'], posi
     directory: configDirectory(values['config-dir']),
   };
 }
-/** Without one trailing dot, as the app's own /auth/cli/config names it. */
+/**
+ * Without one trailing dot, as the app's own /auth/cli/config names it. This is the only place a
+ * dot is stripped; a host that still ends in one names no durin app.
+ */
 const canonicalOrigin = (origin: string): string => {
   const url = new URL(origin);
   url.hostname = url.hostname.replace(/\.$/u, '');
+  if (url.hostname.endsWith('.'))
+    throw new CliError(
+      `--app-url ${new URL(origin).host} ends in more than one dot, so it names no durin app.`,
+    );
   return url.origin;
 };
 const configDirectory = (path: string | undefined) =>

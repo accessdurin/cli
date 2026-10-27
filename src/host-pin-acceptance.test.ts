@@ -373,7 +373,12 @@ const deviceSignIn = (appOrigin: string, provider: string) => [
 
 /** Fake production: the app, WorkOS and the MCP gateway and sign-in server, so setup finishes. */
 const productionDeployment = (
-  changes: { endpoint?: string; mcpIssuer?: string; registration?: string } = {},
+  changes: {
+    endpoint?: string;
+    accountIssuer?: string;
+    mcpIssuer?: string;
+    registration?: string;
+  } = {},
 ): Route => {
   const endpoint = changes.endpoint ?? resource;
   const session = {
@@ -390,7 +395,7 @@ const productionDeployment = (
       Response.json({
         clientId: 'client_account',
         appOrigin: production,
-        issuer: productionIssuer,
+        issuer: changes.accountIssuer ?? productionIssuer,
         providerOrigin: workos,
       }),
     '/user_management/authorize/device': () =>
@@ -575,15 +580,65 @@ it.each(['global', 'injected'] as const)(
   },
 );
 
-it.each([
-  'https://auth.getdurin.com/',
-  'https://auth.getdurin.com:443/',
+it.each(['https://auth.getdurin.com/', productionIssuer])(
+  'production signs accounts in with the account issuer %s on api.workos.com',
+  async (value) => {
+    const { hosts, outcome } = await setupSignIn(production, value);
+    expect(hosts).toEqual(deviceSignIn(production, 'api.workos.com'));
+    expect(outcome).toContain('Unable to start account sign-in.');
+  },
+);
+
+/** Spellings that parse to production's issuer but are not exactly it, as written. */
+const issuerSpellings = [
   'https://AUTH.getdurin.com',
-  productionIssuer,
-])('production signs accounts in with the account issuer %s on api.workos.com', async (value) => {
-  const { hosts, outcome } = await setupSignIn(production, value);
-  expect(hosts).toEqual(deviceSignIn(production, 'api.workos.com'));
-  expect(outcome).toContain('Unable to start account sign-in.');
+  'https://auth.getdurin.com:443/',
+  'https:///auth.getdurin.com',
+  'https:auth.getdurin.com',
+  'https://auth%2egetdurin.com/',
+  'https://auth.getdurin.com/x/..',
+  'https://:@auth.getdurin.com',
+];
+it.each(issuerSpellings)(
+  'production refuses the account issuer %s from /auth/cli/config before sign-in and saves nothing',
+  async (value) => {
+    const { hosts, outcome, saved } = await setupSignIn(production, value);
+    expect(hosts).toEqual(configOnly(production));
+    expect(outcome).toContain(
+      'The account sign-in issuer must be exactly auth.getdurin.com over HTTPS',
+    );
+    expect(saved).toEqual([]);
+  },
+);
+
+it.each(issuerSpellings)(
+  'production refuses the MCP sign-in server %s from MCP discovery before contacting it and saves nothing',
+  async (value) => {
+    const { hosts, outcome, saved } = await setupRun({
+      appOrigin: production,
+      route: productionDeployment({ mcpIssuer: value }),
+    });
+    expect(hosts).toEqual([...accountSignIn, mcpDiscovery]);
+    expect(outcome).toContain(
+      'The MCP sign-in server must be exactly auth.getdurin.com over HTTPS',
+    );
+    expect(saved).toEqual([]);
+  },
+);
+
+it('saves production’s issuers as https://auth.getdurin.com when config and discovery name them with a trailing slash', async () => {
+  const { hosts, outcome, saved, ready } = await setupRun({
+    appOrigin: production,
+    route: productionDeployment({
+      accountIssuer: `${productionIssuer}/`,
+      mcpIssuer: `${productionIssuer}/`,
+    }),
+  });
+  expect(outcome).toBe('finished');
+  expect(hosts).toEqual([...accountSignIn, mcpDiscovery, ...mcpSignIn]);
+  expect(saved).toHaveLength(1);
+  expect(saved[0]).toMatchObject({ accountIssuer: productionIssuer, mcpIssuer: productionIssuer });
+  expect(ready).toEqual([saved[0]!.id]);
 });
 
 it.each([
@@ -640,6 +695,27 @@ it.each([
     expect(outcome).not.toContain('WorkOS issuer');
   },
 );
+
+it('refuses --app-url https://app.getdurin.com.., which ends in two dots, before contacting anything', async () => {
+  const sent = vi.spyOn(globalThis, 'fetch');
+  try {
+    expect(() => cliOptions(['login', '--app-url', 'https://app.getdurin.com..'])).toThrow(
+      '--app-url app.getdurin.com.. ends in more than one dot',
+    );
+    expect(sent).not.toHaveBeenCalled();
+  } finally {
+    vi.restoreAllMocks();
+  }
+  // Even when given to setup directly, it is neither production nor a self-hosted app.
+  const { hosts, outcome, saved } = await setupRun({
+    appOrigin: 'https://app.getdurin.com..',
+    route: productionDeployment(),
+  });
+  expect(hosts).toEqual([]);
+  expect(outcome).toContain('durin didn’t contact app.getdurin.com..');
+  expect(outcome).not.toContain('auth.getdurin.com');
+  expect(saved).toEqual([]);
+});
 
 it('treats a lookalike of the production app host as a self-hosted app, never as production', async () => {
   const app = new URL('https://аpp.getdurin.com').origin;

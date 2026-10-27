@@ -18,7 +18,7 @@ beforeAll(async () => {
   await build({ logLevel: 'silent', build: { outDir } });
   // Under node_modules the bundle is outside this package's scope, so it names its module type.
   await writeFile(join(outDir, 'package.json'), '{"type":"module"}\n');
-});
+}, 60_000);
 afterAll(async () => {
   await rm(outDir, { recursive: true, force: true });
 });
@@ -26,9 +26,13 @@ afterAll(async () => {
 /** Onboarding needs a terminal; util-linux `script` runs the built CLI in one. */
 const terminal = spawnSync('script', ['--version'], { encoding: 'utf8' });
 const hasTerminal = !terminal.error && terminal.stdout.includes('util-linux');
+/** Without `script` these tests skip locally, but fail in CI, which must run them. */
+const skipped = !hasTerminal && !process.env.CI;
 const quoted = (value: string) => `'${value.replaceAll("'", `'\\''`)}'`;
 /** Runs the built CLI with its own config directory and home, so no saved state is shared. */
 const durin = async (args: readonly string[]) => {
+  if (!hasTerminal)
+    throw new Error('These end-to-end tests need util-linux `script`, which CI must install.');
   const home = await mkdtemp(join(tmpdir(), 'durin-e2e-'));
   const command = [process.execPath, join(outDir, 'cli.js'), ...args, '--config-dir', home];
   try {
@@ -44,12 +48,19 @@ const durin = async (args: readonly string[]) => {
   }
 };
 
-/** A real HTTP server on 127.0.0.1 that records every request it receives. */
+/**
+ * A real HTTP server on 127.0.0.1 that records every request it receives, and counts every
+ * connection, including one that never makes an HTTP request (such as a TLS handshake).
+ */
 const localServer = async (reply: (path: string, response: ServerResponse) => void) => {
   const hits: string[] = [];
+  let connections = 0;
   const server = createServer((request, response) => {
     hits.push(`${request.method} ${request.url}`);
     reply(request.url ?? '', response);
+  });
+  server.on('connection', () => {
+    connections += 1;
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const { port } = server.address() as AddressInfo;
@@ -57,11 +68,12 @@ const localServer = async (reply: (path: string, response: ServerResponse) => vo
     server.closeAllConnections();
     return new Promise<void>((resolve) => server.close(() => resolve()));
   };
-  return { port, origin: `http://127.0.0.1:${port}`, hits, close };
+  return { port, origin: `http://127.0.0.1:${port}`, hits, connections: () => connections, close };
 };
 
-it.skipIf(!hasTerminal)(
+it.skipIf(skipped)(
   'with --dev, the built CLI reads a local deployment’s config, then starts device sign-in on its WorkOS',
+  { timeout: 30_000 },
   async () => {
     const workos = await localServer((_path, response) => {
       response.writeHead(503).end();
@@ -89,8 +101,9 @@ it.skipIf(!hasTerminal)(
   },
 );
 
-it.skipIf(!hasTerminal)(
-  'without --dev, the built CLI refuses a loopback app URL before any request reaches it',
+it.skipIf(skipped)(
+  'without --dev, the built CLI refuses a loopback app URL before connecting to it',
+  { timeout: 30_000 },
   async () => {
     const app = await localServer((_path, response) => {
       response.writeHead(503).end();
@@ -102,6 +115,9 @@ it.skipIf(!hasTerminal)(
       expect(output).toContain('Local addresses are only allowed with --dev.');
       expect(code).toBe(1);
       expect(app.hits).toEqual([]);
+      // The CLI would speak HTTPS to this plain HTTP server, so no request could ever arrive;
+      // only a connection count shows that it never tried.
+      expect(app.connections()).toBe(0);
     } finally {
       await app.close();
     }

@@ -5,6 +5,7 @@ import type { PendingRevocations } from './ports/pending-revocations.js';
 import type { CliProfile } from './contracts/cli-profile.js';
 import { safeCliUrl } from './contracts/cli-url.js';
 import {
+  canonicalIssuer,
   profileHostAllowlist,
   untrustedCliHost,
   type CliHostRole,
@@ -35,7 +36,7 @@ export async function mcpIssuer(
   if (!validIssuer(issuer, scope.development))
     throw new CliError('Unsafe MCP authorization issuer.');
   assertExpectedHost('mcpIssuer', String(issuer), scope);
-  return String(issuer);
+  return canonicalIssuer('mcpIssuer', String(issuer), scope);
 }
 function assertExpectedHost(role: CliHostRole, url: string, scope: CliHostScope): void {
   const problem = untrustedCliHost(role, url, scope);

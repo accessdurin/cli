@@ -1,6 +1,8 @@
-// MAR-828 acceptance: Tess's QA host matrix for cli#8 (qa-host-pin.test.ts), as an assertion table.
-// Expected outcomes are her 5ede0ff results, except "port 8443" and the loopback self-host rows
-// (127.0.0.2, localhost., 0.0.0.0, [::ffff:127.0.0.1] without --dev), which must now be rejected.
+// MAR-828 acceptance: the host matrix for cli#8, as an assertion table. Expected outcomes are the
+// 5ede0ff results, except "port 8443" and the loopback self-host rows (127.0.0.2, localhost.,
+// 0.0.0.0, [::ffff:127.0.0.1] without --dev), which must now be rejected; a pinned issuer is
+// compared as written, so uppercase is rejected; and an app origin still ending in a dot (which
+// cliOptions strips once) trusts no host.
 import { expect, it } from 'vitest';
 import { untrustedCliHost, type CliHostScope } from './cli-host.js';
 import { safeCliUrl } from './cli-url.js';
@@ -41,7 +43,9 @@ const rows: readonly Row[] = [
   ['http localhost dev', 'resource', 'http://localhost:8787/mcp', { ...PROD, development: true }, 'accept'],
   ['staging resource on staging', 'resource', 'https://moria.mcp.getdurin.com/mcp', STG, 'accept'],
   ['staging issuer on staging', 'mcpIssuer', 'https://resilient-tiger-64-staging.authkit.app/', STG, 'accept'],
-  ['staging issuer UPPERCASE', 'mcpIssuer', 'https://RESILIENT-TIGER-64-STAGING.authkit.app/', STG, 'accept'],
+  ['staging issuer UPPERCASE', 'mcpIssuer', 'https://RESILIENT-TIGER-64-STAGING.authkit.app/', STG, 'reject'],
+  ['prod issuer UPPERCASE', 'mcpIssuer', 'https://AUTH.getdurin.com/', PROD, 'reject'],
+  ['prod issuer port 443 explicit', 'mcpIssuer', 'https://auth.getdurin.com:443/', PROD, 'reject'],
   ['other tenant authkit', 'mcpIssuer', 'https://other-tenant.authkit.app/', STG, 'reject'],
   ['bare authkit.app', 'mcpIssuer', 'https://authkit.app/', STG, 'reject'],
   ['staging issuer .evil.com', 'mcpIssuer', 'https://resilient-tiger-64-staging.authkit.app.evil.com/', STG, 'reject'],
@@ -52,7 +56,7 @@ const rows: readonly Row[] = [
   ['moria callback host as issuer on PROD', 'mcpIssuer', 'https://moria.app.getdurin.com/', PROD, 'reject'],
   ['app host as resource prod', 'resource', 'https://app.getdurin.com/mcp', PROD, 'accept'],
   ['staging issuer as resource', 'resource', 'https://resilient-tiger-64-staging.authkit.app/mcp', STG, 'reject'],
-  ['app-url trailing dot (staging)', 'mcpIssuer', 'https://resilient-tiger-64-staging.authkit.app/', { appOrigin: 'https://moria.app.getdurin.com.', development: false }, 'accept'],
+  ['app-url trailing dot left unstripped (staging)', 'mcpIssuer', 'https://resilient-tiger-64-staging.authkit.app/', { appOrigin: 'https://moria.app.getdurin.com.', development: false }, 'reject'],
   ['app-url uppercase staging', 'mcpIssuer', 'https://resilient-tiger-64-staging.authkit.app/', { appOrigin: 'https://MORIA.APP.GETDURIN.COM', development: false }, 'accept'],
   ['app-url 127.0.0.2 no dev (self host)', 'resource', 'https://127.0.0.2/mcp', { appOrigin: 'https://127.0.0.2', development: false }, 'reject'],
   ['app-url localhost. no dev (self host)', 'resource', 'https://localhost./mcp', { appOrigin: 'https://localhost.', development: false }, 'reject'],
@@ -67,7 +71,7 @@ const outcome = (role: Row[1], url: string, scope: CliHostScope) =>
     : 'reject';
 
 it.each(rows.map(([name, role, url, scope, expected]) => ({ name, role, url, scope, expected })))(
-  'QA host matrix: $name ($role $url)',
+  'host matrix: $name ($role $url)',
   ({ role, url, scope, expected }) => {
     expect(outcome(role, url, scope)).toBe(expected);
   },
