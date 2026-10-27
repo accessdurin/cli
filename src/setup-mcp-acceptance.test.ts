@@ -14,8 +14,8 @@ vi.mock('./remote-mcp.js', () => ({
   },
 }));
 
-const resource = `https://mcp.example.test/mcp/u/${'a'.repeat(64)}`;
-const issuer = 'https://auth.example.test/';
+const resource = `https://app.example.test/mcp/u/${'a'.repeat(64)}`;
+const issuer = 'https://app.example.test/';
 const profile = createProfile({
   appOrigin: 'https://app.example.test',
   accountIssuer: issuer,

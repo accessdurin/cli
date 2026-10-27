@@ -18,6 +18,7 @@ import { retryPendingRevocations } from './logout.js';
 import { installRuntime } from './install-runtime.js';
 import { verifySavedBridge } from './verify-bridge.js';
 import { CliError } from './cli-options.js';
+import { deploymentHostAllowlist } from './contracts/cli-host.js';
 
 type Options = {
   readonly appOrigin: string;
@@ -33,9 +34,15 @@ type Options = {
 };
 export async function runSetup(options: Options): Promise<void> {
   const context = await setupContext(options);
-  const { intent, request, clock } = context;
+  const { intent, clock } = context;
   options.ui.stage('Authenticate your Durin account');
-  const account = await setupAccount({ ...options, request, intent, clock });
+  // setupAccount guards its own requests: its hosts depend on the account issuer it learns.
+  const account = await setupAccount({
+    ...options,
+    request: options.request ?? fetch,
+    intent,
+    clock,
+  });
   options.ui.stage('Complete organization onboarding');
   await onboardOrganization({
     api: account.api,
@@ -61,7 +68,7 @@ async function setupContext(options: Options) {
   return {
     ...options,
     intent,
-    request: secureFetch(options.development, options.request ?? fetch),
+    request: secureFetch(deploymentHostAllowlist(options), options.request ?? fetch),
     store: options.store ?? new NativeCredentialStore(),
     clock: setupClock(options),
   };
@@ -86,7 +93,7 @@ async function setupAgent(
     organizationId: workspace.organization.id,
     environment: workspace.settings.environment,
     resource: endpoint.url,
-    mcpIssuer: await mcpIssuer(endpoint.url, request, options.development),
+    mcpIssuer: await mcpIssuer(endpoint.url, request, options),
     development: options.development,
   });
   const profiles = new FileProfiles(options.directory);

@@ -27,7 +27,7 @@ Options:
   --approval-id <id>            Resume a tool call after approval
   --force                       logout: clear the local grant even if revocation fails
   --app-url <origin>            Durin app origin (default: https://app.getdurin.com)
-  --dev                        Allow loopback HTTP for local development
+  --dev                        Allow loopback hosts and HTTP for local development
   -h, --help                   Show this help
 
 Agent selection happens during onboarding. Direct MCP clients authorize separately.
@@ -60,11 +60,24 @@ function resolvedOptions(values: ReturnType<typeof parseCliArgs>['values'], posi
   return {
     values,
     positionals,
-    appOrigin,
+    appOrigin: canonicalOrigin(appOrigin),
     development,
     directory: configDirectory(values['config-dir']),
   };
 }
+/**
+ * Without one trailing dot, as the app's own /auth/cli/config names it. This is the only place a
+ * dot is stripped; a host that still ends in one names no durin app.
+ */
+const canonicalOrigin = (origin: string): string => {
+  const url = new URL(origin);
+  url.hostname = url.hostname.replace(/\.$/u, '');
+  if (url.hostname.endsWith('.'))
+    throw new CliError(
+      `--app-url ${new URL(origin).host} ends in more than one dot, so it names no durin app.`,
+    );
+  return url.origin;
+};
 const configDirectory = (path: string | undefined) =>
   resolve(path ?? resolve(homedir(), '.config/durin'));
 export function cliOptions(args: readonly string[]) {

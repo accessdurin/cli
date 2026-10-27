@@ -26,11 +26,11 @@ vi.mock('./credentials.js', () => ({
   },
 }));
 
-const issuer = 'https://issuer.example.test/';
-const resource = `https://mcp.example.test/mcp/u/${'a'.repeat(64)}`;
+const issuer = 'https://app.example.test/';
+const resource = `https://app.example.test/mcp/u/${'a'.repeat(64)}`;
 const profile = createProfile({
   appOrigin: 'https://app.example.test',
-  accountIssuer: 'https://account.example.test',
+  accountIssuer: 'https://app.example.test',
   accountClientId: 'account',
   principalId: 'user_one',
   workosOrganizationId: 'org_one',

@@ -4,8 +4,8 @@ import { auth } from '@modelcontextprotocol/client';
 import { McpOAuthProvider } from './mcp-oauth.js';
 import { createProfile } from './profiles.js';
 
-const resource = `https://mcp.example.test/mcp/u/${'a'.repeat(64)}`;
-const issuer = 'https://auth.example.test/';
+const resource = `https://app.example.test/mcp/u/${'a'.repeat(64)}`;
+const issuer = 'https://app.example.test/';
 const bodyText = (init?: RequestInit): string => String(init?.body);
 const profile = createProfile({
   appOrigin: 'https://app.example.test',

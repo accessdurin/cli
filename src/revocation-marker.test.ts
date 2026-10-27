@@ -26,14 +26,14 @@ vi.mock('./remote-mcp.js', () => ({
 
 const scope = {
   appOrigin: 'https://app.example.test',
-  accountIssuer: 'https://account.example.test',
+  accountIssuer: 'https://app.example.test',
   accountClientId: 'account',
   principalId: 'user_one',
   workosOrganizationId: 'org_one',
   organizationId: 'org_internal',
   environment: 'production',
-  resource: `https://mcp.example.test/mcp/u/${'a'.repeat(64)}`,
-  mcpIssuer: 'https://issuer.example.test',
+  resource: `https://app.example.test/mcp/u/${'a'.repeat(64)}`,
+  mcpIssuer: 'https://app.example.test',
   development: false,
 } as const;
 const profile = createProfile(scope);
@@ -82,10 +82,10 @@ const authorizationServer =
     String(url).includes('.well-known')
       ? Response.json({
           issuer: profile.mcpIssuer,
-          authorization_endpoint: 'https://issuer.example.test/authorize',
-          token_endpoint: 'https://issuer.example.test/token',
+          authorization_endpoint: 'https://app.example.test/authorize',
+          token_endpoint: 'https://app.example.test/token',
           response_types_supported: ['code'],
-          revocation_endpoint: 'https://issuer.example.test/revoke',
+          revocation_endpoint: 'https://app.example.test/revoke',
         })
       : revoke();
 const networkFailure = (code: string) => () => {
@@ -348,8 +348,8 @@ it('leaves the profile blocked when logout throws before its credentials are wip
   const withoutRevocation: typeof fetch = async () =>
     Response.json({
       issuer: profile.mcpIssuer,
-      authorization_endpoint: 'https://issuer.example.test/authorize',
-      token_endpoint: 'https://issuer.example.test/token',
+      authorization_endpoint: 'https://app.example.test/authorize',
+      token_endpoint: 'https://app.example.test/token',
       response_types_supported: ['code'],
     });
   const failing = {

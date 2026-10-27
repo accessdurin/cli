@@ -8,6 +8,7 @@ import { withProfileLock } from './profile-lock.js';
 import { assertSignOutFinished, FileRevocationMarker } from './revocation-marker.js';
 import { secureFetch } from './safe-fetch.js';
 import { retryPendingRevocations } from './logout.js';
+import { profileHostAllowlist } from './contracts/cli-host.js';
 
 /** Checked under the profile lock, so no request slips past a logout that is still revoking. */
 const withSignedInProfile = <T>(directory: string, profileId: string, work: () => Promise<T>) =>
@@ -33,7 +34,7 @@ export async function profileConnection(options: CliOptions) {
     development: profile.development,
     marker,
     authorization: new McpOAuthProvider({ profile, store, marker }),
-    fetch: secureFetch(profile.development),
+    fetch: secureFetch(profileHostAllowlist(profile)),
     serialize: (work: () => Promise<void>) =>
       withSignedInProfile(options.directory, profile.id, work),
   };

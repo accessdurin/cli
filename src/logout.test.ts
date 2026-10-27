@@ -5,14 +5,14 @@ import { McpOAuthProvider } from './mcp-oauth.js';
 
 const profile = createProfile({
   appOrigin: 'https://app.example.test',
-  accountIssuer: 'https://account.example.test',
+  accountIssuer: 'https://app.example.test',
   accountClientId: 'account',
   principalId: 'user_one',
   workosOrganizationId: 'org_one',
   organizationId: 'org_internal',
   environment: 'production',
-  resource: `https://mcp.example.test/mcp/u/${'a'.repeat(64)}`,
-  mcpIssuer: 'https://issuer.example.test',
+  resource: `https://app.example.test/mcp/u/${'a'.repeat(64)}`,
+  mcpIssuer: 'https://app.example.test',
   development: false,
 });
 const memoryStore = (values: Map<string, string>) => ({
@@ -52,10 +52,10 @@ const authorizationServer =
     String(url).includes('.well-known')
       ? Response.json({
           issuer: profile.mcpIssuer,
-          authorization_endpoint: 'https://issuer.example.test/authorize',
-          token_endpoint: 'https://issuer.example.test/token',
+          authorization_endpoint: 'https://app.example.test/authorize',
+          token_endpoint: 'https://app.example.test/token',
           response_types_supported: ['code'],
-          revocation_endpoint: 'https://issuer.example.test/revoke',
+          revocation_endpoint: 'https://app.example.test/revoke',
         })
       : revoke(init);
 
@@ -184,8 +184,8 @@ it('clears the grant despite a transient failure when forced', async () => {
 
 const metadataWith = (revocationEndpoint: string) => ({
   issuer: profile.mcpIssuer,
-  authorization_endpoint: 'https://issuer.example.test/authorize',
-  token_endpoint: 'https://issuer.example.test/token',
+  authorization_endpoint: 'https://app.example.test/authorize',
+  token_endpoint: 'https://app.example.test/token',
   response_types_supported: ['code'],
   revocation_endpoint: revocationEndpoint,
 });
@@ -194,7 +194,7 @@ it('clears the grant when its revocation endpoint is unsafe, since it can never 
   await signedIn(values);
   const request = async (url: string | URL | Request) =>
     String(url).includes('.well-known')
-      ? Response.json(metadataWith('http://issuer.example.test/revoke'))
+      ? Response.json(metadataWith('http://app.example.test/revoke'))
       : new Response(null, { status: 200 });
   expect(
     await signOutMcp({ profile, store: memoryStore(values), marker: memoryMarker(), request }),
@@ -224,7 +224,7 @@ const notFoundMetadata: typeof fetch = async (url) =>
 const withoutRevocationEndpoint: typeof fetch = async (url) =>
   String(url).includes('.well-known')
     ? Response.json({
-        ...metadataWith('https://issuer.example.test/revoke'),
+        ...metadataWith('https://app.example.test/revoke'),
         revocation_endpoint: undefined,
       })
     : new Response(null, { status: 200 });
@@ -326,7 +326,7 @@ it('records the unfinished sign-out before contacting the authorization server',
 const withoutRevocation: typeof fetch = async (url) =>
   String(url).includes('.well-known')
     ? Response.json({
-        ...metadataWith('https://issuer.example.test/revoke'),
+        ...metadataWith('https://app.example.test/revoke'),
         revocation_endpoint: undefined,
       })
     : new Response(null, { status: 200 });
