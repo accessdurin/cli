@@ -11,8 +11,8 @@ const profile = createProfile({
   workosOrganizationId: 'org_one',
   organizationId: 'org_internal',
   environment: 'production',
-  resource: `https://mcp.example.test/mcp/u/${'a'.repeat(64)}`,
-  mcpIssuer: 'https://issuer.example.test',
+  resource: `https://app.example.test/mcp/u/${'a'.repeat(64)}`,
+  mcpIssuer: 'https://app.example.test',
   development: false,
 });
 const memoryStore = (values: Map<string, string>) => ({

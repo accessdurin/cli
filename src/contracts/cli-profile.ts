@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { safeCliUrl } from './cli-url.js';
+import { cliHostRoles, untrustedCliHost } from './cli-host.js';
 
 export const cliProfileIdSchema = z.string().regex(/^[a-f0-9]{64}$/u);
 export const cliProfileScopeSchema = z
@@ -30,7 +31,13 @@ export const cliProfileScopeSchema = z
   .refine(
     (scope) => /\/mcp\/u\/[a-f0-9]{64}$/u.test(scope.resource),
     'Use the resolved personal MCP resource.',
-  );
+  )
+  .superRefine((scope, context) => {
+    for (const role of cliHostRoles) {
+      const problem = untrustedCliHost(role, scope[role], scope);
+      if (problem) context.addIssue({ code: 'custom', message: problem, path: [role] });
+    }
+  });
 export const cliProfileSchema = cliProfileScopeSchema
   .safeExtend({
     version: z.literal(1),

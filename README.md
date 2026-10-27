@@ -27,6 +27,12 @@ with `npm install --global @accessdurin/cli`. Publishing this Git repository alo
 does not make the package available on npm.
 The default app origin is `https://app.getdurin.com`. That deployment must have
 AuthKit CLI authentication and MCP authorization configured before onboarding works.
+Setup accepts a personal MCP endpoint and MCP sign-in server only on hosts the
+selected app uses: `mcp.getdurin.com` and `auth.getdurin.com` for the default app.
+Any other `--app-url` deployment must serve both from its own host. Hosts match
+exactly, never by suffix. Loopback hosts (`localhost`, `127.0.0.1`, `[::1]`) need
+`--dev`. Saved profiles are checked again whenever they load; one that points
+elsewhere is refused until you run `durin` to set it up again.
 
 ## Claude Code plugin
 
@@ -85,7 +91,7 @@ It does not trust a saved completion flag. No pasted endpoint or token is requir
 | `--approval-id <id>`      | `tools call`; resume the exact independently approved operation          |
 | `--force`                 | `logout`; clear local credentials and lift the block if revocation fails |
 | `--app-url <origin>`      | Interactive setup; use another HTTPS Durin deployment                    |
-| `--dev`                   | Interactive setup; additionally allow guarded loopback HTTP              |
+| `--dev`                   | Interactive setup; allow loopback hosts, including guarded HTTP          |
 | `-h`, `--help`            | Show usage                                                               |
 
 Unknown, misplaced, and extra arguments fail instead of being silently ignored.

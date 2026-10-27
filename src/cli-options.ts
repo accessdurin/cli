@@ -27,7 +27,7 @@ Options:
   --approval-id <id>            Resume a tool call after approval
   --force                       logout: clear the local grant even if revocation fails
   --app-url <origin>            Durin app origin (default: https://app.getdurin.com)
-  --dev                        Allow loopback HTTP for local development
+  --dev                        Allow loopback hosts and HTTP for local development
   -h, --help                   Show this help
 
 Agent selection happens during onboarding. Direct MCP clients authorize separately.

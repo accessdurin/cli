@@ -85,7 +85,7 @@ async function setupAgent(
     organizationId: workspace.organization.id,
     environment: workspace.settings.environment,
     resource: endpoint.url,
-    mcpIssuer: await mcpIssuer(endpoint.url, request, options.development),
+    mcpIssuer: await mcpIssuer(endpoint.url, request, options),
     development: options.development,
   });
   const profiles = new FileProfiles(options.directory);

@@ -4,6 +4,7 @@ import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promise
 import { dirname, join } from 'node:path';
 import { z } from 'zod';
 import type { CliProfiles } from './ports/cli-profiles.js';
+import { cliHostRoles } from './contracts/cli-host.js';
 import {
   cliProfileIdSchema,
   cliProfileSchema,
@@ -17,9 +18,17 @@ export function createProfile(input: CliProfileScope): CliProfile {
   const id = createHash('sha256').update(JSON.stringify(scope)).digest('hex');
   return { ...scope, version: 1, id };
 }
+const invalidProfile = (error: z.ZodError): string => {
+  const host = error.issues.find(
+    (issue) => issue.code === 'custom' && cliHostRoles.some((role) => issue.path[0] === role),
+  );
+  return host
+    ? `${host.message} Run durin to set up this organization again.`
+    : 'Invalid Durin profile binding.';
+};
 const parseProfile = (value: unknown): CliProfile => {
   const parsed = cliProfileSchema.safeParse(value);
-  if (!parsed.success) throw new CliError('Invalid Durin profile binding.');
+  if (!parsed.success) throw new CliError(invalidProfile(parsed.error));
   const { id, version: _version, ...scope } = parsed.data;
   const expected = createProfile(scope);
   if (id !== expected.id)

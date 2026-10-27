@@ -1,8 +1,8 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { expect, it, vi } from 'vitest';
-import { authorizeMcp } from './setup-mcp.js';
+import { describe, expect, it, vi } from 'vitest';
+import { authorizeMcp, mcpIssuer } from './setup-mcp.js';
 import { createProfile } from './profiles.js';
 import { FileRevocationMarker } from './revocation-marker.js';
 import type { RevocationMarker } from './ports/revocation-marker.js';
@@ -15,8 +15,8 @@ vi.mock('./remote-mcp.js', () => ({
   },
 }));
 
-const resource = `https://mcp.example.test/mcp/u/${'a'.repeat(64)}`;
-const issuer = 'https://auth.example.test/';
+const resource = `https://app.example.test/mcp/u/${'a'.repeat(64)}`;
+const issuer = 'https://app.example.test/';
 const profile = createProfile({
   appOrigin: 'https://app.example.test',
   accountIssuer: issuer,
@@ -147,6 +147,80 @@ it.each([
   ).rejects.toThrow('Unsafe MCP authorization URL.');
   expect(opened).toEqual([]);
   expect(await marker.pending()).toBe(true);
+});
+
+describe('MCP issuer discovery host pinning', () => {
+  const personal = `/mcp/u/${'a'.repeat(64)}`;
+  const production = { appOrigin: 'https://app.getdurin.com', development: false };
+  const discovery = (resourceUrl: string, authorizationServer: string) => {
+    const requested: string[] = [];
+    const request: typeof fetch = async (input) => {
+      const url = new URL(String(input));
+      requested.push(url.host);
+      return url.pathname.includes('oauth-protected-resource')
+        ? Response.json({ resource: resourceUrl, authorization_servers: [authorizationServer] })
+        : new Response(null, { status: 404 });
+    };
+    return { request, requested };
+  };
+
+  it('accepts the production MCP gateway and its sign-in server', async () => {
+    const value = `https://mcp.getdurin.com${personal}`;
+    const { request } = discovery(value, 'https://auth.getdurin.com');
+    await expect(mcpIssuer(value, request, production)).resolves.toBe('https://auth.getdurin.com');
+  });
+
+  it.each([
+    ['a lookalike host', 'https://evil-durin.com', 'evil-durin.com'],
+    ['a suffix lookalike host', 'https://getdurin.com.evil.test', 'getdurin.com.evil.test'],
+    ['a subdomain that is not allowed', 'https://evil.getdurin.com', 'evil.getdurin.com'],
+    ['a loopback host outside development', 'https://127.0.0.1:8443', '127.0.0.1'],
+  ])(
+    'rejects a personal MCP resource on %s before contacting it',
+    async (_case, origin, unexpected) => {
+      const value = `${origin}${personal}`;
+      const { request, requested } = discovery(value, 'https://auth.getdurin.com');
+      const failure = mcpIssuer(value, request, production);
+      await expect(failure).rejects.toThrow(unexpected);
+      await expect(failure).rejects.toThrow('mcp.getdurin.com');
+      expect(requested).toEqual([]);
+    },
+  );
+
+  it.each([
+    ['a lookalike host', 'https://evil-durin.com', 'evil-durin.com'],
+    [
+      'a suffix lookalike host',
+      'https://auth.getdurin.com.evil.test',
+      'auth.getdurin.com.evil.test',
+    ],
+    ['a subdomain that is not allowed', 'https://login.getdurin.com', 'login.getdurin.com'],
+    ['the MCP gateway host', 'https://mcp.getdurin.com', 'mcp.getdurin.com'],
+    ['a loopback host outside development', 'https://localhost', 'localhost'],
+  ])('rejects an MCP sign-in server on %s', async (_case, authorizationServer, unexpected) => {
+    const value = `https://mcp.getdurin.com${personal}`;
+    const { request } = discovery(value, authorizationServer);
+    const failure = mcpIssuer(value, request, production);
+    await expect(failure).rejects.toThrow(unexpected);
+    await expect(failure).rejects.toThrow('auth.getdurin.com');
+  });
+
+  it('accepts a loopback MCP gateway and sign-in server in development', async () => {
+    const value = `http://127.0.0.1:5272${personal}`;
+    const { request } = discovery(value, 'http://127.0.0.1:5272/');
+    await expect(
+      mcpIssuer(value, request, { appOrigin: 'http://127.0.0.1:5270', development: true }),
+    ).resolves.toBe('http://127.0.0.1:5272/');
+  });
+
+  it('rejects a loopback MCP gateway when development is off, even on the app host', async () => {
+    const value = `https://127.0.0.1:8443${personal}`;
+    const { request, requested } = discovery(value, 'https://127.0.0.1:8443/');
+    await expect(
+      mcpIssuer(value, request, { appOrigin: 'https://127.0.0.1:8443', development: false }),
+    ).rejects.toThrow('127.0.0.1');
+    expect(requested).toEqual([]);
+  });
 });
 
 const oauthFixtureRequest: typeof fetch = async (input, init) => {
