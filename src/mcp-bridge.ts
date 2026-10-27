@@ -12,6 +12,8 @@ import { cliMcpNegotiationSchema } from './contracts/cli-mcp.js';
 import { safeCliUrl } from './contracts/cli-url.js';
 import type { BridgeCalls } from './bridge-calls.js';
 import { CliError } from './cli-options.js';
+import type { RevocationMarker } from './ports/revocation-marker.js';
+import { SIGN_OUT_UNFINISHED } from './revocation-marker.js';
 
 type Options = {
   readonly resource: string;
@@ -23,7 +25,10 @@ type Options = {
   readonly calls?: BridgeCalls;
   readonly serialize?: (work: () => Promise<void>) => Promise<void>;
   readonly onError?: (message: string) => void;
+  readonly marker?: RevocationMarker;
 };
+/** How often an open bridge checks whether another process left sign-out unfinished. */
+const SIGN_OUT_CHECK_INTERVAL = 1_000;
 const failureMessage = (error: unknown): string => {
   if (error instanceof CliError) return error.message;
   return error instanceof UnauthorizedError
@@ -37,6 +42,8 @@ export class McpStdioBridge {
   private initializedRequest: string | number | undefined;
   private closed = false;
   private delivery: Promise<void> = Promise.resolve();
+  private signOutCheck: NodeJS.Timeout | undefined;
+  private signedOut = true;
 
   constructor(private readonly options: Options) {
     if (!safeCliUrl(options.resource, options.development ?? false))
@@ -65,7 +72,7 @@ export class McpStdioBridge {
     Object.assign(this.remote, {
       onmessage: (message: JSONRPCMessage) => {
         this.negotiated(message);
-        this.delivery = this.deliver(message);
+        this.delivery = this.delivery.then(() => this.deliver(message));
         void this.delivery.catch(() => this.close());
       },
       onerror: () => this.report('Durin MCP transport failed.'),
@@ -78,11 +85,40 @@ export class McpStdioBridge {
   async start(): Promise<void> {
     await this.remote.start();
     await this.local.start();
+    this.watchSignOut();
   }
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
+    clearInterval(this.signOutCheck);
     await Promise.all([this.remote.close(), this.local.close()]);
+  }
+
+  /**
+   * Once another process leaves sign-out unfinished, the bridge closes, ending its event stream
+   * and any token refresh. A bridge that starts while sign-out is unfinished stays open, so
+   * that each call explains why it is refused.
+   */
+  private watchSignOut(): void {
+    if (!this.options.marker) return;
+    const check = () => void this.closeOnSignOut().catch(() => this.close());
+    check();
+    this.signOutCheck = setInterval(check, SIGN_OUT_CHECK_INTERVAL);
+    this.signOutCheck.unref();
+  }
+  private async closeOnSignOut(): Promise<void> {
+    const signedOut = await this.signOutPending();
+    const started = !this.signedOut && signedOut;
+    this.signedOut = signedOut;
+    if (started) await this.closeSignedOut();
+  }
+  private async signOutPending(): Promise<boolean> {
+    return this.options.marker ? this.options.marker.pending() : false;
+  }
+  private async closeSignedOut(): Promise<void> {
+    if (this.closed) return;
+    this.report(SIGN_OUT_UNFINISHED);
+    await this.close();
   }
 
   private async forward(message: JSONRPCMessage): Promise<void> {
@@ -99,7 +135,9 @@ export class McpStdioBridge {
     await this.remote.send(prepared);
     await this.delivery;
   }
-  private deliver(message: JSONRPCMessage): Promise<void> {
+  /** Nothing the server sends reaches the agent while sign-out is unfinished. */
+  private async deliver(message: JSONRPCMessage): Promise<void> {
+    if (await this.signOutPending()) return this.closeSignedOut();
     const send = (value: JSONRPCMessage) => this.local.send(value);
     return this.options.calls ? this.options.calls.deliver(message, send) : send(message);
   }

@@ -7,7 +7,7 @@ import { atomicWrite } from './profiles.js';
 import type { RevocationMarker } from './ports/revocation-marker.js';
 import type { PendingRevocations, UnrevokedGrant } from './ports/pending-revocations.js';
 
-const SIGN_OUT_UNFINISHED =
+export const SIGN_OUT_UNFINISHED =
   'Signing out of this durin profile hasn’t finished: the authorization server could not confirm that access was revoked, so MCP calls and durin tools are blocked for this profile. Run durin logout again to finish, or durin logout --force to sign out on this computer without the server.';
 const missingFile = (error: unknown): boolean =>
   z.object({ code: z.literal('ENOENT') }).safeParse(error).success;

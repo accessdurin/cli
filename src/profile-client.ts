@@ -25,11 +25,13 @@ export async function profileConnection(options: CliOptions) {
       );
     });
   await retryPendingRevocations(options.directory, profile);
+  const marker = new FileRevocationMarker(options.directory, profile.id);
   return {
     profile,
     resource: profile.resource,
     development: profile.development,
-    authorization: new McpOAuthProvider({ profile, store: new NativeCredentialStore() }),
+    marker,
+    authorization: new McpOAuthProvider({ profile, store: new NativeCredentialStore(), marker }),
     fetch: secureFetch(profile.development),
     serialize: (work: () => Promise<void>) =>
       withSignedInProfile(options.directory, profile.id, work),

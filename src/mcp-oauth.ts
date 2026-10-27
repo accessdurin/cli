@@ -10,6 +10,8 @@ import type {
   StoredOAuthTokens,
 } from '@modelcontextprotocol/client';
 import type { CredentialStore } from './ports/credential-store.js';
+import type { RevocationMarker } from './ports/revocation-marker.js';
+import { assertSignOutFinished } from './revocation-marker.js';
 import type { CliProfile } from './contracts/cli-profile.js';
 import { safeCliUrl } from './contracts/cli-url.js';
 
@@ -22,6 +24,8 @@ type Options = {
   readonly profile: CliProfile;
   readonly store: CredentialStore;
   readonly authorization?: Authorization;
+  /** Given for MCP sessions, which must not use or refresh the grant while sign-out is unfinished. */
+  readonly marker?: RevocationMarker;
 };
 type CredentialKind = 'client' | 'tokens';
 const signInRequired = () =>
@@ -105,7 +109,8 @@ export class McpOAuthProvider implements OAuthClientProvider {
       JSON.stringify(parseClient(value, this.options.profile.mcpIssuer)),
     );
   }
-  tokens(context?: OAuthClientInformationContext): Promise<StoredOAuthTokens | undefined> {
+  async tokens(context?: OAuthClientInformationContext): Promise<StoredOAuthTokens | undefined> {
+    if (this.options.marker) await assertSignOutFinished(this.options.marker);
     return this.load('tokens', parseTokens, context);
   }
   async saveTokens(
