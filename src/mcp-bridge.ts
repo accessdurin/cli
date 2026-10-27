@@ -12,6 +12,7 @@ import { cliMcpNegotiationSchema } from './contracts/cli-mcp.js';
 import { safeCliUrl } from './contracts/cli-url.js';
 import type { BridgeCalls } from './bridge-calls.js';
 import { CliError } from './cli-options.js';
+import { SIGN_IN_AGAIN } from './mcp-oauth.js';
 import type { RevocationMarker } from './ports/revocation-marker.js';
 import { SIGN_OUT_UNFINISHED } from './revocation-marker.js';
 
@@ -32,7 +33,7 @@ const SIGN_OUT_CHECK_INTERVAL = 1_000;
 const failureMessage = (error: unknown): string => {
   if (error instanceof CliError) return error.message;
   return error instanceof UnauthorizedError
-    ? 'Durin MCP sign-in is required. Run durin to authorize this organization.'
+    ? SIGN_IN_AGAIN
     : 'Durin MCP request failed. Its outcome may be uncertain; retain the same idempotency key when retrying.';
 };
 

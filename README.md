@@ -189,7 +189,10 @@ for that profile retry those revocations for up to 10 seconds without waiting fo
 profile, and forget each old grant once it is revoked or the server says it offers no
 revocation. A failed retry never stops the command. Sign-out finishes without revoking
 only when the server's own metadata lists no revocation endpoint, or when it lists an
-unsafe one that durin will never call; then the grant is cleared locally. Other clients'
+unsafe one that durin will never call; then the grant is cleared locally. If the
+authorization server revokes the grant itself, the next MCP call through a bridge or
+`durin tools …` is refused after one refused refresh, the stored tokens are deleted
+rather than retried, and durin asks you to sign in again with `durin`. Other clients'
 OAuth grants and browser sessions are unaffected.
 
 If a process dies while holding a profile lock, the CLI reports its exact lock path.

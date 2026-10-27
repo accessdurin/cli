@@ -5,12 +5,13 @@ import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { auth, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
-import { cliOptions } from './cli-options.js';
+import { cliOptions, CliError } from './cli-options.js';
 import { McpStdioBridge } from './mcp-bridge.js';
 import { McpOAuthProvider } from './mcp-oauth.js';
 import { profileConnection } from './profile-client.js';
 import { createProfile, FileProfiles } from './profiles.js';
 import { FileRevocationMarker } from './revocation-marker.js';
+import { toolCommand } from './tool-commands.js';
 
 const keyring = vi.hoisted(() => new Map<string, string>());
 vi.mock('./credentials.js', () => ({
@@ -135,10 +136,33 @@ const mcpAnswer = (body: string) => {
     { headers: { 'mcp-session-id': 'session-one' } },
   );
 };
+/** Once the server revokes the grant, MCP requests and refreshes are refused (MAR-534 case 8). */
+const revokedRoutes = [
+  {
+    match: (path: string) => path === '/token',
+    response: () =>
+      Response.json(
+        { error: 'invalid_grant', error_description: 'The grant was revoked.' },
+        { status: 400 },
+      ),
+  },
+  {
+    match: (path: string) => path.startsWith('/mcp/'),
+    response: () =>
+      new Response(null, {
+        status: 401,
+        headers: { 'www-authenticate': 'Bearer error="invalid_token"' },
+      }),
+  },
+];
 /** The organization's MCP server and authorization server, recording every request. */
 const durinServer = () => {
   const requests: Recorded[] = [];
   const streams: ReturnType<typeof eventStream>[] = [];
+  let routes = authorizationRoutes;
+  const revoke = () => {
+    routes = [...revokedRoutes, ...authorizationRoutes];
+  };
   const openStream = (signal: AbortSignal | null | undefined) => {
     const stream = eventStream(signal);
     streams.push(stream);
@@ -147,11 +171,11 @@ const durinServer = () => {
   const request: typeof fetch = async (input, init) => {
     const entry = recorded(input, init);
     requests.push(entry);
-    const route = authorizationRoutes.find(({ match }) => match(entry.path));
+    const route = routes.find(({ match }) => match(entry.path));
     if (route) return route.response();
     return entry.method === 'GET' ? openStream(init?.signal) : mcpAnswer(entry.body);
   };
-  return { request, requests, streams };
+  return { request, requests, streams, revoke };
 };
 const usesOldGrant = ({ authorization, body }: Recorded) =>
   authorization === 'Bearer old-access' || body.includes('old-refresh');
@@ -194,7 +218,7 @@ const openBridge = async (server: ReturnType<typeof durinServer>) => {
   await next();
   write({ jsonrpc: '2.0', method: 'notifications/initialized' });
   await vi.waitFor(() => expect(server.streams).toHaveLength(1));
-  return { bridge, next, received, errors, stream: server.streams[0]! };
+  return { bridge, next, write, received, errors, stream: server.streams[0]! };
 };
 
 it('stops delivering an open bridge’s event stream once another process marks sign-out unfinished', async () => {
@@ -270,5 +294,66 @@ it('sends no request with the old grant from a transport outside the call gate',
     expect(server.requests.filter(usesOldGrant)).toEqual([]);
   } finally {
     await transport.close();
+  }
+});
+
+// MAR-534 case 8: a grant the server revoked blocks the next MCP call, with no silent retry.
+const signInAgain = (message: unknown) => {
+  expect(message).toMatch(/sign in again/u);
+  expect(message).toMatch(/Run durin in a terminal/u);
+  expect(message).not.toMatch(/Durin/u);
+};
+const toolCall = (id: number) => ({
+  jsonrpc: '2.0',
+  id,
+  method: 'tools/call',
+  params: { name: 'sandbox__read_document', arguments: {} },
+});
+
+it('blocks the next bridge call once the server has revoked the grant, and asks to sign in again', async () => {
+  const server = durinServer();
+  const open = await openBridge(server);
+  try {
+    server.revoke();
+    const revokedAt = server.requests.length;
+    open.write(toolCall(2));
+    const refused = (await open.next()) as { id: number; error?: { message: string } };
+    expect(refused.id).toBe(2);
+    signInAgain(refused.error?.message);
+    const afterRefusal = server.requests.slice(revokedAt);
+    expect(
+      afterRefusal.filter(({ authorization }) => authorization === 'Bearer old-access'),
+    ).toHaveLength(1);
+    expect(afterRefusal.filter(({ path }) => path === '/token')).toHaveLength(1);
+
+    const retriedAt = server.requests.length;
+    open.write(toolCall(3));
+    const again = (await open.next()) as { id: number; error?: { message: string } };
+    expect(again.id).toBe(3);
+    signInAgain(again.error?.message);
+    expect(server.requests.slice(retriedAt).filter(usesOldGrant)).toEqual([]);
+  } finally {
+    await open.bridge.close();
+  }
+});
+
+it('blocks durin tools once the server has revoked the grant, and asks to sign in again', async () => {
+  const server = durinServer();
+  server.revoke();
+  vi.stubGlobal('fetch', server.request);
+  vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+  try {
+    const tools = () => toolCommand(cliOptions(['tools', 'list', '--config-dir', directory]));
+    const refused = await tools().catch((error: unknown) => error);
+    expect(refused).toBeInstanceOf(CliError);
+    signInAgain((refused as Error).message);
+    const retriedAt = server.requests.length;
+    const again = await tools().catch((error: unknown) => error);
+    expect(again).toBeInstanceOf(CliError);
+    signInAgain((again as Error).message);
+    expect(server.requests.slice(retriedAt).filter(usesOldGrant)).toEqual([]);
+  } finally {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   }
 });
