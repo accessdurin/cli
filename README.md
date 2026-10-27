@@ -83,7 +83,7 @@ It does not trust a saved completion flag. No pasted endpoint or token is requir
 | `--input <file\|->`       | `tools call`; a JSON object, at most 1 MiB; `-` reads stdin              |
 | `--idempotency-key <key>` | Required for `tools call`; retain it on retries                          |
 | `--approval-id <id>`      | `tools call`; resume the exact independently approved operation          |
-| `--force`                 | `logout`; clear local credentials even if revocation fails               |
+| `--force`                 | `logout`; clear local credentials and lift the block if revocation fails |
 | `--app-url <origin>`      | Interactive setup; use another HTTPS Durin deployment                    |
 | `--dev`                   | Interactive setup; additionally allow guarded loopback HTTP              |
 | `-h`, `--help`            | Show usage                                                               |
@@ -160,15 +160,42 @@ but not the approval. A call with no response or a protocol error keeps both. Re
 expire 24 hours after their last change, after which an identical call is a new
 operation, even while its approval is pending.
 
-MCP credentials use macOS Keychain, Windows Credential Manager, or Linux Secret
-Service. There is no plaintext fallback. Account-session tokens remain in memory
-only during onboarding. `logout` affects the selected CLI-owned MCP grant, retains
-config/profile metadata, and reports remote revocation separately. If the
-authorization server gives no HTTP answer (a connection, DNS, or TLS failure, or a
-timeout), rate-limits, or returns a server error, the grant stays stored so that
-`durin logout` can retry; `durin logout --force` clears it anyway. A redirect, a 4xx
-response, or missing or unsafe metadata still clears it locally. Other clients'
-OAuth grants and browser sessions are unaffected.
+MCP credentials use macOS Keychain, Windows Credential Manager, or Linux Secret Service.
+There is no plaintext fallback. Account-session tokens remain in memory only during
+onboarding. `logout` affects the selected CLI-owned MCP grant, retains config/profile
+metadata, and reports remote revocation separately. If the authorization server doesn't
+confirm the revocation, the grant stays stored so that `durin logout` can retry. That
+covers no HTTP answer (a connection, DNS, or TLS failure, or a timeout), a redirect or
+any 4xx or 5xx answer from the revocation endpoint (captive portals and proxies send
+these too), and metadata that is missing or unreadable. Only a 2xx answer counts as
+revoked. `durin logout` marks the profile in `<config-dir>/revocations/` before it
+contacts the server and removes the mark only after the local credentials are gone, so a
+logout that is interrupted (for example with Ctrl-C) or fails partway still counts as
+unfinished. Anything left at the mark's path counts, even a damaged file or a broken
+symlink. If durin can't write the mark (for example, because the disk is full), logout
+clears the grant locally rather than keep it without a block. Until sign-out finishes,
+every MCP call through `durin mcp serve`, `durin tools …`, and `durin verify` is
+refused, and the grant is neither used nor refreshed. A bridge that was already running
+closes within about a second, ending its event stream; a bridge started while sign-out
+is unfinished stays open so that each call explains why it is refused. The block lifts
+when a retried `durin logout` succeeds, when `durin logout --force` clears the grant
+locally (it works offline), or when you sign in to the profile again with `durin`.
+Signing in again never reuses the kept grant: durin first retries revoking it, then
+deletes it. If the authorization server still can't confirm the revocation, durin moves
+the old grant's tokens to their own entry in the same OS credential store, keeps only a
+private index (ids and timestamps, no tokens) in `<config-dir>/revocations/`, and
+continues signing in. If the credential store can't take them, sign-in stops and the
+profile stays blocked, with the old grant where it was. Later `durin mcp serve`, `durin
+tools …`, `durin verify`, `durin logout`, and `durin` sign-ins for that profile retry
+those revocations for up to 10 seconds without waiting for a busy profile, and forget
+each old grant once it is revoked or the server says it offers no revocation. A failed
+retry never stops the command. Sign-out finishes without revoking only when the server's
+own metadata lists no revocation endpoint, or when it lists an unsafe one that durin
+will never call; then the grant is cleared locally. If the authorization server revokes
+the grant itself, the next MCP call through a bridge or `durin tools …` is refused after
+one refused refresh, the stored tokens are deleted rather than retried, and durin asks
+you to sign in again with `durin`. Other clients' OAuth grants and browser sessions are
+unaffected.
 
 If a process dies while holding a profile lock, the CLI reports its exact lock path.
 Stop Durin and the profile's bridges before removing that abandoned lock, then retry

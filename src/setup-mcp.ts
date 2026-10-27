@@ -1,11 +1,14 @@
 import { auth, discoverOAuthProtectedResourceMetadata } from '@modelcontextprotocol/client';
 import type { CredentialStore } from './ports/credential-store.js';
+import type { RevocationMarker } from './ports/revocation-marker.js';
+import type { PendingRevocations } from './ports/pending-revocations.js';
 import type { CliProfile } from './contracts/cli-profile.js';
 import { safeCliUrl } from './contracts/cli-url.js';
 import { McpOAuthProvider } from './mcp-oauth.js';
 import { listenForAuthorization } from './oauth-callback.js';
 import { CliError } from './cli-options.js';
 import { RemoteMcpClient } from './remote-mcp.js';
+import { retireKeptGrant } from './logout.js';
 
 export async function mcpIssuer(
   resource: string,
@@ -28,10 +31,14 @@ export async function mcpIssuer(
 type Options = {
   readonly profile: CliProfile;
   readonly store: CredentialStore;
+  readonly marker: RevocationMarker;
+  readonly pending: PendingRevocations;
   readonly request: typeof fetch;
   readonly open: (url: string) => Promise<void>;
 };
+/** Runs under the profile lock. A grant kept by an unfinished logout is retired, never reused. */
 export async function authorizeMcp(options: Options): Promise<number> {
+  if (await options.marker.pending()) await retireKeptGrant(options);
   const callback = await listenForAuthorization({ issuer: options.profile.mcpIssuer });
   const provider = new McpOAuthProvider({
     profile: options.profile,
@@ -48,6 +55,7 @@ export async function authorizeMcp(options: Options): Promise<number> {
       fetchFn: options.request,
     });
     if (result === 'REDIRECT') await exchangeCode(options, provider, callback.result);
+    await options.marker.clear();
     return await authenticatedCatalog(options, provider);
   } finally {
     await callback.close();
