@@ -1,9 +1,10 @@
-import { cp, mkdtemp, readdir, rm, stat } from 'node:fs/promises';
+import { cp, lstat, mkdtemp, readdir, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import { authorizeMcp } from './setup-mcp.js';
-import { cliOptions } from './cli-options.js';
+import { signInMcp } from './setup.js';
+import { cliOptions, CliError } from './cli-options.js';
 import { createProfile, FileProfiles } from './profiles.js';
 import { McpOAuthProvider } from './mcp-oauth.js';
 import { FilePendingRevocations, FileRevocationMarker } from './revocation-marker.js';
@@ -349,6 +350,9 @@ const withDirectory = async (work: (directory: string) => Promise<void>) => {
     await rm(directory, { recursive: true, force: true });
   }
 };
+/** The pending list as durin keeps it: an index on disk, tokens in the OS credential store. */
+const pendingList = (directory: string) =>
+  new FilePendingRevocations(directory, profile.id, memoryStore(keyring));
 /** Signs in as `durin` does after an unfinished logout, with its state on disk. */
 const signInWithFiles = async (directory: string, revoke: () => Response) => {
   const marker = new FileRevocationMarker(directory, profile.id);
@@ -356,7 +360,7 @@ const signInWithFiles = async (directory: string, revoke: () => Response) => {
   return signInAgain({
     values: keyring,
     marker,
-    pending: new FilePendingRevocations(directory, profile.id),
+    pending: pendingList(directory),
     revoke,
   });
 };
@@ -373,7 +377,7 @@ it('retries the pending list on later commands, keeping it until revocation succ
   await withDirectory(async (directory) => {
     const output = silenced();
     await signInWithFiles(directory, busy);
-    const pending = new FilePendingRevocations(directory, profile.id);
+    const pending = pendingList(directory);
     expect(await pending.entries()).toEqual([kept]);
     expect(await new FileRevocationMarker(directory, profile.id).pending()).toBe(false);
 
@@ -413,7 +417,7 @@ it.each([
     const server = laterServer(accepted);
     await command(directory);
     expect(revokedTokens(server).slice(0, 2)).toEqual([kept.refreshToken, kept.accessToken]);
-    expect(await new FilePendingRevocations(directory, profile.id).entries()).toEqual([]);
+    expect(await pendingList(directory).entries()).toEqual([]);
   });
 });
 
@@ -426,7 +430,7 @@ it('drops a pending grant once the server says it offers no revocation', async (
         ? Response.json({ ...metadata(), revocation_endpoint: undefined })
         : oauthFixtureRequest(input, init)) satisfies typeof fetch);
     await profileConnection(commandOptions(directory, 'mcp', 'serve'));
-    expect(await new FilePendingRevocations(directory, profile.id).entries()).toEqual([]);
+    expect(await pendingList(directory).entries()).toEqual([]);
   });
 });
 
@@ -453,22 +457,21 @@ it('skips the pending list without waiting while another process holds the profi
     expect(server.sent('/revoke')).toEqual([]);
     release();
     await holder;
-    expect(await new FilePendingRevocations(directory, profile.id).entries()).toEqual([kept]);
+    expect(await pendingList(directory).entries()).toEqual([kept]);
   });
 });
 
-it('keeps the pending list across a restart, reading only what was saved on disk', async () => {
+it('keeps the pending list across a restart, reading only its index on disk and the credential store', async () => {
   await withDirectory(async (directory) => {
     silenced();
     await signInWithFiles(directory, busy);
     const restarted = await mkdtemp(join(tmpdir(), 'durin-pending-revocations-restart-'));
     try {
       await cp(directory, restarted, { recursive: true });
-      keyring.clear();
       const server = laterServer(accepted);
       await profileConnection(commandOptions(restarted, 'mcp', 'serve'));
       expect(revokedTokens(server)).toEqual([kept.refreshToken, kept.accessToken]);
-      expect(await new FilePendingRevocations(restarted, profile.id).entries()).toEqual([]);
+      expect(await pendingList(restarted).entries()).toEqual([]);
     } finally {
       await rm(restarted, { recursive: true, force: true });
     }
@@ -478,7 +481,7 @@ it('keeps the pending list across a restart, reading only what was saved on disk
 it.skipIf(process.platform === 'win32')('keeps the pending list private to this user', async () => {
   await withDirectory(async (directory) => {
     await signInWithFiles(directory, busy);
-    const pending = new FilePendingRevocations(directory, profile.id);
+    const pending = pendingList(directory);
     expect((await stat(pending.path)).mode & 0o777).toBe(0o600);
     expect((await stat(join(directory, 'revocations'))).mode & 0o777).toBe(0o700);
     expect(
@@ -486,6 +489,125 @@ it.skipIf(process.platform === 'win32')('keeps the pending list private to this 
     ).toEqual([]);
   });
 });
+
+// MAR-552: pending tokens live in the OS credential store; only a non-secret index is on disk.
+const filesUnder = async (directory: string): Promise<string[]> => {
+  const names = await readdir(directory, { recursive: true });
+  const paths = names.map((name) => join(directory, name));
+  const regular = await Promise.all(
+    paths.map(async (path) => ((await lstat(path)).isFile() ? path : null)),
+  );
+  return regular.filter((path): path is string => path !== null);
+};
+const keptTokenFiles = async (directory: string) => {
+  const files = await filesUnder(directory);
+  const contents = await Promise.all(files.map((path) => readFile(path, 'utf8')));
+  return files.filter((_path, index) => /kept-mcp/u.test(contents[index] ?? ''));
+};
+const credentialStoreHolds = (token: string) =>
+  [...keyring.values()].some((value) => value.includes(token));
+
+it('keeps no token in any file under the durin directory while a revocation is pending', async () => {
+  await withDirectory(async (directory) => {
+    silenced();
+    await signInWithFiles(directory, busy);
+    expect(await pendingList(directory).entries()).toEqual([kept]);
+    expect(await keptTokenFiles(directory)).toEqual([]);
+    expect(credentialStoreHolds(kept.refreshToken!)).toBe(true);
+    expect(credentialStoreHolds(kept.accessToken)).toBe(true);
+
+    laterServer(accepted);
+    await profileConnection(commandOptions(directory, 'mcp', 'serve'));
+    expect(await pendingList(directory).entries()).toEqual([]);
+    expect(credentialStoreHolds(kept.refreshToken!)).toBe(false);
+    expect(await keptTokenFiles(directory)).toEqual([]);
+  });
+});
+
+const storeUnavailable = () =>
+  new CliError(
+    'OS credential store unavailable. Unlock your credential store and run durin again.',
+  );
+it('keeps the block and the kept grant, writing no token to disk, when the credential store refuses the pending grant', async () => {
+  await withDirectory(async (directory) => {
+    silenced();
+    const marker = new FileRevocationMarker(directory, profile.id);
+    await marker.mark();
+    await keptGrantStore(keyring);
+    const store = {
+      ...memoryStore(keyring),
+      write: async () => {
+        throw storeUnavailable();
+      },
+    };
+    const server = authorizationServer(busy);
+    await expect(
+      authorizeMcp({
+        profile,
+        store,
+        marker,
+        pending: new FilePendingRevocations(directory, profile.id, store),
+        request: server.request,
+        open: async () => {},
+      }),
+    ).rejects.toThrow(/OS credential store unavailable/u);
+    expect(await marker.pending()).toBe(true);
+    expect(await storedTokens(keyring)).toMatchObject({ refresh_token: kept.refreshToken });
+    expect(await keptTokenFiles(directory)).toEqual([]);
+    expect(await pendingList(directory).entries()).toEqual([]);
+    expect(server.sent('/register')).toEqual([]);
+  });
+});
+
+it('keeps the pending list when the credential store cannot be read, without failing the command', async () => {
+  await withDirectory(async (directory) => {
+    silenced();
+    await signInWithFiles(directory, busy);
+    const server = laterServer(accepted);
+    const pending = new FilePendingRevocations(directory, profile.id, {
+      ...memoryStore(keyring),
+      read: async () => {
+        throw storeUnavailable();
+      },
+    });
+    await expect(pending.entries()).rejects.toThrow(/OS credential store unavailable/u);
+    expect(server.sent('/revoke')).toEqual([]);
+    expect(await pendingList(directory).entries()).toEqual([kept]);
+  });
+});
+
+// MAR-552: the setup sign-in retries earlier pending revocations before it signs in.
+const seedPending = async (directory: string) => {
+  await pendingList(directory).add(kept);
+};
+it.each([
+  ['revoked', accepted, []],
+  ['still refused', busy, [kept]],
+] as const)(
+  'retries the pending list when durin signs in to the profile (%s)',
+  async (_name, revoke, remaining) => {
+    await withDirectory(async (directory) => {
+      await seedPending(directory);
+      const server = authorizationServer(revoke);
+      const tools = await signInMcp({
+        directory,
+        profile,
+        store: memoryStore(keyring),
+        request: server.request,
+        open: async (value) => {
+          await fetch(callbackUrl(new URL(value)));
+        },
+      });
+      expect(tools).toBe(1);
+      const paths = server.requests.map(({ path }) => path);
+      expect(paths.indexOf('/revoke')).toBeGreaterThanOrEqual(0);
+      expect(paths.indexOf('/revoke')).toBeLessThan(paths.indexOf('/register'));
+      expect(server.sent('/revoke')[0]?.get('token')).toBe(kept.refreshToken);
+      expect(await pendingList(directory).entries()).toEqual(remaining);
+      expect(sessions.tokens).toEqual(['synthetic-mcp-access']);
+    });
+  },
+);
 
 const oauthFixtureRequest: typeof fetch = async (input, init) => {
   const url = new URL(String(input));

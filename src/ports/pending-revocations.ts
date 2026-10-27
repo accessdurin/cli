@@ -4,7 +4,10 @@ export type UnrevokedGrant = {
   readonly accessToken: string;
   readonly refreshToken?: string | undefined;
 };
-/** Grants that a new sign-in replaced before the authorization server confirmed their revocation. */
+/**
+ * Grants that a new sign-in replaced before the authorization server confirmed their revocation.
+ * Their tokens are kept in the OS credential store, never on disk.
+ */
 export interface PendingRevocations {
   entries(): Promise<readonly UnrevokedGrant[]>;
   add(grant: UnrevokedGrant): Promise<void>;

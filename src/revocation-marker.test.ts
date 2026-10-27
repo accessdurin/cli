@@ -431,14 +431,15 @@ it.skipIf(process.platform === 'win32')(
 it.skipIf(process.platform === 'win32')(
   'never reads a dangling symlink at the pending list path as an empty list',
   async () => {
-    const pending = new FilePendingRevocations(directory, profile.id);
+    const store = await signedInStore();
+    const pending = new FilePendingRevocations(directory, profile.id, store);
     await danglingSymlink(pending.path);
     await expect(pending.entries()).rejects.toThrow(CliError);
     await expect(
       pending.add({ clientId: 'client_one', accessToken: 'synthetic-access' }),
     ).rejects.toThrow(CliError);
     const request = vi.fn<typeof fetch>(revoked);
-    await retryPendingRevocations(directory, profile, request);
+    await retryPendingRevocations(directory, profile, store, request);
     expect(request).not.toHaveBeenCalled();
     expect((await lstat(pending.path)).isSymbolicLink()).toBe(true);
   },

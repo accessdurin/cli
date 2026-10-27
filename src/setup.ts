@@ -100,7 +100,7 @@ async function setupAgent(
   await writeBridgeConfig(agent, bridge);
   options.ui.agent.configured(agent.configPath);
   options.ui.stage('Sign in to this organization’s Durin MCP');
-  await signInMcp(options, profile);
+  await signInMcp({ ...options, profile, open: options.ui.openAuthorization });
   options.ui.stage('Verify the saved agent bridge');
   const toolCount = await verifySavedBridge(agent, bridge);
   await profiles.activate(profile.id);
@@ -111,19 +111,24 @@ async function setupAgent(
     toolCount,
   });
 }
-async function signInMcp(
-  options: Awaited<ReturnType<typeof setupContext>>,
-  profile: CliProfile,
-): Promise<void> {
-  await retryPendingRevocations(options.directory, profile, options.request);
-  await withProfileLock(options.directory, profile.id, () =>
+/** Signs the profile in to its MCP server, first retrying revocations an earlier sign-in left. */
+export async function signInMcp(input: {
+  readonly directory: string;
+  readonly profile: CliProfile;
+  readonly store: CredentialStore;
+  readonly request: typeof fetch;
+  readonly open: (url: string) => Promise<void>;
+}): Promise<number> {
+  const { directory, profile, store, request } = input;
+  await retryPendingRevocations(directory, profile, store, request);
+  return withProfileLock(directory, profile.id, () =>
     authorizeMcp({
       profile,
-      store: options.store,
-      marker: new FileRevocationMarker(options.directory, profile.id),
-      pending: new FilePendingRevocations(options.directory, profile.id),
-      request: options.request,
-      open: options.ui.openAuthorization,
+      store,
+      marker: new FileRevocationMarker(directory, profile.id),
+      pending: new FilePendingRevocations(directory, profile.id, store),
+      request,
+      open: input.open,
     }),
   );
 }

@@ -105,9 +105,10 @@ const withDeadline =
 export async function retryPendingRevocations(
   directory: string,
   profile: CliProfile,
+  store: CredentialStore,
   request: typeof fetch = fetch,
 ): Promise<void> {
-  const pending = new FilePendingRevocations(directory, profile.id);
+  const pending = new FilePendingRevocations(directory, profile.id, store);
   const retry = async () => {
     const deadline = AbortSignal.timeout(PENDING_RETRY_DEADLINE);
     const remaining: UnrevokedGrant[] = [];

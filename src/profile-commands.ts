@@ -18,11 +18,12 @@ export async function profileCommand(options: CliOptions): Promise<void> {
 }
 export async function logoutCommand(options: CliOptions): Promise<void> {
   const profile = await new FileProfiles(options.directory).load(options.values.profile);
-  await retryPendingRevocations(options.directory, profile);
+  const store = new NativeCredentialStore();
+  await retryPendingRevocations(options.directory, profile, store);
   const { remote, local } = await withProfileLock(options.directory, profile.id, () =>
     signOutMcp({
       profile,
-      store: new NativeCredentialStore(),
+      store,
       marker: new FileRevocationMarker(options.directory, profile.id),
       request: fetch,
       force: options.values.force ?? false,

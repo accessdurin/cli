@@ -24,14 +24,15 @@ export async function profileConnection(options: CliOptions) {
         'No valid organization profile. Run durin in a terminal to complete setup.',
       );
     });
-  await retryPendingRevocations(options.directory, profile);
+  const store = new NativeCredentialStore();
+  await retryPendingRevocations(options.directory, profile, store);
   const marker = new FileRevocationMarker(options.directory, profile.id);
   return {
     profile,
     resource: profile.resource,
     development: profile.development,
     marker,
-    authorization: new McpOAuthProvider({ profile, store: new NativeCredentialStore(), marker }),
+    authorization: new McpOAuthProvider({ profile, store, marker }),
     fetch: secureFetch(profile.development),
     serialize: (work: () => Promise<void>) =>
       withSignedInProfile(options.directory, profile.id, work),
