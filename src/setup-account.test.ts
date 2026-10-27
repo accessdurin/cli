@@ -32,7 +32,6 @@ const workos = 'https://api.workos.com';
 
 describe('account sign-in hosts', () => {
   it.each([
-    [production, { issuer: `${production}/`, providerOrigin: workos }, 'api.workos.com'],
     [
       production,
       { issuer: 'https://auth.getdurin.com/', providerOrigin: workos },
@@ -77,7 +76,7 @@ describe('account sign-in hosts', () => {
     'https://127.0.0.1:4567',
   ])('never contacts an account API on %s, which the app does not use', async (providerOrigin) => {
     const { outcome, requested } = await signIn(production, {
-      issuer: `${production}/`,
+      issuer: 'https://auth.getdurin.com/',
       providerOrigin,
     });
     expect(requested).toEqual(['app.getdurin.com/auth/cli/config']);

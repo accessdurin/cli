@@ -75,7 +75,7 @@ describe('organization profile hosts', () => {
   const production = {
     ...scope,
     appOrigin: 'https://app.getdurin.com',
-    accountIssuer: 'https://app.getdurin.com/',
+    accountIssuer: 'https://auth.getdurin.com/',
     resource: `https://mcp.getdurin.com${personal}`,
     mcpIssuer: 'https://auth.getdurin.com/',
   };

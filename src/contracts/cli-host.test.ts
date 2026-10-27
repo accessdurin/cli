@@ -296,9 +296,41 @@ describe('account host pinning', () => {
     expect(untrustedCliHost('accountIssuer', value, staging)).toBeUndefined();
   });
 
-  it.each(cliHostRoles)('accepts a %s on the app’s own host', (role) => {
-    for (const scope of [production, staging, custom])
-      expect(untrustedCliHost(role, url(role, scope.appOrigin), scope)).toBeUndefined();
+  it.each(['resource', 'accountProvider'] as const)(
+    'accepts a %s on the app’s own host',
+    (role) => {
+      for (const scope of [production, staging, custom])
+        expect(untrustedCliHost(role, url(role, scope.appOrigin), scope)).toBeUndefined();
+    },
+  );
+
+  it.each(['mcpIssuer', 'accountIssuer'] as const)(
+    'refuses a known app’s own host as its %s',
+    (role) => {
+      for (const scope of [production, staging])
+        expect(untrustedCliHost(role, url(role, scope.appOrigin), scope)).toContain(
+          new URL(scope.appOrigin).host,
+        );
+    },
+  );
+
+  it.each(
+    (['mcpIssuer', 'accountIssuer'] as const).flatMap((role) =>
+      [
+        'https://auth.getdurin.com/x',
+        'https://auth.getdurin.com//',
+        'https://auth.getdurin.com/?',
+        'https://auth.getdurin.com/?a=1',
+        'https://auth.getdurin.com/#a',
+        'https://user@auth.getdurin.com/',
+        'https://user:secret@auth.getdurin.com/',
+        'http://auth.getdurin.com/',
+      ].map((value) => [role, value] as const),
+    ),
+  )('accepts only the exact production %s value, not %s', (role, value) => {
+    const problem = untrustedCliHost(role, value, production);
+    expect(problem).toContain('must be exactly auth.getdurin.com over HTTPS');
+    expect(problem).not.toContain('secret');
   });
 
   it('accepts auth.getdurin.com, but not api.workos.com, as production’s account issuer', () => {

@@ -60,11 +60,17 @@ function resolvedOptions(values: ReturnType<typeof parseCliArgs>['values'], posi
   return {
     values,
     positionals,
-    appOrigin,
+    appOrigin: canonicalOrigin(appOrigin),
     development,
     directory: configDirectory(values['config-dir']),
   };
 }
+/** Without one trailing dot, as the app's own /auth/cli/config names it. */
+const canonicalOrigin = (origin: string): string => {
+  const url = new URL(origin);
+  url.hostname = url.hostname.replace(/\.$/u, '');
+  return url.origin;
+};
 const configDirectory = (path: string | undefined) =>
   resolve(path ?? resolve(homedir(), '.config/durin'));
 export function cliOptions(args: readonly string[]) {

@@ -70,11 +70,15 @@ describe('setup MCP host pinning', () => {
     );
   });
 
+  const accountIssuers = new Map([
+    ['https://app.getdurin.com', 'https://auth.getdurin.com/'],
+    ['https://moria.app.getdurin.com', 'https://resilient-tiger-64-staging.authkit.app/'],
+  ]);
   const verifiedAccount = (appOrigin: string, endpoint: string) =>
     ({
       scope: {
         appOrigin,
-        accountIssuer: `${appOrigin}/`,
+        accountIssuer: accountIssuers.get(appOrigin) ?? `${appOrigin}/`,
         accountClientId: 'client_account',
         principalId: 'user_one',
       },

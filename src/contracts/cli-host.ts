@@ -29,12 +29,14 @@ const WORKOS_API = 'api.workos.com';
  */
 const WORKOS_ISSUER_HOST =
   /^(?:[a-z\d](?:[a-z\d-]{0,61}[a-z\d])?\.authkit\.app|api\.workos\.com)$/u;
-const workosIssuer = (url: string | undefined): boolean =>
-  url !== undefined &&
-  URL.canParse(url) &&
-  new URL(url).protocol === 'https:' &&
-  WORKOS_ISSUER_HOST.test(new URL(url).host);
-/** Exact hosts each known app uses besides its own. Never match by suffix. */
+const workosIssuer = (url: string | undefined): boolean => {
+  const parsed = URL.parse(url ?? '');
+  return parsed?.protocol === 'https:' && WORKOS_ISSUER_HOST.test(parsed.host);
+};
+/**
+ * Exact hosts each known app uses. Never match by suffix. Its issuers must be exactly
+ * https://<host>, and the app's own host serves only APP_HOST_ROLES.
+ */
 const DEPLOYMENT_HOSTS = new Map<string, Readonly<Record<CliHostRole, readonly string[]>>>([
   // Account issuer: the "Durin Production" WorkOS environment's verified AuthKit custom domain,
   // which https://auth.getdurin.com/.well-known/openid-configuration names as its issuer.
@@ -69,32 +71,52 @@ const ROLE_NAMES: Readonly<Record<CliHostRole, string>> = {
 /** Hostname and port, which a URL leaves out when it is the default for its scheme. */
 const hostOf = (value: string): string => (URL.canParse(value) ? new URL(value).host : '');
 const loopback = (host: string): boolean => loopbackCliHost(new URL(`http://${host}`).hostname);
-const selfHosted = (scope: CliHostScope): boolean => !DEPLOYMENT_HOSTS.has(hostOf(scope.appOrigin));
+/** The app's host without one trailing dot, so app.getdurin.com. is still production. */
+const appHostOf = (appOrigin: string): string => {
+  if (!URL.canParse(appOrigin)) return '';
+  const { hostname, port } = new URL(appOrigin);
+  return `${hostname.replace(/\.$/u, '')}${port ? `:${port}` : ''}`;
+};
+const selfHosted = (scope: CliHostScope): boolean =>
+  !DEPLOYMENT_HOSTS.has(appHostOf(scope.appOrigin));
 /** A self-hosted app may sign accounts in with WorkOS; only then may it reach WorkOS's API. */
 const selfHostedHosts = (role: CliHostRole, scope: CliHostScope): readonly string[] =>
   role === 'accountProvider' && workosIssuer(scope.accountIssuer) ? [WORKOS_API] : [];
+/** A known app's own host is never one of its issuers. A self-hosted app's serves every role. */
+const APP_HOST_ROLES = new Set<CliHostRole>(['resource', 'accountProvider']);
+/** The app's own host, both as written in --app-url and without its trailing dot. */
+const appHosts = (role: CliHostRole, scope: CliHostScope): readonly string[] =>
+  selfHosted(scope) || APP_HOST_ROLES.has(role)
+    ? [appHostOf(scope.appOrigin), hostOf(scope.appOrigin)]
+    : [];
 const expectedHosts = (role: CliHostRole, scope: CliHostScope): readonly string[] => {
-  const app = hostOf(scope.appOrigin);
+  const app = appHostOf(scope.appOrigin);
   const listed = DEPLOYMENT_HOSTS.get(app)?.[role] ?? selfHostedHosts(role, scope);
-  return [...listed, app].filter((host) => host && (scope.development || !loopback(host)));
+  return [...new Set([...listed, ...appHosts(role, scope)])].filter(
+    (host) => host && (scope.development || !loopback(host)),
+  );
 };
 const allowsWorkosIssuer = (role: CliHostRole, scope: CliHostScope): boolean =>
   role === 'accountIssuer' && selfHosted(scope);
-const allowedHost = (role: CliHostRole, url: string, scope: CliHostScope): boolean => {
-  const host = hostOf(url);
-  if (loopback(host)) return scope.development;
-  return (
-    expectedHosts(role, scope).includes(host) ||
-    (allowsWorkosIssuer(role, scope) && workosIssuer(url))
-  );
-};
+const pinnedIssuer = (role: CliHostRole, scope: CliHostScope): boolean =>
+  (role === 'mcpIssuer' || role === 'accountIssuer') && !selfHosted(scope);
+/** Exactly https://<host>, with at most one trailing slash: no path, query, fragment or user. */
+const exactIssuer = (url: string, host: string): boolean =>
+  URL.parse(url)?.href === `https://${host}/`;
+const allowedRemote = (role: CliHostRole, url: string, scope: CliHostScope): boolean =>
+  pinnedIssuer(role, scope)
+    ? expectedHosts(role, scope).some((expected) => exactIssuer(url, expected))
+    : expectedHosts(role, scope).includes(hostOf(url)) ||
+      (allowsWorkosIssuer(role, scope) && workosIssuer(url));
+const allowedHost = (role: CliHostRole, url: string, scope: CliHostScope): boolean =>
+  loopback(hostOf(url)) ? scope.development : allowedRemote(role, url, scope);
 const describeExpected = (role: CliHostRole, scope: CliHostScope): string => {
   const workosIssuers = allowsWorkosIssuer(role, scope)
     ? ['a WorkOS issuer (<tenant>.authkit.app or api.workos.com)']
     : [];
   const expected = [...expectedHosts(role, scope), ...workosIssuers];
   return expected.length
-    ? `, but the durin app at ${hostOf(scope.appOrigin)} uses ${expected.join(' or ')}`
+    ? `, but the durin app at ${appHostOf(scope.appOrigin)} uses ${expected.join(' or ')}`
     : '';
 };
 const workosProviderHint = (role: CliHostRole, host: string, scope: CliHostScope): string =>
@@ -102,6 +124,8 @@ const workosProviderHint = (role: CliHostRole, host: string, scope: CliHostScope
     ? ' A self-hosted durin app uses api.workos.com only when its account sign-in issuer is a WorkOS issuer.'
     : '';
 const describeProblem = (role: CliHostRole, host: string, scope: CliHostScope): string => {
+  if (pinnedIssuer(role, scope) && expectedHosts(role, scope).includes(host))
+    return `The ${ROLE_NAMES[role]} must be exactly ${host} over HTTPS, with no path, query or user name.`;
   const local = loopback(host) ? ' Local addresses are only allowed with --dev.' : '';
   const uses = describeExpected(role, scope);
   return `The ${ROLE_NAMES[role]} is on ${host}${uses}.${local}${workosProviderHint(role, host, scope)}`;
