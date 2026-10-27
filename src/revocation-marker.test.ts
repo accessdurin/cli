@@ -302,6 +302,76 @@ it('refuses a bridge call that waited for the profile lock while logout failed',
   }
 });
 
+// MAR-552: the block is on disk before logout touches the network, so a dying logout keeps it.
+const hungRevocation = () => {
+  let arrived = () => {};
+  const reached = new Promise<void>((resolve) => {
+    arrived = resolve;
+  });
+  let release = (_response: Response) => {};
+  const answer = new Promise<Response>((resolve) => {
+    release = resolve;
+  });
+  const request: typeof fetch = async (url, init) => {
+    if (String(url).includes('.well-known')) return revoked(url, init);
+    arrived();
+    return answer;
+  };
+  return { request, reached, release };
+};
+const lockPath = () => join(directory, 'locks', `${profile.id}.lock`);
+
+it('leaves the profile blocked when logout dies while its revocation request is in flight', async () => {
+  const hung = hungRevocation();
+  const signingOut = logout({ store: await signedInStore(), request: hung.request });
+  await hung.reached;
+  // The process dies here (Ctrl-C or a kill during the 60-second timeout): only disk state is left.
+  expect(await new FileRevocationMarker(directory, profile.id).pending()).toBe(true);
+  // As the abandoned-lock message instructs, the user removes the dead process's lock.
+  await rm(lockPath(), { force: true });
+  await expectBlocked();
+  hung.release(new Response(null, { status: 503 }));
+  await signingOut;
+});
+
+it('leaves the profile blocked when logout throws before its credentials are wiped', async () => {
+  const store = await signedInStore();
+  const withoutRevocation: typeof fetch = async () =>
+    Response.json({
+      issuer: profile.mcpIssuer,
+      authorization_endpoint: 'https://issuer.example.test/authorize',
+      token_endpoint: 'https://issuer.example.test/token',
+      response_types_supported: ['code'],
+    });
+  const failing = {
+    ...store,
+    remove: async () => {
+      throw new CliError('OS credential store unavailable.');
+    },
+  };
+  await expect(logout({ store: failing, request: withoutRevocation })).rejects.toThrow(
+    'OS credential store unavailable.',
+  );
+  expect(await new FileRevocationMarker(directory, profile.id).pending()).toBe(true);
+  await expectBlocked();
+});
+
+it('marks the profile before revoking and clears the mark once a logout succeeds', async () => {
+  const observed: boolean[] = [];
+  const request: typeof fetch = async (url, init) => {
+    observed.push(await new FileRevocationMarker(directory, profile.id).pending());
+    return revoked(url, init);
+  };
+  expect(await logout({ store: await signedInStore(), request })).toEqual({
+    remote: 'revoked',
+    local: 'cleared',
+  });
+  expect(observed.length).toBeGreaterThan(0);
+  expect(observed.every(Boolean)).toBe(true);
+  expect(await new FileRevocationMarker(directory, profile.id).pending()).toBe(false);
+  await expectUnblocked();
+});
+
 it('records one unfinished sign-out when two processes mark and read it at once', async () => {
   const first = new FileRevocationMarker(directory, profile.id);
   const second = new FileRevocationMarker(directory, profile.id);

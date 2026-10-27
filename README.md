@@ -166,8 +166,10 @@ only during onboarding. `logout` affects the selected CLI-owned MCP grant, retai
 config/profile metadata, and reports remote revocation separately. If the
 authorization server gives no HTTP answer (a connection, DNS, or TLS failure, or a
 timeout), rate-limits, returns a server error, or answers with unreadable metadata, the
-grant stays stored so that `durin logout` can retry. Until sign-out finishes, the
-profile is marked in `<config-dir>/revocations/` and every MCP call through
+grant stays stored so that `durin logout` can retry. `durin logout` marks the profile in
+`<config-dir>/revocations/` before it contacts the server and removes the mark only after
+the local credentials are gone, so a logout that is interrupted (for example with Ctrl-C)
+or fails partway still counts as unfinished. Until sign-out finishes, every MCP call through
 `durin mcp serve`, `durin tools …`, and `durin verify` is refused, including in bridges
 that were already running. The block lifts when a retried `durin logout` succeeds, when
 `durin logout --force` clears the grant locally (it works offline), or when you sign in

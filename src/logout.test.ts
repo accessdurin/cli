@@ -235,7 +235,7 @@ it('reports nothing to revoke when no grant is stored', async () => {
   });
 });
 
-it('never records an unfinished sign-out when logout revokes the grant', async () => {
+it('leaves no unfinished sign-out when logout revokes the grant', async () => {
   const values = new Map<string, string>();
   await signedIn(values);
   const marker = memoryMarker();
@@ -244,8 +244,23 @@ it('never records an unfinished sign-out when logout revokes the grant', async (
     remote: 'revoked',
     local: 'cleared',
   });
-  expect(marker.state).toEqual({ pending: false, marks: 0 });
+  expect(marker.state.pending).toBe(false);
   expect(values.size).toBe(0);
+});
+
+it('records the unfinished sign-out before contacting the authorization server', async () => {
+  const values = new Map<string, string>();
+  await signedIn(values);
+  const marker = memoryMarker();
+  const observed: boolean[] = [];
+  const revoked = authorizationServer(() => new Response(null, { status: 200 }));
+  const request: typeof fetch = async (url, init) => {
+    observed.push(marker.state.pending);
+    return revoked(url, init);
+  };
+  await signOutMcp({ profile, store: memoryStore(values), marker, request });
+  expect(observed).toEqual([true, true, true]);
+  expect(marker.state.pending).toBe(false);
 });
 
 const withoutRevocation: typeof fetch = async (url) =>
