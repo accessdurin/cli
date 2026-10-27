@@ -38,11 +38,13 @@ app's port:
 | `moria.app.getdurin.com` | `moria.mcp.getdurin.com` | `resilient-tiger-64-staging.authkit.app` | `resilient-tiger-64-staging.authkit.app` | `api.workos.com`        |
 
 The app's own host is also accepted for every role, and any other `--app-url`
-deployment must serve all of them from its own host. Loopback hosts (`localhost`,
-`127.0.0.1`, `[::1]`) need `--dev`. The account hosts come from the app's
-`/auth/cli/config` and are checked before device sign-in starts. Saved profiles are
-checked again whenever they load; one that points elsewhere is refused until you run
-`durin` to sign in again.
+deployment must serve all of them from its own host. Loopback hosts need `--dev`,
+both as an MCP or sign-in host and as the `--app-url`. That covers `localhost` and
+its subdomains, all of `127.0.0.0/8`, `[::1]`, IPv4-mapped `[::ffff:127.x.x.x]` in
+any spelling, and `0.0.0.0` and `[::]`, ignoring case and one trailing dot. The
+account hosts come from the app's `/auth/cli/config` and are checked before device
+sign-in starts. Saved profiles are checked again whenever they load; one that points
+elsewhere is refused until you run `durin` to sign in again.
 Every request is checked against these hosts before anything is sent, including
 the token, registration and revocation endpoints that the sign-in server's
 metadata names and any metadata address an MCP server's `401` answer points to.

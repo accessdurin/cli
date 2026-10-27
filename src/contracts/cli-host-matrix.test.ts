@@ -1,5 +1,6 @@
 // MAR-828 acceptance: Tess's QA host matrix for cli#8 (qa-host-pin.test.ts), as an assertion table.
-// Expected outcomes are her 5ede0ff results, except "port 8443", which must now be rejected.
+// Expected outcomes are her 5ede0ff results, except "port 8443" and the loopback self-host rows
+// (127.0.0.2, localhost., 0.0.0.0, [::ffff:127.0.0.1] without --dev), which must now be rejected.
 import { expect, it } from 'vitest';
 import { untrustedCliHost, type CliHostScope } from './cli-host.js';
 import { safeCliUrl } from './cli-url.js';
@@ -53,6 +54,10 @@ const rows: readonly Row[] = [
   ['staging issuer as resource', 'resource', 'https://resilient-tiger-64-staging.authkit.app/mcp', STG, 'reject'],
   ['app-url trailing dot (staging)', 'mcpIssuer', 'https://resilient-tiger-64-staging.authkit.app/', { appOrigin: 'https://moria.app.getdurin.com.', development: false }, 'reject'],
   ['app-url uppercase staging', 'mcpIssuer', 'https://resilient-tiger-64-staging.authkit.app/', { appOrigin: 'https://MORIA.APP.GETDURIN.COM', development: false }, 'accept'],
+  ['app-url 127.0.0.2 no dev (self host)', 'resource', 'https://127.0.0.2/mcp', { appOrigin: 'https://127.0.0.2', development: false }, 'reject'],
+  ['app-url localhost. no dev (self host)', 'resource', 'https://localhost./mcp', { appOrigin: 'https://localhost.', development: false }, 'reject'],
+  ['app-url 0.0.0.0 no dev (self host)', 'resource', 'https://0.0.0.0/mcp', { appOrigin: 'https://0.0.0.0', development: false }, 'reject'],
+  ['app-url [::ffff:127.0.0.1] no dev', 'resource', 'https://[::ffff:127.0.0.1]/mcp', { appOrigin: 'https://[::ffff:127.0.0.1]', development: false }, 'reject'],
   ['app-url 127.1 no dev', 'resource', 'https://127.1/mcp', { appOrigin: 'https://127.1', development: false }, 'reject'],
   ['app-url localhost no dev (self host)', 'resource', 'https://localhost/mcp', { appOrigin: 'https://localhost', development: false }, 'reject'],
 ];
