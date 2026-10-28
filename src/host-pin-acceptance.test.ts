@@ -484,6 +484,33 @@ const mcpSignIn = [
   'POST auth.getdurin.com/token',
 ];
 
+it('pins the root protected-resource issuer when path-aware discovery falls back and the documents disagree', async () => {
+  const pathAware = `/.well-known/oauth-protected-resource${new URL(resource).pathname}`;
+  const rootDocument = '/.well-known/oauth-protected-resource';
+  const pathIssuer = 'https://resilient-tiger-64-staging.authkit.app';
+  const deployment = productionDeployment();
+  const { hosts, outcome, saved } = await setupRun({
+    appOrigin: production,
+    route: (url, init) => {
+      if (url.pathname === pathAware)
+        return new Response(JSON.stringify({ resource, authorization_servers: [pathIssuer] }), {
+          status: 404,
+          headers: { 'content-type': 'application/json' },
+        });
+      if (url.pathname === rootDocument)
+        return Response.json({ resource, authorization_servers: [productionIssuer] });
+      return deployment(url, init);
+    },
+  });
+  const discovered = [`GET mcp.getdurin.com${pathAware}`, `GET mcp.getdurin.com${rootDocument}`];
+  expect(outcome).toBe('finished');
+  // Path-aware is not OK, so the SDK falls back to the root document. The capture keeps that
+  // later response, and sign-in discovers the same pair again.
+  expect(hosts).toEqual([...accountSignIn, ...discovered, ...discovered, ...mcpSignIn.slice(1)]);
+  expect(saved).toMatchObject([{ mcpIssuer: productionIssuer }]);
+  expect(hosts.join('\n')).not.toContain('resilient-tiger-64-staging.authkit.app');
+});
+
 it('signs in to production end to end, contacting only its hosts, and saves the profile', async () => {
   const { hosts, outcome, saved, ready } = await setupRun({
     appOrigin: production,
