@@ -484,32 +484,69 @@ const mcpSignIn = [
   'POST auth.getdurin.com/token',
 ];
 
-it('pins the root protected-resource issuer when path-aware discovery falls back and the documents disagree', async () => {
-  const pathAware = `/.well-known/oauth-protected-resource${new URL(resource).pathname}`;
-  const rootDocument = '/.well-known/oauth-protected-resource';
-  const pathIssuer = 'https://resilient-tiger-64-staging.authkit.app';
+const pathAwareDocument = `/.well-known/oauth-protected-resource${new URL(resource).pathname}`;
+const rootDocument = '/.well-known/oauth-protected-resource';
+const discoveryHosts = [
+  `GET mcp.getdurin.com${pathAwareDocument}`,
+  `GET mcp.getdurin.com${rootDocument}`,
+];
+const protectedResourceRoute = (
+  pathStatus: number,
+  pathIssuer: string,
+  root: Response | (() => never),
+) => {
   const deployment = productionDeployment();
+  return (url: URL, init?: RequestInit) => {
+    if (url.pathname === pathAwareDocument)
+      return new Response(JSON.stringify({ resource, authorization_servers: [pathIssuer] }), {
+        status: pathStatus,
+        headers: { 'content-type': 'application/json' },
+      });
+    if (url.pathname === rootDocument) return typeof root === 'function' ? root() : root;
+    return deployment(url, init);
+  };
+};
+
+it('fails closed when path-aware and root protected-resource documents disagree on the issuer', async () => {
+  const pathIssuer = 'https://resilient-tiger-64-staging.authkit.app';
   const { hosts, outcome, saved } = await setupRun({
     appOrigin: production,
-    route: (url, init) => {
-      if (url.pathname === pathAware)
-        return new Response(JSON.stringify({ resource, authorization_servers: [pathIssuer] }), {
-          status: 404,
-          headers: { 'content-type': 'application/json' },
-        });
-      if (url.pathname === rootDocument)
-        return Response.json({ resource, authorization_servers: [productionIssuer] });
-      return deployment(url, init);
-    },
+    route: protectedResourceRoute(
+      404,
+      pathIssuer,
+      Response.json({ resource, authorization_servers: [productionIssuer] }),
+    ),
   });
-  const discovered = [`GET mcp.getdurin.com${pathAware}`, `GET mcp.getdurin.com${rootDocument}`];
-  expect(outcome).toBe('finished');
-  // Path-aware is not OK, so the SDK falls back to the root document. The capture keeps that
-  // later response, and sign-in discovers the same pair again.
-  expect(hosts).toEqual([...accountSignIn, ...discovered, ...discovered, ...mcpSignIn.slice(1)]);
-  expect(saved).toMatchObject([{ mcpIssuer: productionIssuer }]);
+  expect(outcome).toContain('different sign-in servers');
+  expect(outcome).toContain('Nothing was saved');
+  expect(hosts).toEqual([...accountSignIn, ...discoveryHosts]);
+  expect(saved).toEqual([]);
   expect(hosts.join('\n')).not.toContain('resilient-tiger-64-staging.authkit.app');
 });
+
+it.each([
+  [
+    'a network error',
+    () => {
+      throw new TypeError('fetch failed');
+    },
+  ],
+  ['HTTP 500', new Response(null, { status: 500 })],
+] as const)(
+  'fails closed when path-aware discovery is a 404 naming an attacker issuer and the root document is %s',
+  async (_name, root) => {
+    const attacker = 'https://evil.example';
+    const { hosts, outcome, saved } = await setupRun({
+      appOrigin: production,
+      route: protectedResourceRoute(404, attacker, root),
+    });
+    expect(outcome).not.toBe('finished');
+    expect(saved).toEqual([]);
+    expect(hosts).toEqual([...accountSignIn, ...discoveryHosts]);
+    expect(hosts.join('\n')).not.toContain('evil.example');
+    expect(outcome).not.toContain(attacker);
+  },
+);
 
 it('signs in to production end to end, contacting only its hosts, and saves the profile', async () => {
   const { hosts, outcome, saved, ready } = await setupRun({
@@ -712,6 +749,7 @@ it.each([
   };
   const id = createHash('sha256').update(JSON.stringify(scope)).digest('hex');
   const directory = await mkdtemp(join(tmpdir(), 'durin-host-pin-'));
+  const sent = vi.spyOn(globalThis, 'fetch');
   try {
     await mkdir(join(directory, 'profiles'), { recursive: true });
     await writeFile(
@@ -722,7 +760,12 @@ it.each([
     await expect(new FileProfiles(directory).load(id)).rejects.toThrow(
       'Run durin to sign in again.',
     );
+    await expect(
+      profileConnection(cliOptions(['tools', 'list', '--config-dir', directory])),
+    ).rejects.toThrow('No valid organization profile');
+    expect(sent).not.toHaveBeenCalled();
   } finally {
+    vi.restoreAllMocks();
     await rm(directory, { recursive: true, force: true });
   }
 });
@@ -897,7 +940,6 @@ it('never follows a redirect from /auth/cli/config, even to another local server
 it.each([
   'https://acme-tenant.authkit.app/',
   'https://resilient-tiger-64-staging.authkit.app/',
-  'https://acme-tenant.authkit.app:443',
   'https://api.workos.com/user_management/client_acme',
 ])(
   'a self-hosted app with the WorkOS account issuer %s signs in on api.workos.com',
@@ -921,6 +963,66 @@ it.each(['https://api.workos.com:8443', `https://api.workos.com.${EVIL}`, 'https
     expect(outcome).toContain('uses api.workos.com or durin.acme.test');
   },
 );
+
+const selfHostedSpellings = [
+  ['leading space', ` ${selfHosted}/`],
+  ['NUL', `${selfHosted}/\u0000`],
+  ['backslash', `${selfHosted}\\`],
+  ['uppercase scheme', 'HTTPS://durin.acme.test/'],
+  ['explicit port', 'https://durin.acme.test:443/'],
+  ['double slash', 'https://durin.acme.test//'],
+] as const;
+it.each(selfHostedSpellings)(
+  'a self-hosted app refuses an account issuer with a %s before sign-in',
+  async (_spelling, value) => {
+    const { hosts, outcome, saved } = await setupSignIn(selfHosted, value);
+    expect(hosts).toEqual(configOnly(selfHosted));
+    expect(outcome).toContain('account sign-in issuer');
+    expect(saved).toEqual([]);
+  },
+);
+it.each(
+  selfHostedSpellings.flatMap(([, value]) => [
+    ['accountIssuer', value],
+    ['mcpIssuer', value],
+  ]),
+)('refuses to load a self-hosted profile whose %s is %j', async (field, value) => {
+  const personal = `/mcp/u/${'b'.repeat(64)}`;
+  const scope = {
+    appOrigin: selfHosted,
+    accountIssuer: `${selfHosted}/`,
+    accountClientId: 'account',
+    principalId: 'user_one',
+    workosOrganizationId: 'org_one',
+    organizationId: 'org_internal',
+    environment: 'production' as const,
+    resource: `${selfHosted}${personal}`,
+    mcpIssuer: `${selfHosted}/`,
+    development: false,
+    [field]: value,
+  };
+  const id = createHash('sha256').update(JSON.stringify(scope)).digest('hex');
+  const directory = await mkdtemp(join(tmpdir(), 'durin-host-pin-'));
+  const sent = vi.spyOn(globalThis, 'fetch');
+  try {
+    await mkdir(join(directory, 'profiles'), { recursive: true });
+    await writeFile(
+      join(directory, 'profiles', `${id}.json`),
+      JSON.stringify({ ...scope, version: 1, id }),
+    );
+    await expect(new FileProfiles(directory).load(id)).rejects.toThrow('sign-in');
+    await expect(new FileProfiles(directory).load(id)).rejects.toThrow(
+      'Run durin to sign in again.',
+    );
+    await expect(
+      profileConnection(cliOptions(['tools', 'list', '--config-dir', directory])),
+    ).rejects.toThrow('No valid organization profile');
+    expect(sent).not.toHaveBeenCalled();
+  } finally {
+    vi.restoreAllMocks();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
 it('a self-hosted app with its own account issuer signs in on its own host only', async () => {
   const { hosts, outcome } = await setupSignIn(selfHosted, `${selfHosted}/`, selfHosted);

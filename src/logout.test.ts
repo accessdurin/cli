@@ -5,14 +5,14 @@ import { McpOAuthProvider } from './mcp-oauth.js';
 
 const profile = createProfile({
   appOrigin: 'https://app.example.test',
-  accountIssuer: 'https://app.example.test',
+  accountIssuer: 'https://app.example.test/',
   accountClientId: 'account',
   principalId: 'user_one',
   workosOrganizationId: 'org_one',
   organizationId: 'org_internal',
   environment: 'production',
   resource: `https://app.example.test/mcp/u/${'a'.repeat(64)}`,
-  mcpIssuer: 'https://app.example.test',
+  mcpIssuer: 'https://app.example.test/',
   development: false,
 });
 const memoryStore = (values: Map<string, string>) => ({

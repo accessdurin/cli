@@ -1,4 +1,4 @@
-import { loopbackCliHost } from './cli-url.js';
+import { loopbackCliHost, roundTripCliUrl } from './cli-url.js';
 
 export type CliHostRole = 'resource' | 'mcpIssuer' | 'accountIssuer' | 'accountProvider';
 export type CliHostScope = {
@@ -103,11 +103,16 @@ const pinnedIssuer = (role: CliHostRole, scope: CliHostScope): boolean =>
  */
 const exactIssuer = (url: string, host: string): boolean =>
   url === `https://${host}` || url === `https://${host}/`;
-const allowedRemote = (role: CliHostRole, url: string, scope: CliHostScope): boolean =>
-  pinnedIssuer(role, scope)
-    ? expectedHosts(role, scope).some((expected) => exactIssuer(url, expected))
-    : expectedHosts(role, scope).includes(hostOf(url)) ||
-      (allowsWorkosIssuer(role, scope) && workosIssuer(url));
+const issuerRole = (role: CliHostRole): boolean => role === 'mcpIssuer' || role === 'accountIssuer';
+const hostAllowed = (role: CliHostRole, url: string, scope: CliHostScope): boolean =>
+  expectedHosts(role, scope).includes(hostOf(url)) ||
+  (allowsWorkosIssuer(role, scope) && workosIssuer(url));
+const allowedRemote = (role: CliHostRole, url: string, scope: CliHostScope): boolean => {
+  if (pinnedIssuer(role, scope))
+    return expectedHosts(role, scope).some((expected) => exactIssuer(url, expected));
+  if (issuerRole(role) && !roundTripCliUrl(url)) return false;
+  return hostAllowed(role, url, scope);
+};
 const allowedHost = (role: CliHostRole, url: string, scope: CliHostScope): boolean =>
   loopback(hostOf(url)) ? scope.development : allowedRemote(role, url, scope);
 const describeExpected = (role: CliHostRole, scope: CliHostScope): string => {

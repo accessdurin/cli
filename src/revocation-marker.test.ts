@@ -26,14 +26,14 @@ vi.mock('./remote-mcp.js', () => ({
 
 const scope = {
   appOrigin: 'https://app.example.test',
-  accountIssuer: 'https://app.example.test',
+  accountIssuer: 'https://app.example.test/',
   accountClientId: 'account',
   principalId: 'user_one',
   workosOrganizationId: 'org_one',
   organizationId: 'org_internal',
   environment: 'production',
   resource: `https://app.example.test/mcp/u/${'a'.repeat(64)}`,
-  mcpIssuer: 'https://app.example.test',
+  mcpIssuer: 'https://app.example.test/',
   development: false,
 } as const;
 const profile = createProfile(scope);

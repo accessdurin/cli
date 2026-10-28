@@ -36,3 +36,17 @@ export function safeCliUrl(value: string, development: boolean): boolean {
     !/[\r\n]/u.test(value),
   ].every(Boolean);
 }
+/**
+ * A self-hosted issuer is stored as written. Spaces, NUL, and backslashes are refused, and so is
+ * any spelling whose URL form is not the string itself (`HTTPS://`, an explicit `:443`, or `//`).
+ */
+const OPAQUE_ISSUER = new RegExp(`[\\s${String.fromCharCode(0)}\\\\]`, 'u');
+const opaqueIssuer = (value: string): boolean => OPAQUE_ISSUER.test(value) || !URL.canParse(value);
+const extraSlash = (value: string): boolean => {
+  const scheme = value.indexOf('://');
+  return scheme < 0 || value.slice(scheme + 3).includes('//');
+};
+export function roundTripCliUrl(value: string): boolean {
+  if (opaqueIssuer(value)) return false;
+  return new URL(value).href === value && !extraSlash(value);
+}

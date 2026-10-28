@@ -70,9 +70,13 @@ describe('host pinning', () => {
     'accepts a %s on the app origin host for a deployment without an allowlist',
     (role) => {
       expect(untrustedCliHost(role, url(role, 'https://durin.acme.test'), custom)).toBeUndefined();
-      expect(
-        untrustedCliHost(role, url(role, 'https://durin.acme.test:443'), custom),
-      ).toBeUndefined();
+      const onDefaultPort = untrustedCliHost(
+        role,
+        url(role, 'https://durin.acme.test:443'),
+        custom,
+      );
+      const issuer = role === 'mcpIssuer' || role === 'accountIssuer';
+      expect(onDefaultPort === undefined).toBe(!issuer);
     },
   );
 

@@ -27,13 +27,13 @@ export async function mcpIssuer(
   if (!safeCliUrl(resource, scope.development))
     throw new CliError('The personal MCP endpoint is unsafe.');
   assertExpectedHost('resource', resource, scope);
-  const captured: { issuer?: string } = {};
+  const noted: NotedIssuers = { others: [] };
   const metadata = await discoverOAuthProtectedResourceMetadata(
     resource,
     undefined,
-    observingProtectedResource(request, captured),
+    observingProtectedResource(resource, request, noted),
   );
-  return pinnedMcpIssuer(resource, metadata, captured.issuer, scope);
+  return pinnedMcpIssuer(resource, metadata, noted, scope);
 }
 const pinnedMcpIssuer = (
   resource: string,
@@ -41,7 +41,7 @@ const pinnedMcpIssuer = (
     readonly resource?: string | undefined;
     readonly authorization_servers?: string[] | undefined;
   },
-  captured: string | undefined,
+  captured: NotedIssuers,
   scope: CliHostScope,
 ): string => {
   const issuers = authorizationServers(metadata.authorization_servers);
@@ -49,8 +49,7 @@ const pinnedMcpIssuer = (
     throw new CliError(
       'MCP discovery must identify the exact personal resource and one trusted issuer.',
     );
-  // The SDK's URL check trims. The spelling the server sent is what gets pinned.
-  const issuer = writtenIssuer(captured, issuers);
+  const issuer = agreedIssuer(captured, issuers[0] ?? '', scope);
   if (!validIssuer(issuer, scope.development))
     throw new CliError('Unsafe MCP authorization issuer.');
   assertExpectedHost('mcpIssuer', issuer, scope);
@@ -133,21 +132,22 @@ async function authenticatedCatalog(options: Options, provider: McpOAuthProvider
 }
 
 const authorizationServers = (issuers?: string[]): string[] => issuers ?? [];
-const writtenIssuer = (captured: string | undefined, issuers: readonly string[]): string => {
-  if (captured) return captured;
-  if (issuers[0]) return issuers[0];
-  return '';
+type NotedIssuers = { pinned?: string; others: string[] };
+const ISSUERS_DISAGREE =
+  'MCP discovery found protected-resource documents that name different sign-in servers. Nothing was saved.';
+const refuseDifferentIssuer = (pinned: string | undefined, scope: CliHostScope): never => {
+  if (pinned) assertExpectedHost('mcpIssuer', pinned, scope);
+  throw new CliError(ISSUERS_DISAGREE);
+};
+const agreedIssuer = (noted: NotedIssuers, sdkIssuer: string, scope: CliHostScope): string => {
+  if (noted.pinned !== sdkIssuer) refuseDifferentIssuer(noted.pinned, scope);
+  if (noted.others.some((issuer) => issuer !== sdkIssuer)) throw new CliError(ISSUERS_DISAGREE);
+  return sdkIssuer;
 };
 const protectedResourceSchema = z.object({
   authorization_servers: z.array(z.string()).min(1),
 });
-/** The issuer string as the protected-resource document spelled it, before any URL normalization. */
-const protectedResourceIssuer = async (
-  input: Parameters<typeof fetch>[0],
-  response: Response,
-): Promise<string | undefined> => {
-  const target = input instanceof Request ? input.url : String(input);
-  if (!target.includes('oauth-protected-resource')) return undefined;
+const documentIssuer = async (response: Response): Promise<string | undefined> => {
   const body: unknown = await response
     .clone()
     .json()
@@ -155,14 +155,33 @@ const protectedResourceIssuer = async (
   const parsed = protectedResourceSchema.safeParse(body);
   return parsed.success ? parsed.data.authorization_servers[0] : undefined;
 };
+const sameOrigin = (target: string, origin: string): boolean =>
+  URL.canParse(target) && new URL(target).origin === origin;
+const pinsIssuer = (response: Response, target: string, origin: string): boolean =>
+  response.ok && sameOrigin(target, origin);
+/** Only a 2xx document on the resource origin is the issuer durin will pin. */
+const noteProtectedResource = async (
+  target: string,
+  response: Response,
+  origin: string,
+  noted: NotedIssuers,
+): Promise<void> => {
+  if (!target.includes('oauth-protected-resource')) return;
+  const issuer = await documentIssuer(response);
+  if (!issuer) return;
+  if (pinsIssuer(response, target, origin)) noted.pinned = issuer;
+  else noted.others.push(issuer);
+};
 const observingProtectedResource = (
+  resource: string,
   request: typeof fetch,
-  captured: { issuer?: string },
+  noted: NotedIssuers,
 ): typeof fetch => {
+  const origin = new URL(resource).origin;
   const observe: typeof fetch = async (input, init) => {
     const response = await request(input, init);
-    const issuer = await protectedResourceIssuer(input, response);
-    if (issuer) captured.issuer = issuer;
+    const target = input instanceof Request ? input.url : String(input);
+    await noteProtectedResource(target, response, origin, noted);
     return response;
   };
   return observe;
