@@ -90,7 +90,7 @@ const authorityOf = (endpoint: string): string => {
   return end < 0 ? rest : rest.slice(0, end);
 };
 /** HTTPS on the pinned host, with no userinfo and no explicit port. */
-const pinnedHttpsHost = (endpoint: string): boolean => {
+export const pinnedHttpsHost = (endpoint: string): boolean => {
   if (!URL.canParse(endpoint)) return false;
   const url = new URL(endpoint);
   return url.protocol === 'https:' && authorityOf(endpoint) === PRODUCTION_HOST;
