@@ -312,6 +312,116 @@ it('logout makes no request when a self-hosted app claims the production issuer'
   expect(keyring.size).toBe(0);
 });
 
+const logoutOf = (directory: string, id: string) =>
+  printed(() => logoutCommand(cliOptions(['logout', '--profile', id, '--config-dir', directory])));
+const sentNoToken = (seen: readonly Seen[]): void => {
+  const bodies = seen.map((call) => call.body).join('\n');
+  expect(bodies).not.toContain(ACCESS);
+  expect(bodies).not.toContain(REFRESH);
+};
+
+it('logout makes no request for a lookalike app', async () => {
+  const { directory, id } = await profileFile(PRODUCTION, {
+    appOrigin: 'https://app.getdurin.com.evil.example',
+  });
+  const seen = requests();
+  const output = await logoutOf(directory, id);
+  expect(seen).toEqual([]);
+  expect(output).toContain("The server session was not revoked because its issuer isn't trusted");
+  expect(process.exitCode).toBeUndefined();
+});
+
+it('logout makes no request for a lookalike resource', async () => {
+  const { directory, id } = await profileFile(PRODUCTION, {
+    resource: `https://mcp.getdurin.com.evil.example/mcp/u/${'a'.repeat(64)}`,
+  });
+  const seen = requests();
+  const output = await logoutOf(directory, id);
+  expect(seen).toEqual([]);
+  expect(output).toContain("The server session was not revoked because its issuer isn't trusted");
+  expect(process.exitCode).toBeUndefined();
+});
+
+it('logout makes no request when the issuer has a double slash', async () => {
+  const { directory, id } = await profileFile('https://auth.getdurin.com//');
+  const seen = requests();
+  const output = await logoutOf(directory, id);
+  expect(seen).toEqual([]);
+  expect(output).toContain("The server session was not revoked because its issuer isn't trusted");
+  expect(process.exitCode).toBeUndefined();
+});
+
+it.each([
+  ['another host', 'https://evil.example/oauth2/revoke'],
+  ['a lookalike suffix', 'https://auth.getdurin.com.evil/oauth2/revoke'],
+  ['http', 'http://auth.getdurin.com/oauth2/revoke'],
+  ['an explicit port', 'https://auth.getdurin.com:443/oauth2/revoke'],
+  ['userinfo', 'https://user@auth.getdurin.com/oauth2/revoke'],
+])(
+  'logout sends no token when the advertised revocation endpoint is %s',
+  async (_name, endpoint) => {
+    const { directory, id } = await profileFile(`${PRODUCTION}/`);
+    const seen = requests(metadataReply(endpoint));
+    const output = await logoutOf(directory, id);
+    sentNoToken(seen);
+    expect(output).toContain('The server session was not revoked');
+    expect(output).not.toContain('The server session was revoked.');
+    expect(process.exitCode).toBeUndefined();
+    expect(keyring.size).toBe(0);
+  },
+);
+
+it('logout sends no token when discovery names a different issuer', async () => {
+  const { directory, id } = await profileFile(`${PRODUCTION}/`);
+  const seen = requests(() =>
+    Response.json({
+      ...PRODUCTION_METADATA,
+      issuer: 'https://evil.example',
+      revocation_endpoint: `${PRODUCTION}/oauth2/revoke`,
+    }),
+  );
+  const output = await logoutOf(directory, id);
+  sentNoToken(seen);
+  expect(output).toContain('The server session was not revoked');
+  expect(process.exitCode).toBeUndefined();
+  expect(keyring.size).toBe(0);
+});
+
+const failingFetch = (reply: () => Response | Promise<Response>) => {
+  const seen: Seen[] = [];
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+    const url = callUrl(input);
+    seen.push({
+      url,
+      body: callBody(init),
+      redirect: callRedirect(init),
+      signal: callSignal(init),
+    });
+    return reply();
+  });
+  return seen;
+};
+it.each([
+  ['rejects the request', () => Promise.reject(new TypeError('fetch failed'))],
+  [
+    'times out',
+    () =>
+      Promise.reject(new DOMException('The operation was aborted due to timeout', 'TimeoutError')),
+  ],
+  ['returns HTTP 500', () => new Response(null, { status: 500 })],
+])('logout deletes local credentials when discovery %s', async (_name, reply) => {
+  const { directory, id } = await profileFile(`${PRODUCTION}/`);
+  const seen = failingFetch(reply);
+  const output = await logoutOf(directory, id);
+  sentNoToken(seen);
+  expect(output).toContain(
+    `Removed local credentials for ${id}. The server session was not revoked; it will expire on its own.`,
+  );
+  expect(process.exitCode).toBeUndefined();
+  expect(keyring.size).toBe(0);
+  await expect(readFile(join(directory, 'profiles', `${id}.json`), 'utf8')).rejects.toThrow();
+});
+
 it('logout deletes an untrusted issuer locally and says the server session was not revoked', async () => {
   const { directory, id } = await profileFile('https://evil.example/');
   await seedUnrevoked(directory, id);

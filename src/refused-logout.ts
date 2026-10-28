@@ -81,12 +81,25 @@ const storedClientId = async (store: CredentialStore, id: string): Promise<strin
   }
 };
 
+/** The authority as written, so an explicit port or userinfo is not folded away. */
+const authorityOf = (endpoint: string): string => {
+  const scheme = endpoint.indexOf('://');
+  if (scheme < 0) return '';
+  const rest = endpoint.slice(scheme + 3);
+  const end = rest.search(/[/?#]/u);
+  return end < 0 ? rest : rest.slice(0, end);
+};
+/** HTTPS on the pinned host, with no userinfo and no explicit port. */
+const pinnedHttpsHost = (endpoint: string): boolean => {
+  if (!URL.canParse(endpoint)) return false;
+  const url = new URL(endpoint);
+  return url.protocol === 'https:' && authorityOf(endpoint) === PRODUCTION_HOST;
+};
 /** Only an endpoint the production metadata actually names, and only on the pinned host. */
 const pinnedRevocation = (metadata: unknown): string => {
   const endpoint = stringField(record(metadata), 'revocation_endpoint');
-  if (!URL.canParse(endpoint)) return '';
-  const url = new URL(endpoint);
-  return url.host === PRODUCTION_HOST ? url.href : '';
+  if (!pinnedHttpsHost(endpoint)) return '';
+  return new URL(endpoint).href;
 };
 const advertisedRevocation = async (): Promise<string> => {
   const metadata = await discoverAuthorizationServerMetadata(PRODUCTION_ISSUER, {

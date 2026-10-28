@@ -164,6 +164,30 @@ const otherIssuerResponse = (url: URL): Response => {
     });
   return Response.json({ access_token: 'replacement', token_type: 'Bearer' });
 };
+const memoryStore = () => ({
+  read: async (): Promise<string | null> => null,
+  write: async (): Promise<void> => {},
+  remove: async (): Promise<void> => {},
+});
+it('treats a discovered self-hosted issuer with one trailing slash as the saved issuer', () => {
+  const provider = new McpOAuthProvider({ profile, store: memoryStore() });
+  const state = { authorizationServerUrl: 'https://app.example.test' };
+  expect(() => provider.saveDiscoveryState(state)).not.toThrow();
+  expect(provider.discoveryState()).toEqual(state);
+});
+it('refuses a discovered issuer that is not the saved one apart from one trailing slash', () => {
+  const provider = new McpOAuthProvider({ profile, store: memoryStore() });
+  for (const authorizationServerUrl of [
+    'https://app.example.test//',
+    'https://app.example.test/x',
+    'HTTPS://app.example.test/',
+    'https://app.example.test:443',
+    'https://other.example.test/',
+  ])
+    expect(() => provider.saveDiscoveryState({ authorizationServerUrl })).toThrow(
+      'MCP authorization issuer does not match the selected profile.',
+    );
+});
 const saveSignedIn = async (provider: McpOAuthProvider): Promise<void> => {
   await provider.saveClientInformation({
     client_id: 'mcp_public_client',

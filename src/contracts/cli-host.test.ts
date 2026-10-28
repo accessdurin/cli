@@ -399,10 +399,15 @@ describe('account host pinning', () => {
     ).toBeUndefined();
   });
 
-  it('compares a self-hosted issuer with one trailing slash as the same issuer', () => {
+  it('compares one trailing slash as the same issuer and keeps //, a path, case, and a port different', () => {
     const scope = { appOrigin: 'https://h', development: false };
     const compared = (value: string) => comparableIssuer('mcpIssuer', value, scope);
     expect(compared('https://h')).toBe(compared('https://h/'));
+    expect(compared('https://h/')).not.toBe(compared('https://h//'));
+    expect(compared('https://h/x')).not.toBe(compared('https://h/x/'));
+    expect(compared('https://h')).not.toBe(compared('https://H/'));
+    expect(compared('https://h')).not.toBe(compared('https://h:443'));
+    expect(compared('https://h')).not.toBe(compared('https://h:443/'));
     expect(compared('https://h')).not.toBe(compared('https://other'));
   });
 

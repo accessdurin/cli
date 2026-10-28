@@ -14,7 +14,7 @@ import type { RevocationMarker } from './ports/revocation-marker.js';
 import { assertSignOutFinished } from './revocation-marker.js';
 import type { CliProfile } from './contracts/cli-profile.js';
 import { safeCliUrl } from './contracts/cli-url.js';
-import { canonicalIssuer } from './contracts/cli-host.js';
+import { comparableIssuer } from './contracts/cli-host.js';
 
 type Authorization = {
   readonly redirectUrl: string;
@@ -137,11 +137,11 @@ export class McpOAuthProvider implements OAuthClientProvider {
   }
 
   /**
-   * The SDK names the sign-in server as the MCP server's metadata spells it, so a known app's
-   * https://<host>/ is the same issuer as https://<host>. Nothing else is.
+   * The SDK names the sign-in server as the metadata spells it. One root trailing slash is the
+   * same issuer, including for a self-hosted app. Case, port, `//`, a path, and another host are not.
    */
   saveDiscoveryState(state: OAuthDiscoveryState): void {
-    const issuer = (url: string) => canonicalIssuer('mcpIssuer', url, this.options.profile);
+    const issuer = (url: string) => comparableIssuer('mcpIssuer', url, this.options.profile);
     if (issuer(state.authorizationServerUrl) !== issuer(this.options.profile.mcpIssuer))
       throw new CliError('MCP authorization issuer does not match the selected profile.');
     this.discovery = state;
