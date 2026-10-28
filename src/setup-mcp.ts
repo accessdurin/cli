@@ -1,4 +1,5 @@
 import { auth, discoverOAuthProtectedResourceMetadata } from '@modelcontextprotocol/client';
+import { z } from 'zod';
 import type { CredentialStore } from './ports/credential-store.js';
 import type { RevocationMarker } from './ports/revocation-marker.js';
 import type { PendingRevocations } from './ports/pending-revocations.js';
@@ -26,18 +27,35 @@ export async function mcpIssuer(
   if (!safeCliUrl(resource, scope.development))
     throw new CliError('The personal MCP endpoint is unsafe.');
   assertExpectedHost('resource', resource, scope);
-  const metadata = await discoverOAuthProtectedResourceMetadata(resource, undefined, request);
+  const captured: { issuer?: string } = {};
+  const metadata = await discoverOAuthProtectedResourceMetadata(
+    resource,
+    undefined,
+    observingProtectedResource(request, captured),
+  );
+  return pinnedMcpIssuer(resource, metadata, captured.issuer, scope);
+}
+const pinnedMcpIssuer = (
+  resource: string,
+  metadata: {
+    readonly resource?: string | undefined;
+    readonly authorization_servers?: string[] | undefined;
+  },
+  captured: string | undefined,
+  scope: CliHostScope,
+): string => {
   const issuers = authorizationServers(metadata.authorization_servers);
   if (![metadata.resource === resource, issuers.length === 1].every(Boolean))
     throw new CliError(
       'MCP discovery must identify the exact personal resource and one trusted issuer.',
     );
-  const issuer = issuers[0];
+  // The SDK's URL check trims. The spelling the server sent is what gets pinned.
+  const issuer = writtenIssuer(captured, issuers);
   if (!validIssuer(issuer, scope.development))
     throw new CliError('Unsafe MCP authorization issuer.');
-  assertExpectedHost('mcpIssuer', String(issuer), scope);
-  return canonicalIssuer('mcpIssuer', String(issuer), scope);
-}
+  assertExpectedHost('mcpIssuer', issuer, scope);
+  return canonicalIssuer('mcpIssuer', issuer, scope);
+};
 function assertExpectedHost(role: CliHostRole, url: string, scope: CliHostScope): void {
   const problem = untrustedCliHost(role, url, scope);
   if (problem) throw new CliError(`${problem} Check --app-url, or ask your durin administrator.`);
@@ -115,5 +133,39 @@ async function authenticatedCatalog(options: Options, provider: McpOAuthProvider
 }
 
 const authorizationServers = (issuers?: string[]): string[] => issuers ?? [];
+const writtenIssuer = (captured: string | undefined, issuers: readonly string[]): string => {
+  if (captured) return captured;
+  if (issuers[0]) return issuers[0];
+  return '';
+};
+const protectedResourceSchema = z.object({
+  authorization_servers: z.array(z.string()).min(1),
+});
+/** The issuer string as the protected-resource document spelled it, before any URL normalization. */
+const protectedResourceIssuer = async (
+  input: Parameters<typeof fetch>[0],
+  response: Response,
+): Promise<string | undefined> => {
+  const target = input instanceof Request ? input.url : String(input);
+  if (!target.includes('oauth-protected-resource')) return undefined;
+  const body: unknown = await response
+    .clone()
+    .json()
+    .catch(() => undefined);
+  const parsed = protectedResourceSchema.safeParse(body);
+  return parsed.success ? parsed.data.authorization_servers[0] : undefined;
+};
+const observingProtectedResource = (
+  request: typeof fetch,
+  captured: { issuer?: string },
+): typeof fetch => {
+  const observe: typeof fetch = async (input, init) => {
+    const response = await request(input, init);
+    const issuer = await protectedResourceIssuer(input, response);
+    if (issuer) captured.issuer = issuer;
+    return response;
+  };
+  return observe;
+};
 const validIssuer = (issuer: string | undefined, development: boolean): boolean =>
   Boolean(issuer && safeCliUrl(issuer, development));

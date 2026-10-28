@@ -26,13 +26,49 @@ afterAll(async () => {
 /** Onboarding needs a terminal; util-linux `script` runs the built CLI in one. */
 const terminal = spawnSync('script', ['--version'], { encoding: 'utf8' });
 const hasTerminal = !terminal.error && terminal.stdout.includes('util-linux');
-/** Without `script` these tests skip locally, but fail in CI, which must run them. */
-const skipped = !hasTerminal && !process.env.CI;
+/** `true` and `1` are CI. `false`, `0`, empty, and unset are not, so they do not force these tests. */
+const REAL_CI = new Set(['true', '1']);
+const ciRunsHostPinE2e = (value: string | undefined): boolean =>
+  REAL_CI.has(value?.trim().toLowerCase() ?? '');
+const SCRIPT_REQUIRED = 'These end-to-end tests need util-linux `script`, which CI must install.';
+/** The failure CI hits when `script` is missing. Any other `CI` value skips these tests instead. */
+const hostPinTerminalFailure = (
+  scriptPresent: boolean,
+  env: NodeJS.ProcessEnv,
+): string | undefined => {
+  if (scriptPresent) return undefined;
+  if (ciRunsHostPinE2e(env.CI)) return SCRIPT_REQUIRED;
+  return undefined;
+};
+const terminalFailure = hostPinTerminalFailure(hasTerminal, process.env);
+/** Without `script` these tests skip locally. Real CI runs them and fails when `script` is missing. */
+const skipped = !hasTerminal && terminalFailure === undefined;
+
+it.each([
+  ['false', undefined],
+  ['0', undefined],
+  ['FALSE', undefined],
+  ['', undefined],
+  [undefined, undefined],
+  ['true', SCRIPT_REQUIRED],
+  ['1', SCRIPT_REQUIRED],
+  ['TRUE', SCRIPT_REQUIRED],
+] as const)(
+  'with no script, CI=%j does not count as CI unless it is true or 1 (failure: %j)',
+  (ci, failure) => {
+    const env = { CI: ci };
+    expect(hostPinTerminalFailure(false, env)).toBe(failure);
+  },
+);
+
+it('runs the host-pin end-to-end tests when script is present, even if CI is false or 0', () => {
+  expect(hostPinTerminalFailure(true, { CI: 'false' })).toBeUndefined();
+  expect(hostPinTerminalFailure(true, { CI: '0' })).toBeUndefined();
+});
 const quoted = (value: string) => `'${value.replaceAll("'", `'\\''`)}'`;
 /** Runs the built CLI with its own config directory and home, so no saved state is shared. */
 const durin = async (args: readonly string[]) => {
-  if (!hasTerminal)
-    throw new Error('These end-to-end tests need util-linux `script`, which CI must install.');
+  if (terminalFailure) throw new Error(terminalFailure);
   const home = await mkdtemp(join(tmpdir(), 'durin-e2e-'));
   const command = [process.execPath, join(outDir, 'cli.js'), ...args, '--config-dir', home];
   try {

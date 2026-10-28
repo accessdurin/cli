@@ -1,5 +1,6 @@
 // MAR-828 acceptance: Tess's QA repros of Seth's review of cli#8 (qa-seth-cli8.test.ts, reviewed
 // head 5ede0ff). Each asserts the required behaviour; imports, fixtures and APIs are adapted.
+import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { createServer, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -43,14 +44,14 @@ const issuer = 'https://auth.getdurin.com/';
 // auth.getdurin.com.
 const profile = createProfile({
   appOrigin: 'https://app.getdurin.com',
-  accountIssuer: issuer,
+  accountIssuer: 'https://auth.getdurin.com',
   accountClientId: 'account',
   principalId: 'user_one',
   workosOrganizationId: 'org_one',
   organizationId: 'org_internal',
   environment: 'production',
   resource,
-  mcpIssuer: issuer,
+  mcpIssuer: 'https://auth.getdurin.com',
   development: false,
 });
 const memoryStore = (values = new Map<string, string>()) => ({
@@ -91,12 +92,12 @@ const recorder = (
 const evilHit = (hosts: string[]) => hosts.filter((h) => h.includes(EVIL));
 const signedIn = async (values: Map<string, string>) => {
   const provider = new McpOAuthProvider({ profile, store: memoryStore(values) });
-  await provider.saveClientInformation({ client_id: 'client_one', issuer });
+  await provider.saveClientInformation({ client_id: 'client_one', issuer: profile.mcpIssuer });
   await provider.saveTokens({
     access_token: 'synthetic-access',
     refresh_token: 'synthetic-refresh',
     token_type: 'Bearer',
-    issuer,
+    issuer: profile.mcpIssuer,
   });
   return provider;
 };
@@ -132,12 +133,15 @@ it.each([true, false])(
 
 type Reply = readonly [path: string, reply: (init?: RequestInit) => Response];
 const signInReplies: readonly Reply[] = [
-  ['oauth-protected-resource', () => Response.json({ resource, authorization_servers: [issuer] })],
+  [
+    'oauth-protected-resource',
+    () => Response.json({ resource, authorization_servers: [profile.mcpIssuer] }),
+  ],
   [
     '.well-known',
     () =>
       Response.json({
-        issuer,
+        issuer: profile.mcpIssuer,
         scopes_supported: ['email'],
         authorization_endpoint: `${issuer}authorize`,
         token_endpoint: `https://${EVIL}/token`,
@@ -183,7 +187,7 @@ it.each([true, false])(
         cb.search = new URLSearchParams({
           code: 'synthetic-code',
           state: a.searchParams.get('state')!,
-          iss: issuer,
+          iss: profile.mcpIssuer,
         }).toString();
         await fetch(cb.href);
       },
@@ -598,6 +602,10 @@ const issuerSpellings = [
   'https://auth%2egetdurin.com/',
   'https://auth.getdurin.com/x/..',
   'https://:@auth.getdurin.com',
+  ' https://auth.getdurin.com',
+  'https://auth.getdurin.com ',
+  'https://auth\t.getdurin.com',
+  'https://auth.getdurin.com\\',
 ];
 it.each(issuerSpellings)(
   'production refuses the account issuer %s from /auth/cli/config before sign-in and saves nothing',
@@ -625,6 +633,72 @@ it.each(issuerSpellings)(
     expect(saved).toEqual([]);
   },
 );
+
+it('production refuses the account issuer https://auth.getdurin.com., whose one trailing dot only --app-url strips', async () => {
+  const value = 'https://auth.getdurin.com.';
+  const { hosts, outcome, saved } = await setupSignIn(production, value);
+  expect(hosts).toEqual(configOnly(production));
+  expect(outcome).toContain('The account sign-in issuer is on auth.getdurin.com.');
+  expect(saved).toEqual([]);
+});
+
+it('production refuses the MCP sign-in server https://auth.getdurin.com. before contacting it and saves nothing', async () => {
+  const value = 'https://auth.getdurin.com.';
+  const { hosts, outcome, saved } = await setupRun({
+    appOrigin: production,
+    route: productionDeployment({ mcpIssuer: value }),
+  });
+  expect(hosts).toEqual([...accountSignIn, mcpDiscovery]);
+  expect(outcome).toContain('The MCP sign-in server is on auth.getdurin.com.');
+  expect(saved).toEqual([]);
+});
+
+const savedIssuerRefusal = (value: string) => {
+  const host = new URL(value).host;
+  return host === 'auth.getdurin.com'
+    ? 'must be exactly auth.getdurin.com over HTTPS'
+    : `is on ${host}`;
+};
+it.each([
+  ['accountIssuer', `${productionIssuer}/`],
+  ['mcpIssuer', `${productionIssuer}/`],
+  ['accountIssuer', ` ${productionIssuer}`],
+  ['mcpIssuer', `${productionIssuer} `],
+  ['accountIssuer', 'https://auth\t.getdurin.com'],
+  ['mcpIssuer', 'https://auth.getdurin.com\\'],
+  ['accountIssuer', 'https://auth.getdurin.com.'],
+  ['mcpIssuer', 'https://AUTH.getdurin.com'],
+  ['accountIssuer', 'https://auth.getdurin.com:443'],
+] as const)('refuses to load a saved production profile whose %s is %j', async (field, value) => {
+  const scope = {
+    appOrigin: production,
+    accountIssuer: productionIssuer,
+    accountClientId: 'account',
+    principalId: 'user_one',
+    workosOrganizationId: 'org_one',
+    organizationId: 'org_internal',
+    environment: 'production' as const,
+    resource,
+    mcpIssuer: productionIssuer,
+    development: false,
+    [field]: value,
+  };
+  const id = createHash('sha256').update(JSON.stringify(scope)).digest('hex');
+  const directory = await mkdtemp(join(tmpdir(), 'durin-host-pin-'));
+  try {
+    await mkdir(join(directory, 'profiles'), { recursive: true });
+    await writeFile(
+      join(directory, 'profiles', `${id}.json`),
+      JSON.stringify({ ...scope, version: 1, id }),
+    );
+    await expect(new FileProfiles(directory).load(id)).rejects.toThrow(savedIssuerRefusal(value));
+    await expect(new FileProfiles(directory).load(id)).rejects.toThrow(
+      'Run durin to sign in again.',
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
 it('saves production’s issuers as https://auth.getdurin.com when config and discovery name them with a trailing slash', async () => {
   const { hosts, outcome, saved, ready } = await setupRun({

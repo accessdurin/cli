@@ -155,6 +155,32 @@ export function canonicalIssuer(role: CliHostRole, url: string, scope: CliHostSc
   const host = expectedHosts(role, scope).find((expected) => exactIssuer(url, expected));
   return host ? `https://${host}` : url;
 }
+/**
+ * A saved profile keeps a known app's issuer as the canonical `https://<host>` string. Live setup
+ * may accept the trailing-slash spelling and save this form. Loading any other spelling, including
+ * one that only parses to the same host, refuses it instead of rewriting it.
+ */
+const profileIssuerProblem = (
+  role: 'mcpIssuer' | 'accountIssuer',
+  url: string,
+  scope: CliHostScope,
+): string | undefined => {
+  const problem = untrustedCliHost(role, url, scope);
+  if (problem) return problem;
+  const canonical = canonicalIssuer(role, url, scope);
+  return url === canonical
+    ? undefined
+    : `The ${ROLE_NAMES[role]} must be exactly ${new URL(canonical).host} over HTTPS, in lowercase, with no port, path, query or user name.`;
+};
+type ProfileHostScope = CliHostScope &
+  Readonly<Record<(typeof cliProfileHostRoles)[number], string>>;
+export function untrustedProfileHost(
+  role: (typeof cliProfileHostRoles)[number],
+  scope: ProfileHostScope,
+): string | undefined {
+  if (role === 'resource') return untrustedCliHost(role, scope.resource, scope);
+  return profileIssuerProblem(role, scope[role], scope);
+}
 
 /** The hosts a request may reach. Loopback hosts are reachable only in development. */
 export type CliHostAllowlist = { readonly hosts: readonly string[]; readonly development: boolean };
