@@ -198,11 +198,28 @@ const refusedDetail = (id: string, revoked: boolean | undefined): string => {
   if (revoked) return `${removed} The server session was revoked.`;
   return `${removed} ${NOT_REVOKED}`;
 };
+const isEnoent = (error: unknown): boolean => {
+  if (typeof error !== 'object' || error === null || !('code' in error)) return false;
+  return error.code === 'ENOENT';
+};
+const profileMissing = async (directory: string, id: string): Promise<boolean> => {
+  try {
+    await readFile(join(directory, 'profiles', `${id}.json`));
+    return false;
+  } catch (error) {
+    return isEnoent(error);
+  }
+};
 const finishRefusedLogout = async (
   directory: string,
   id: string,
   reason: string,
 ): Promise<void> => {
+  if (await profileMissing(directory, id)) {
+    process.exitCode = 0;
+    process.stdout.write('already logged out\n');
+    return;
+  }
   const raw = await readRawProfile(directory, id);
   const store = new NativeCredentialStore();
   const revoked = trustedProduction(raw) ? await revokeProduction(store, id) : undefined;

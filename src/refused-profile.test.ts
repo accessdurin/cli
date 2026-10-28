@@ -544,3 +544,35 @@ it('logout of a refused profile holds the profile lock until it finishes', async
   await waiting;
   expect(entered).toBe(true);
 });
+
+it('a second logout that waits prints already logged out', async () => {
+  const { directory, id } = await profileFile(`${PRODUCTION}/`);
+  let release = (): void => undefined;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+    await gate;
+    return Response.json(PRODUCTION_METADATA);
+  });
+  const chunks: string[] = [];
+  const write = vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+    chunks.push(String(chunk));
+    return true;
+  });
+  const options = cliOptions(['logout', '--profile', id, '--config-dir', directory]);
+  const leading = logoutCommand(options);
+  await waitForLock(join(directory, 'locks', `${id}.lock`));
+  const waiting = logoutCommand(options);
+  await setTimeout(200);
+  expect(chunks.join('')).not.toContain('already logged out');
+  release();
+  await leading;
+  await waiting;
+  write.mockRestore();
+  const output = chunks.join('');
+  expect(output.slice(output.indexOf('already logged out'))).toBe('already logged out\n');
+  expect(output).toContain('The server session was not revoked');
+  expect(output).not.toContain("isn't trusted");
+  expect(process.exitCode).toBe(0);
+});
