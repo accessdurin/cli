@@ -20,7 +20,8 @@ const withSignedInProfile = <T>(directory: string, profileId: string, work: () =
 export async function profileConnection(options: CliOptions) {
   const profile = await new FileProfiles(options.directory)
     .load(options.values.profile)
-    .catch(() => {
+    .catch((error: unknown) => {
+      if (error instanceof CliError) throw error;
       throw new CliError(
         'No valid organization profile. Run durin in a terminal to complete setup.',
       );

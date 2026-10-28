@@ -140,6 +140,18 @@ const describeProblem = (role: CliHostRole, host: string, scope: CliHostScope): 
  * Explains, in plain language, why `url` is not on a host that the deployment at
  * `scope.appOrigin` uses for `role`; undefined when the host is expected.
  */
+const looseSelfHostedIssuer = (role: CliHostRole, url: string, scope: CliHostScope): boolean =>
+  issuerRole(role) && !pinnedIssuer(role, scope) && !roundTripCliUrl(url);
+const spellingProblem = (
+  role: CliHostRole,
+  url: string,
+  scope: CliHostScope,
+  host: string,
+): string | undefined => {
+  if (!looseSelfHostedIssuer(role, url, scope)) return undefined;
+  if (!expectedHosts(role, scope).includes(host)) return undefined;
+  return `The ${ROLE_NAMES[role]} must be written exactly as https://${host}: lowercase, with no :443, //, spaces, NUL or backslash.`;
+};
 export function untrustedCliHost(
   role: CliHostRole,
   url: string,
@@ -147,7 +159,10 @@ export function untrustedCliHost(
 ): string | undefined {
   const host = hostOf(url);
   if (!host) return `The ${ROLE_NAMES[role]} is not a valid web address.`;
-  return allowedHost(role, url, scope) ? undefined : describeProblem(role, host, scope);
+  return (
+    spellingProblem(role, url, scope, host) ??
+    (allowedHost(role, url, scope) ? undefined : describeProblem(role, host, scope))
+  );
 }
 
 /**

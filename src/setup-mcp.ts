@@ -158,7 +158,7 @@ const documentIssuer = async (response: Response): Promise<string | undefined> =
 const sameOrigin = (target: string, origin: string): boolean =>
   URL.canParse(target) && new URL(target).origin === origin;
 const pinsIssuer = (response: Response, target: string, origin: string): boolean =>
-  response.ok && sameOrigin(target, origin);
+  response.ok && !response.redirected && sameOrigin(target, origin);
 /** Only a 2xx document on the resource origin is the issuer durin will pin. */
 const noteProtectedResource = async (
   target: string,
