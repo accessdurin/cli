@@ -22,7 +22,7 @@ import { mcpCommand, verifyProfile } from './mcp-command.js';
 import { cliOptions } from './cli-options.js';
 import type { AgentConfig } from './agents.js';
 import type { SetupUi } from './ports/cli-setup.js';
-import { canonicalIssuer, profileHostAllowlist } from './contracts/cli-host.js';
+import { canonicalIssuer, comparableIssuer, profileHostAllowlist } from './contracts/cli-host.js';
 
 vi.mock('./remote-mcp.js', () => ({
   RemoteMcpClient: class {
@@ -527,6 +527,19 @@ it('treats a trailing slash as the same production issuer and refuses other spel
   expect(same(`${productionIssuer}//`)).toBe(false);
   expect(same(`${productionIssuer}/x`)).toBe(false);
   expect(same('https://evil.example/')).toBe(false);
+});
+
+it('treats one trailing slash as the same self-hosted issuer and a different host as different', () => {
+  const scope = { appOrigin: 'https://h', development: false };
+  const compared = (value: string) => comparableIssuer('mcpIssuer', value, scope);
+  expect(compared('https://h')).toBe(compared('https://h/'));
+  expect(compared('https://h')).not.toBe(compared('https://other'));
+  expect(compared('https://h')).not.toBe(compared('HTTPS://h/'));
+  expect(compared('https://h')).not.toBe(compared('https://h:443'));
+  expect(compared('https://h')).not.toBe(compared('https://h:443/'));
+  expect(compared('https://h')).not.toBe(compared('https://h//'));
+  expect(compared('https://h')).not.toBe(compared('https://h/x'));
+  expect(compared('https://h')).not.toBe(compared('https://h.evil.example/'));
 });
 
 it('pins only the root issuer when a path-aware 404 names the same issuer with a trailing slash', async () => {
@@ -1101,14 +1114,18 @@ it.each([selfHosted, `${selfHosted}/`])(
   },
 );
 
-it('a self-hosted app refuses the WorkOS account issuer https://acme-tenant.authkit.app:443', async () => {
-  const value = 'https://acme-tenant.authkit.app:443';
-  const { hosts, outcome, saved } = await setupSignIn(selfHosted, value);
-  expect(hosts).toEqual(configOnly(selfHosted));
-  expect(outcome).toContain('The account sign-in issuer is on acme-tenant.authkit.app');
-  expect(outcome).not.toContain('Unable to start account sign-in.');
-  expect(saved).toEqual([]);
-});
+it.each(['https://acme-tenant.authkit.app:443', 'https://ACME-TENANT.AUTHKIT.APP/'])(
+  'a self-hosted app refuses the WorkOS account issuer %s as a spelling',
+  async (value) => {
+    const { hosts, outcome, saved } = await setupSignIn(selfHosted, value);
+    expect(hosts).toEqual(configOnly(selfHosted));
+    expect(outcome).toContain(
+      'must be written exactly as https://acme-tenant.authkit.app: lowercase, with no :443, //, spaces, NUL or backslash.',
+    );
+    expect(outcome).not.toContain('Unable to start account sign-in.');
+    expect(saved).toEqual([]);
+  },
+);
 
 const selfHostedResource = `https://durin.acme.test/mcp/u/${'c'.repeat(64)}`;
 const selfHostedAccount = [

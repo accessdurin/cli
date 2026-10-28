@@ -142,6 +142,24 @@ const describeProblem = (role: CliHostRole, host: string, scope: CliHostScope): 
  */
 const looseSelfHostedIssuer = (role: CliHostRole, url: string, scope: CliHostScope): boolean =>
   issuerRole(role) && !pinnedIssuer(role, scope) && !roundTripCliUrl(url);
+const workosHostname = (url: string): string => {
+  const parsed = URL.parse(url);
+  if (!parsed || parsed.protocol !== 'https:') return '';
+  return WORKOS_ISSUER_HOST.test(parsed.hostname) ? parsed.hostname : '';
+};
+/** The host the exact-spelling message should name, or empty when a different message applies. */
+const exactSpellingHost = (
+  role: CliHostRole,
+  url: string,
+  scope: CliHostScope,
+  host: string,
+): string => {
+  if (expectedHosts(role, scope).includes(host)) return host;
+  // A non-default port is a different host (`:8443`), so it keeps the ordinary host message.
+  if (!allowsWorkosIssuer(role, scope)) return '';
+  const named = workosHostname(url);
+  return named === host ? named : '';
+};
 const spellingProblem = (
   role: CliHostRole,
   url: string,
@@ -149,8 +167,9 @@ const spellingProblem = (
   host: string,
 ): string | undefined => {
   if (!looseSelfHostedIssuer(role, url, scope)) return undefined;
-  if (!expectedHosts(role, scope).includes(host)) return undefined;
-  return `The ${ROLE_NAMES[role]} must be written exactly as https://${host}: lowercase, with no :443, //, spaces, NUL or backslash.`;
+  const named = exactSpellingHost(role, url, scope, host);
+  if (!named) return undefined;
+  return `The ${ROLE_NAMES[role]} must be written exactly as https://${named}: lowercase, with no :443, //, spaces, NUL or backslash.`;
 };
 export function untrustedCliHost(
   role: CliHostRole,
@@ -174,6 +193,22 @@ export function canonicalIssuer(role: CliHostRole, url: string, scope: CliHostSc
   if (!pinnedIssuer(role, scope)) return url;
   const host = expectedHosts(role, scope).find((expected) => exactIssuer(url, expected));
   return host ? `https://${host}` : url;
+}
+/** True only for the single slash of an empty path, as in `https://host/`. */
+const rootSlash = (url: string): boolean => {
+  const scheme = url.indexOf('://');
+  if (scheme < 0 || !url.endsWith('/')) return false;
+  const rest = url.slice(scheme + 3);
+  return rest.indexOf('/') === rest.length - 1;
+};
+/**
+ * The form used to compare issuers. A pinned issuer is `https://<host>`. Every issuer drops one
+ * root trailing slash, and nothing else: case, port, `//`, a path, and another host stay different.
+ * Saving still uses `canonicalIssuer`, so a self-hosted issuer is stored as written.
+ */
+export function comparableIssuer(role: CliHostRole, url: string, scope: CliHostScope): string {
+  const canonical = canonicalIssuer(role, url, scope);
+  return rootSlash(canonical) ? canonical.slice(0, -1) : canonical;
 }
 /**
  * A saved profile keeps a known app's issuer as the canonical `https://<host>` string. Live setup

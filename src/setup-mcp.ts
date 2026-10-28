@@ -7,6 +7,7 @@ import type { CliProfile } from './contracts/cli-profile.js';
 import { safeCliUrl } from './contracts/cli-url.js';
 import {
   canonicalIssuer,
+  comparableIssuer,
   profileHostAllowlist,
   untrustedCliHost,
   type CliHostRole,
@@ -139,9 +140,9 @@ const refuseDifferentIssuer = (pinned: string | undefined, scope: CliHostScope):
   if (pinned) assertExpectedHost('mcpIssuer', pinned, scope);
   throw new CliError(ISSUERS_DISAGREE);
 };
-/** One trailing slash does not make a different issuer. Nothing else is folded in. */
+/** One root trailing slash does not make a different issuer. Nothing else is folded in. */
 const sameIssuer = (left: string, right: string, scope: CliHostScope): boolean =>
-  canonicalIssuer('mcpIssuer', left, scope) === canonicalIssuer('mcpIssuer', right, scope);
+  comparableIssuer('mcpIssuer', left, scope) === comparableIssuer('mcpIssuer', right, scope);
 const agreedIssuer = (noted: NotedIssuers, sdkIssuer: string, scope: CliHostScope): string => {
   if (!noted.pinned || !sameIssuer(noted.pinned, sdkIssuer, scope))
     refuseDifferentIssuer(noted.pinned, scope);

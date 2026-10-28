@@ -67,23 +67,55 @@ it('runs the host-pin end-to-end tests when script is present, even if CI is fal
   expect(hostPinTerminalFailure(true, { CI: '0' })).toBeUndefined();
 });
 const quoted = (value: string) => `'${value.replaceAll("'", `'\\''`)}'`;
+/** Throws on any socket, TLS connection, or DNS lookup. Imported before the CLI starts. */
+const BLOCK_NETWORK = `import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+const net = require('node:net');
+const tls = require('node:tls');
+const dns = require('node:dns');
+const blocked = () => {
+  throw new Error('durin-e2e-network-blocked');
+};
+net.Socket.prototype.connect = blocked;
+net.connect = blocked;
+tls.connect = blocked;
+for (const method of ['lookup', 'lookupService', 'resolve', 'resolve4', 'resolve6']) {
+  dns[method] = blocked;
+  dns.promises[method] = blocked;
+}
+`;
+const joined = (stdout: string | undefined, stderr: string | undefined): string =>
+  `${stdout ?? ''}${stderr ?? ''}`;
+const runBuilt = (command: readonly string[], env: NodeJS.ProcessEnv) =>
+  exec('script', ['-qec', command.map(quoted).join(' '), '/dev/null'], {
+    env,
+    timeout: 30_000,
+  }).then(
+    ({ stdout, stderr }) => ({ code: 0, output: joined(stdout, stderr) }),
+    (error: { code: number; stdout?: string; stderr?: string }) => ({
+      code: error.code,
+      output: joined(error.stdout, error.stderr),
+    }),
+  );
+const blockedEnv = async (home: string, env: NodeJS.ProcessEnv): Promise<NodeJS.ProcessEnv> => {
+  const preload = join(home, 'block-network.mjs');
+  await writeFile(preload, BLOCK_NETWORK);
+  return { ...env, NODE_OPTIONS: `--import ${preload}` };
+};
 /** Runs the built CLI with its own config directory and home, so no saved state is shared. */
-const durin = async (args: readonly string[], prepare?: (home: string) => Promise<void>) => {
+const durin = async (
+  args: readonly string[],
+  prepare?: (home: string) => Promise<void>,
+  blockNetwork?: boolean,
+) => {
   if (terminalFailure) throw new Error(terminalFailure);
   const home = await mkdtemp(join(tmpdir(), 'durin-e2e-'));
   const command = [process.execPath, join(outDir, 'cli.js'), ...args, '--config-dir', home];
+  const base: NodeJS.ProcessEnv = { PATH: process.env.PATH, HOME: home, TERM: 'xterm' };
   try {
+    const env = blockNetwork ? await blockedEnv(home, base) : base;
     if (prepare) await prepare(home);
-    return await exec('script', ['-qec', command.map(quoted).join(' '), '/dev/null'], {
-      env: { PATH: process.env.PATH, HOME: home, TERM: 'xterm' },
-      timeout: 30_000,
-    }).then(
-      ({ stdout, stderr }) => ({ code: 0, output: `${stdout}${stderr ?? ''}` }),
-      (error: { code: number; stdout: string; stderr?: string }) => ({
-        code: error.code,
-        output: `${error.stdout ?? ''}${error.stderr ?? ''}`,
-      }),
-    );
+    return await runBuilt(command, env);
   } finally {
     await rm(home, { recursive: true, force: true });
   }
@@ -146,9 +178,6 @@ it.skipIf(skipped)(
   'the built CLI accepts a no-slash self-hosted profile and refuses an old production issuer without connecting',
   { timeout: 30_000 },
   async () => {
-    const stub = await localServer((_path, response) => {
-      response.writeHead(200).end('should-not-be-called');
-    });
     const refused = {
       appOrigin: 'https://app.getdurin.com',
       accountIssuer: 'https://auth.getdurin.com/',
@@ -178,22 +207,22 @@ it.skipIf(skipped)(
         JSON.stringify({ ...scope, version: 1, id }),
       );
     };
-    try {
-      const refusedRun = await durin(['tools', 'list'], (home) => writeProfile(home, refused));
-      expect(refusedRun.code).toBe(1);
-      expect(refusedRun.output).toContain('must be exactly auth.getdurin.com over HTTPS');
-      expect(refusedRun.output).toContain('Run durin to sign in again.');
-      expect(refusedRun.output).not.toContain('bearer-OLD-ACCESS-9f3c');
-      expect(stub.hits).toEqual([]);
-      expect(stub.connections()).toBe(0);
-      const acceptedRun = await durin(['tools', 'list'], (home) => writeProfile(home, accepted));
-      expect(acceptedRun.output).not.toContain('must be exactly auth.getdurin.com');
-      expect(acceptedRun.output).not.toContain("issuer isn't trusted");
-      expect(stub.hits).toEqual([]);
-      expect(stub.connections()).toBe(0);
-    } finally {
-      await stub.close();
-    }
+    const refusedRun = await durin(['tools', 'list'], (home) => writeProfile(home, refused), true);
+    expect(refusedRun.code).toBe(1);
+    expect(refusedRun.output).toContain('must be exactly auth.getdurin.com over HTTPS');
+    expect(refusedRun.output).toContain('Run durin to sign in again.');
+    expect(refusedRun.output).not.toContain('bearer-OLD-ACCESS-9f3c');
+    expect(refusedRun.output).not.toContain('durin-e2e-network-blocked');
+    const acceptedRun = await durin(
+      ['tools', 'list'],
+      (home) => writeProfile(home, accepted),
+      true,
+    );
+    expect(acceptedRun.code).toBe(1);
+    expect(acceptedRun.output).toContain('OS credential store unavailable');
+    expect(acceptedRun.output).not.toContain('must be exactly auth.getdurin.com');
+    expect(acceptedRun.output).not.toContain("issuer isn't trusted");
+    expect(acceptedRun.output).not.toContain('durin-e2e-network-blocked');
   },
 );
 
