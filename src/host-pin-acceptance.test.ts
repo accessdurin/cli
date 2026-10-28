@@ -22,7 +22,7 @@ import { mcpCommand, verifyProfile } from './mcp-command.js';
 import { cliOptions } from './cli-options.js';
 import type { AgentConfig } from './agents.js';
 import type { SetupUi } from './ports/cli-setup.js';
-import { profileHostAllowlist } from './contracts/cli-host.js';
+import { canonicalIssuer, profileHostAllowlist } from './contracts/cli-host.js';
 
 vi.mock('./remote-mcp.js', () => ({
   RemoteMcpClient: class {
@@ -356,7 +356,12 @@ const setupRun = async (input: SetupRun) => {
       () => 'finished',
       (error: unknown) => String(error),
     );
-    return { hosts, outcome, saved: await new FileProfiles(directory).list(), ready };
+    return {
+      hosts,
+      outcome,
+      saved: (await new FileProfiles(directory).list()).profiles,
+      ready,
+    };
   } finally {
     vi.restoreAllMocks();
     await rm(directory, { recursive: true, force: true });
@@ -499,11 +504,7 @@ const discoveryHosts = [
   `GET mcp.getdurin.com${pathAwareDocument}`,
   `GET mcp.getdurin.com${rootDocument}`,
 ];
-const protectedResourceRoute = (
-  pathStatus: number,
-  pathIssuer: string,
-  root: Response | (() => never),
-) => {
+const protectedResourceRoute = (pathStatus: number, pathIssuer: string, root: () => Response) => {
   const deployment = productionDeployment();
   return (url: URL, init?: RequestInit) => {
     if (url.pathname === pathAwareDocument)
@@ -511,26 +512,51 @@ const protectedResourceRoute = (
         status: pathStatus,
         headers: { 'content-type': 'application/json' },
       });
-    if (url.pathname === rootDocument) return typeof root === 'function' ? root() : root;
+    if (url.pathname === rootDocument) return root();
     return deployment(url, init);
   };
 };
 
-it('fails closed when path-aware and root protected-resource documents disagree on the issuer', async () => {
-  const pathIssuer = 'https://resilient-tiger-64-staging.authkit.app';
+it('treats a trailing slash as the same production issuer and refuses other spellings', () => {
+  const scope = { appOrigin: production, development: false };
+  const same = (value: string) => canonicalIssuer('mcpIssuer', value, scope) === productionIssuer;
+  expect(same(productionIssuer)).toBe(true);
+  expect(same(`${productionIssuer}/`)).toBe(true);
+  expect(same(`HTTPS://auth.getdurin.com/`)).toBe(false);
+  expect(same(`${productionIssuer}:443`)).toBe(false);
+  expect(same(`${productionIssuer}//`)).toBe(false);
+  expect(same(`${productionIssuer}/x`)).toBe(false);
+  expect(same('https://evil.example/')).toBe(false);
+});
+
+it('pins only the root issuer when a path-aware 404 names the same issuer with a trailing slash', async () => {
   const { hosts, outcome, saved } = await setupRun({
     appOrigin: production,
-    route: protectedResourceRoute(
-      404,
-      pathIssuer,
+    route: protectedResourceRoute(404, `${productionIssuer}/`, () =>
       Response.json({ resource, authorization_servers: [productionIssuer] }),
     ),
   });
-  expect(outcome).toContain('different sign-in servers');
-  expect(outcome).toContain('Nothing was saved');
-  expect(hosts).toEqual([...accountSignIn, ...discoveryHosts]);
-  expect(saved).toEqual([]);
-  expect(hosts.join('\n')).not.toContain('resilient-tiger-64-staging.authkit.app');
+  expect(outcome).toBe('finished');
+  expect(saved).toMatchObject([{ mcpIssuer: productionIssuer }]);
+  expect(hosts).toEqual([
+    ...accountSignIn,
+    ...discoveryHosts,
+    ...discoveryHosts,
+    ...mcpSignIn.slice(1),
+  ]);
+});
+
+it('pins the canonical issuer when a path-aware 404 names an attacker and the root document is trusted', async () => {
+  const attacker = 'https://evil.example';
+  const { hosts, outcome, saved } = await setupRun({
+    appOrigin: production,
+    route: protectedResourceRoute(404, attacker, () =>
+      Response.json({ resource, authorization_servers: [productionIssuer] }),
+    ),
+  });
+  expect(outcome).toBe('finished');
+  expect(saved).toMatchObject([{ mcpIssuer: productionIssuer }]);
+  expect(hosts.join('\n')).not.toContain('evil.example');
 });
 
 it.each([
@@ -540,7 +566,7 @@ it.each([
       throw new TypeError('fetch failed');
     },
   ],
-  ['HTTP 500', new Response(null, { status: 500 })],
+  ['HTTP 500', () => new Response(null, { status: 500 })],
 ] as const)(
   'fails closed when path-aware discovery is a 404 naming an attacker issuer and the root document is %s',
   async (_name, root) => {

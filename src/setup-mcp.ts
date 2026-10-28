@@ -139,9 +139,14 @@ const refuseDifferentIssuer = (pinned: string | undefined, scope: CliHostScope):
   if (pinned) assertExpectedHost('mcpIssuer', pinned, scope);
   throw new CliError(ISSUERS_DISAGREE);
 };
+/** One trailing slash does not make a different issuer. Nothing else is folded in. */
+const sameIssuer = (left: string, right: string, scope: CliHostScope): boolean =>
+  canonicalIssuer('mcpIssuer', left, scope) === canonicalIssuer('mcpIssuer', right, scope);
 const agreedIssuer = (noted: NotedIssuers, sdkIssuer: string, scope: CliHostScope): string => {
-  if (noted.pinned !== sdkIssuer) refuseDifferentIssuer(noted.pinned, scope);
-  if (noted.others.some((issuer) => issuer !== sdkIssuer)) throw new CliError(ISSUERS_DISAGREE);
+  if (!noted.pinned || !sameIssuer(noted.pinned, sdkIssuer, scope))
+    refuseDifferentIssuer(noted.pinned, scope);
+  if (noted.others.some((issuer) => !sameIssuer(issuer, sdkIssuer, scope)))
+    throw new CliError(ISSUERS_DISAGREE);
   return sdkIssuer;
 };
 const protectedResourceSchema = z.object({
@@ -159,6 +164,8 @@ const sameOrigin = (target: string, origin: string): boolean =>
   URL.canParse(target) && new URL(target).origin === origin;
 const pinsIssuer = (response: Response, target: string, origin: string): boolean =>
   response.ok && !response.redirected && sameOrigin(target, origin);
+const isPinnedDocument = (target: string, response: Response, origin: string): boolean =>
+  target.includes('oauth-protected-resource') && pinsIssuer(response, target, origin);
 /** Only a 2xx document on the resource origin is the issuer durin will pin. */
 const noteProtectedResource = async (
   target: string,
@@ -166,11 +173,11 @@ const noteProtectedResource = async (
   origin: string,
   noted: NotedIssuers,
 ): Promise<void> => {
-  if (!target.includes('oauth-protected-resource')) return;
+  if (!isPinnedDocument(target, response, origin)) return;
   const issuer = await documentIssuer(response);
   if (!issuer) return;
-  if (pinsIssuer(response, target, origin)) noted.pinned = issuer;
-  else noted.others.push(issuer);
+  if (noted.pinned) noted.others.push(noted.pinned);
+  noted.pinned = issuer;
 };
 const observingProtectedResource = (
   resource: string,

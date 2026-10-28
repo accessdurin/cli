@@ -1,4 +1,5 @@
 import { execFile, spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { createServer, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -67,17 +68,21 @@ it('runs the host-pin end-to-end tests when script is present, even if CI is fal
 });
 const quoted = (value: string) => `'${value.replaceAll("'", `'\\''`)}'`;
 /** Runs the built CLI with its own config directory and home, so no saved state is shared. */
-const durin = async (args: readonly string[]) => {
+const durin = async (args: readonly string[], prepare?: (home: string) => Promise<void>) => {
   if (terminalFailure) throw new Error(terminalFailure);
   const home = await mkdtemp(join(tmpdir(), 'durin-e2e-'));
   const command = [process.execPath, join(outDir, 'cli.js'), ...args, '--config-dir', home];
   try {
+    if (prepare) await prepare(home);
     return await exec('script', ['-qec', command.map(quoted).join(' '), '/dev/null'], {
       env: { PATH: process.env.PATH, HOME: home, TERM: 'xterm' },
       timeout: 30_000,
     }).then(
-      ({ stdout }) => ({ code: 0, output: stdout }),
-      (error: { code: number; stdout: string }) => ({ code: error.code, output: error.stdout }),
+      ({ stdout, stderr }) => ({ code: 0, output: `${stdout}${stderr ?? ''}` }),
+      (error: { code: number; stdout: string; stderr?: string }) => ({
+        code: error.code,
+        output: `${error.stdout ?? ''}${error.stderr ?? ''}`,
+      }),
     );
   } finally {
     await rm(home, { recursive: true, force: true });
@@ -133,6 +138,61 @@ it.skipIf(skipped)(
       expect(workos.hits).toEqual(['POST /user_management/authorize/device']);
     } finally {
       await Promise.all([app.close(), workos.close()]);
+    }
+  },
+);
+
+it.skipIf(skipped)(
+  'the built CLI accepts a no-slash self-hosted profile and refuses an old production issuer without connecting',
+  { timeout: 30_000 },
+  async () => {
+    const stub = await localServer((_path, response) => {
+      response.writeHead(200).end('should-not-be-called');
+    });
+    const refused = {
+      appOrigin: 'https://app.getdurin.com',
+      accountIssuer: 'https://auth.getdurin.com/',
+      accountClientId: 'bearer-OLD-ACCESS-9f3c',
+      principalId: 'user_one',
+      workosOrganizationId: 'org_one',
+      organizationId: 'org_internal',
+      environment: 'production' as const,
+      resource: `https://mcp.getdurin.com/mcp/u/${'a'.repeat(64)}`,
+      mcpIssuer: 'https://auth.getdurin.com/',
+      development: false,
+    };
+    const accepted = {
+      ...refused,
+      appOrigin: 'https://durin.acme.test',
+      accountIssuer: 'https://durin.acme.test',
+      accountClientId: 'account',
+      resource: `https://durin.acme.test/mcp/u/${'b'.repeat(64)}`,
+      mcpIssuer: 'https://durin.acme.test',
+    };
+    const writeProfile = async (home: string, scope: typeof refused) => {
+      const id = createHash('sha256').update(JSON.stringify(scope)).digest('hex');
+      await mkdir(join(home, 'profiles'), { recursive: true });
+      await writeFile(join(home, 'active'), `${id}\n`);
+      await writeFile(
+        join(home, 'profiles', `${id}.json`),
+        JSON.stringify({ ...scope, version: 1, id }),
+      );
+    };
+    try {
+      const refusedRun = await durin(['tools', 'list'], (home) => writeProfile(home, refused));
+      expect(refusedRun.code).toBe(1);
+      expect(refusedRun.output).toContain('must be exactly auth.getdurin.com over HTTPS');
+      expect(refusedRun.output).toContain('Run durin to sign in again.');
+      expect(refusedRun.output).not.toContain('bearer-OLD-ACCESS-9f3c');
+      expect(stub.hits).toEqual([]);
+      expect(stub.connections()).toBe(0);
+      const acceptedRun = await durin(['tools', 'list'], (home) => writeProfile(home, accepted));
+      expect(acceptedRun.output).not.toContain('must be exactly auth.getdurin.com');
+      expect(acceptedRun.output).not.toContain("issuer isn't trusted");
+      expect(stub.hits).toEqual([]);
+      expect(stub.connections()).toBe(0);
+    } finally {
+      await stub.close();
     }
   },
 );

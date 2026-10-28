@@ -3,7 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { z } from 'zod';
-import type { CliProfiles } from './ports/cli-profiles.js';
+import type { CliProfiles, ProfileList, RefusedProfile } from './ports/cli-profiles.js';
 import { cliProfileHostRoles } from './contracts/cli-host.js';
 import {
   cliProfileIdSchema,
@@ -18,6 +18,8 @@ export function createProfile(input: CliProfileScope): CliProfile {
   const id = createHash('sha256').update(JSON.stringify(scope)).digest('hex');
   return { ...scope, version: 1, id };
 }
+const refusalReason = (error: unknown): string =>
+  error instanceof CliError ? error.message : 'Invalid Durin profile binding.';
 const invalidProfile = (error: z.ZodError): string => {
   const host = error.issues.find(
     (issue) =>
@@ -50,7 +52,7 @@ export class FileProfiles implements CliProfiles {
     return profile;
   }
 
-  async list(): Promise<readonly CliProfile[]> {
+  async list(): Promise<ProfileList> {
     const names = await readdir(join(this.directory, 'profiles')).catch((error: unknown) => {
       if (z.object({ code: z.literal('ENOENT') }).safeParse(error).success) return [];
       throw error;
@@ -58,7 +60,16 @@ export class FileProfiles implements CliProfiles {
     const ids = names
       .filter((name) => /^[a-f0-9]{64}\.json$/u.test(name))
       .map((name) => name.slice(0, -5));
-    return Promise.all(ids.map((id) => this.load(id)));
+    const settled = await Promise.allSettled(
+      ids.map((id) => this.load(id).then((profile) => ({ id, profile }))),
+    );
+    const profiles: CliProfile[] = [];
+    const refused: RefusedProfile[] = [];
+    settled.forEach((result, index) => {
+      if (result.status === 'fulfilled') profiles.push(result.value.profile);
+      else refused.push({ id: ids[index] ?? '', reason: refusalReason(result.reason) });
+    });
+    return { profiles, refused };
   }
 
   async activate(id: string): Promise<void> {

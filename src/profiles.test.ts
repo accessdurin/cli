@@ -181,7 +181,12 @@ describe('organization profile hosts', () => {
         'Run durin to sign in again.',
       );
       await expect(new FileProfiles(directory).load()).rejects.toThrow(host);
-      await expect(new FileProfiles(directory).list()).rejects.toThrow(host);
+      const listed = await new FileProfiles(directory).list();
+      expect(listed.profiles).toEqual([]);
+      expect(listed.refused.map((entry) => entry.reason).join('\n')).toContain(host);
+      expect(listed.refused.map((entry) => entry.reason).join('\n')).toContain(
+        'Run durin to sign in again.',
+      );
     },
   );
 });
