@@ -1,19 +1,20 @@
 import { z } from 'zod';
 import { safeCliUrl } from './cli-url.js';
-import { cliProfileHostRoles, untrustedCliHost } from './cli-host.js';
+import { cliProfileHostRoles, untrustedProfileHost } from './cli-host.js';
 
 export const cliProfileIdSchema = z.string().regex(/^[a-f0-9]{64}$/u);
 export const cliProfileScopeSchema = z
   .object({
     appOrigin: z.url(),
-    accountIssuer: z.url(),
+    // Plain strings, checked as written. z.url() trims, which would accept a padded issuer.
+    accountIssuer: z.string().min(1),
     accountClientId: z.string().min(1),
     principalId: z.string().min(1),
     workosOrganizationId: z.string().min(1),
     organizationId: z.string().min(1),
     environment: z.enum(['sandbox', 'production']),
     resource: z.url(),
-    mcpIssuer: z.url(),
+    mcpIssuer: z.string().min(1),
     development: z.boolean(),
   })
   .strict()
@@ -34,7 +35,7 @@ export const cliProfileScopeSchema = z
   )
   .superRefine((scope, context) => {
     for (const role of cliProfileHostRoles) {
-      const problem = untrustedCliHost(role, scope[role], scope);
+      const problem = untrustedProfileHost(role, scope);
       if (problem) context.addIssue({ code: 'custom', message: problem, path: [role] });
     }
   });

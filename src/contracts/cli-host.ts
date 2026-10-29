@@ -1,4 +1,4 @@
-import { loopbackCliHost } from './cli-url.js';
+import { loopbackCliHost, roundTripCliUrl } from './cli-url.js';
 
 export type CliHostRole = 'resource' | 'mcpIssuer' | 'accountIssuer' | 'accountProvider';
 export type CliHostScope = {
@@ -103,11 +103,16 @@ const pinnedIssuer = (role: CliHostRole, scope: CliHostScope): boolean =>
  */
 const exactIssuer = (url: string, host: string): boolean =>
   url === `https://${host}` || url === `https://${host}/`;
-const allowedRemote = (role: CliHostRole, url: string, scope: CliHostScope): boolean =>
-  pinnedIssuer(role, scope)
-    ? expectedHosts(role, scope).some((expected) => exactIssuer(url, expected))
-    : expectedHosts(role, scope).includes(hostOf(url)) ||
-      (allowsWorkosIssuer(role, scope) && workosIssuer(url));
+const issuerRole = (role: CliHostRole): boolean => role === 'mcpIssuer' || role === 'accountIssuer';
+const hostAllowed = (role: CliHostRole, url: string, scope: CliHostScope): boolean =>
+  expectedHosts(role, scope).includes(hostOf(url)) ||
+  (allowsWorkosIssuer(role, scope) && workosIssuer(url));
+const allowedRemote = (role: CliHostRole, url: string, scope: CliHostScope): boolean => {
+  if (pinnedIssuer(role, scope))
+    return expectedHosts(role, scope).some((expected) => exactIssuer(url, expected));
+  if (issuerRole(role) && !roundTripCliUrl(url)) return false;
+  return hostAllowed(role, url, scope);
+};
 const allowedHost = (role: CliHostRole, url: string, scope: CliHostScope): boolean =>
   loopback(hostOf(url)) ? scope.development : allowedRemote(role, url, scope);
 const describeExpected = (role: CliHostRole, scope: CliHostScope): string => {
@@ -135,6 +140,37 @@ const describeProblem = (role: CliHostRole, host: string, scope: CliHostScope): 
  * Explains, in plain language, why `url` is not on a host that the deployment at
  * `scope.appOrigin` uses for `role`; undefined when the host is expected.
  */
+const looseSelfHostedIssuer = (role: CliHostRole, url: string, scope: CliHostScope): boolean =>
+  issuerRole(role) && !pinnedIssuer(role, scope) && !roundTripCliUrl(url);
+const workosHostname = (url: string): string => {
+  const parsed = URL.parse(url);
+  if (!parsed || parsed.protocol !== 'https:') return '';
+  return WORKOS_ISSUER_HOST.test(parsed.hostname) ? parsed.hostname : '';
+};
+/** The host the exact-spelling message should name, or empty when a different message applies. */
+const exactSpellingHost = (
+  role: CliHostRole,
+  url: string,
+  scope: CliHostScope,
+  host: string,
+): string => {
+  if (expectedHosts(role, scope).includes(host)) return host;
+  // A non-default port is a different host (`:8443`), so it keeps the ordinary host message.
+  if (!allowsWorkosIssuer(role, scope)) return '';
+  const named = workosHostname(url);
+  return named === host ? named : '';
+};
+const spellingProblem = (
+  role: CliHostRole,
+  url: string,
+  scope: CliHostScope,
+  host: string,
+): string | undefined => {
+  if (!looseSelfHostedIssuer(role, url, scope)) return undefined;
+  const named = exactSpellingHost(role, url, scope, host);
+  if (!named) return undefined;
+  return `The ${ROLE_NAMES[role]} must be written exactly as https://${named}: lowercase, with no :443, //, spaces, NUL or backslash.`;
+};
 export function untrustedCliHost(
   role: CliHostRole,
   url: string,
@@ -142,7 +178,10 @@ export function untrustedCliHost(
 ): string | undefined {
   const host = hostOf(url);
   if (!host) return `The ${ROLE_NAMES[role]} is not a valid web address.`;
-  return allowedHost(role, url, scope) ? undefined : describeProblem(role, host, scope);
+  return (
+    spellingProblem(role, url, scope, host) ??
+    (allowedHost(role, url, scope) ? undefined : describeProblem(role, host, scope))
+  );
 }
 
 /**
@@ -154,6 +193,48 @@ export function canonicalIssuer(role: CliHostRole, url: string, scope: CliHostSc
   if (!pinnedIssuer(role, scope)) return url;
   const host = expectedHosts(role, scope).find((expected) => exactIssuer(url, expected));
   return host ? `https://${host}` : url;
+}
+/** True only for the single slash of an empty path, as in `https://host/`. */
+const rootSlash = (url: string): boolean => {
+  const scheme = url.indexOf('://');
+  if (scheme < 0 || !url.endsWith('/')) return false;
+  const rest = url.slice(scheme + 3);
+  return rest.indexOf('/') === rest.length - 1;
+};
+/**
+ * The form used to compare issuers. A pinned issuer is `https://<host>`. Every issuer drops one
+ * root trailing slash, and nothing else: case, port, `//`, a path, and another host stay different.
+ * Saving still uses `canonicalIssuer`, so a self-hosted issuer is stored as written.
+ */
+export function comparableIssuer(role: CliHostRole, url: string, scope: CliHostScope): string {
+  const canonical = canonicalIssuer(role, url, scope);
+  return rootSlash(canonical) ? canonical.slice(0, -1) : canonical;
+}
+/**
+ * A saved profile keeps a known app's issuer as the canonical `https://<host>` string. Live setup
+ * may accept the trailing-slash spelling and save this form. Loading any other spelling, including
+ * one that only parses to the same host, refuses it instead of rewriting it.
+ */
+const profileIssuerProblem = (
+  role: 'mcpIssuer' | 'accountIssuer',
+  url: string,
+  scope: CliHostScope,
+): string | undefined => {
+  const problem = untrustedCliHost(role, url, scope);
+  if (problem) return problem;
+  const canonical = canonicalIssuer(role, url, scope);
+  return url === canonical
+    ? undefined
+    : `The ${ROLE_NAMES[role]} must be exactly ${new URL(canonical).host} over HTTPS, in lowercase, with no port, path, query or user name.`;
+};
+type ProfileHostScope = CliHostScope &
+  Readonly<Record<(typeof cliProfileHostRoles)[number], string>>;
+export function untrustedProfileHost(
+  role: (typeof cliProfileHostRoles)[number],
+  scope: ProfileHostScope,
+): string | undefined {
+  if (role === 'resource') return untrustedCliHost(role, scope.resource, scope);
+  return profileIssuerProblem(role, scope[role], scope);
 }
 
 /** The hosts a request may reach. Loopback hosts are reachable only in development. */

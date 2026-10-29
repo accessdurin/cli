@@ -4,20 +4,27 @@ import { NativeCredentialStore } from './credentials.js';
 import { retryPendingRevocations, signOutMcp } from './logout.js';
 import { withProfileLock } from './profile-lock.js';
 import { FileRevocationMarker } from './revocation-marker.js';
+import { logoutRefusedProfile } from './refused-logout.js';
 import { printJson } from './tool-commands.js';
+import type { CliProfile } from './contracts/cli-profile.js';
+import type { ProfileList } from './ports/cli-profiles.js';
 
+/** Accepted profiles keep their saved shape. A refused one is the same array, marked refused. */
+const listedRows = (listed: ProfileList): readonly unknown[] => [
+  ...listed.profiles,
+  ...listed.refused.map((entry) => ({ id: entry.id, refused: true, reason: entry.reason })),
+];
 export async function profileCommand(options: CliOptions): Promise<void> {
   const profiles = new FileProfiles(options.directory);
   const action = options.positionals[1];
-  if (action === 'list') return printJson(await profiles.list());
+  if (action === 'list') return printJson(listedRows(await profiles.list()));
   if (action !== 'use') throw new CliError('Use durin profiles list or durin profiles use <id>.');
   const id = options.positionals[2];
   if (!id) throw new CliError('Provide a profile ID from durin profiles list.');
   await profiles.activate(id);
   printJson({ activeProfile: id });
 }
-export async function logoutCommand(options: CliOptions): Promise<void> {
-  const profile = await new FileProfiles(options.directory).load(options.values.profile);
+const logoutLoaded = async (options: CliOptions, profile: CliProfile): Promise<void> => {
   const store = new NativeCredentialStore();
   await retryPendingRevocations(options.directory, profile, store);
   const { remote, local } = await withProfileLock(options.directory, profile.id, () =>
@@ -39,4 +46,22 @@ export async function logoutCommand(options: CliOptions): Promise<void> {
         : 'Agent configuration is retained. Run durin to sign in again. Other organization MCP grants are unchanged.',
   });
   if (remote === 'failed') process.exitCode = 1;
+};
+const loadForLogout = async (
+  options: CliOptions,
+): Promise<{ profile?: CliProfile; reason: string }> => {
+  try {
+    return {
+      reason: '',
+      profile: await new FileProfiles(options.directory).load(options.values.profile),
+    };
+  } catch (error) {
+    if (!(error instanceof CliError)) throw error;
+    return { reason: error.message };
+  }
+};
+export async function logoutCommand(options: CliOptions): Promise<void> {
+  const loaded = await loadForLogout(options);
+  if (loaded.profile) return logoutLoaded(options, loaded.profile);
+  await logoutRefusedProfile(options, loaded.reason);
 }

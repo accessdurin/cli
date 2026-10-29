@@ -1,5 +1,6 @@
 import { execFile, spawnSync } from 'node:child_process';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -26,23 +27,109 @@ afterAll(async () => {
 /** Onboarding needs a terminal; util-linux `script` runs the built CLI in one. */
 const terminal = spawnSync('script', ['--version'], { encoding: 'utf8' });
 const hasTerminal = !terminal.error && terminal.stdout.includes('util-linux');
-/** Without `script` these tests skip locally, but fail in CI, which must run them. */
-const skipped = !hasTerminal && !process.env.CI;
+/** `true` and `1` are CI. `false`, `0`, empty, and unset are not, so they do not force these tests. */
+const REAL_CI = new Set(['true', '1']);
+const ciRunsHostPinE2e = (value: string | undefined): boolean =>
+  REAL_CI.has(value?.trim().toLowerCase() ?? '');
+const SCRIPT_REQUIRED = 'These end-to-end tests need util-linux `script`, which CI must install.';
+/** The failure CI hits when `script` is missing. Any other `CI` value skips these tests instead. */
+const hostPinTerminalFailure = (
+  scriptPresent: boolean,
+  env: NodeJS.ProcessEnv,
+): string | undefined => {
+  if (scriptPresent) return undefined;
+  if (ciRunsHostPinE2e(env.CI)) return SCRIPT_REQUIRED;
+  return undefined;
+};
+const terminalFailure = hostPinTerminalFailure(hasTerminal, process.env);
+/** Without `script` these tests skip locally. Real CI runs them and fails when `script` is missing. */
+const skipped = !hasTerminal && terminalFailure === undefined;
+
+it.each([
+  ['false', undefined],
+  ['0', undefined],
+  ['FALSE', undefined],
+  ['', undefined],
+  [undefined, undefined],
+  ['true', SCRIPT_REQUIRED],
+  ['1', SCRIPT_REQUIRED],
+  ['TRUE', SCRIPT_REQUIRED],
+] as const)(
+  'with no script, CI=%j does not count as CI unless it is true or 1 (failure: %j)',
+  (ci, failure) => {
+    const env = { CI: ci };
+    expect(hostPinTerminalFailure(false, env)).toBe(failure);
+  },
+);
+
+it('runs the host-pin end-to-end tests when script is present, even if CI is false or 0', () => {
+  expect(hostPinTerminalFailure(true, { CI: 'false' })).toBeUndefined();
+  expect(hostPinTerminalFailure(true, { CI: '0' })).toBeUndefined();
+});
 const quoted = (value: string) => `'${value.replaceAll("'", `'\\''`)}'`;
-/** Runs the built CLI with its own config directory and home, so no saved state is shared. */
-const durin = async (args: readonly string[]) => {
-  if (!hasTerminal)
-    throw new Error('These end-to-end tests need util-linux `script`, which CI must install.');
-  const home = await mkdtemp(join(tmpdir(), 'durin-e2e-'));
+/** Throws on any socket, TLS connection, or DNS lookup. Imported before the CLI starts. */
+const BLOCK_NETWORK = `import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+const net = require('node:net');
+const tls = require('node:tls');
+const dns = require('node:dns');
+const blocked = () => {
+  throw new Error('durin-e2e-network-blocked');
+};
+net.Socket.prototype.connect = blocked;
+net.connect = blocked;
+tls.connect = blocked;
+for (const method of ['lookup', 'lookupService', 'resolve', 'resolve4', 'resolve6']) {
+  dns[method] = blocked;
+  dns.promises[method] = blocked;
+}
+`;
+const joined = (stdout: string | undefined, stderr: string | undefined): string =>
+  `${stdout ?? ''}${stderr ?? ''}`;
+const runBuilt = (command: readonly string[], env: NodeJS.ProcessEnv) =>
+  exec('script', ['-qec', command.map(quoted).join(' '), '/dev/null'], {
+    env,
+    timeout: 30_000,
+  }).then(
+    ({ stdout, stderr }) => ({ code: 0, output: joined(stdout, stderr) }),
+    (error: { code: number; stdout?: string; stderr?: string }) => ({
+      code: error.code,
+      output: joined(error.stdout, error.stderr),
+    }),
+  );
+const blockedEnv = async (home: string, env: NodeJS.ProcessEnv): Promise<NodeJS.ProcessEnv> => {
+  const preload = join(home, 'block-network.mjs');
+  await writeFile(preload, BLOCK_NETWORK);
+  return { ...env, NODE_OPTIONS: `--import ${preload}` };
+};
+type DurinRun = {
+  readonly blockNetwork?: boolean;
+  readonly inspect?: (home: string) => Promise<void>;
+};
+const runInHome = async (
+  home: string,
+  args: readonly string[],
+  prepare: ((home: string) => Promise<void>) | undefined,
+  run: DurinRun,
+) => {
   const command = [process.execPath, join(outDir, 'cli.js'), ...args, '--config-dir', home];
+  const base: NodeJS.ProcessEnv = { PATH: process.env.PATH, HOME: home, TERM: 'xterm' };
+  const env = run.blockNetwork ? await blockedEnv(home, base) : base;
+  if (prepare) await prepare(home);
+  const result = await runBuilt(command, env);
+  if (run.inspect) await run.inspect(home);
+  return result;
+};
+/** Runs the built CLI with its own config directory and home, so no saved state is shared. */
+const durin = async (
+  args: readonly string[],
+  prepare?: (home: string) => Promise<void>,
+  run: DurinRun = {},
+) => {
+  if (terminalFailure) throw new Error(terminalFailure);
+  const home = await mkdtemp(join(tmpdir(), 'durin-e2e-'));
   try {
-    return await exec('script', ['-qec', command.map(quoted).join(' '), '/dev/null'], {
-      env: { PATH: process.env.PATH, HOME: home, TERM: 'xterm' },
-      timeout: 30_000,
-    }).then(
-      ({ stdout }) => ({ code: 0, output: stdout }),
-      (error: { code: number; stdout: string }) => ({ code: error.code, output: error.stdout }),
-    );
+    return await runInHome(home, args, prepare, run);
   } finally {
     await rm(home, { recursive: true, force: true });
   }
@@ -98,6 +185,124 @@ it.skipIf(skipped)(
     } finally {
       await Promise.all([app.close(), workos.close()]);
     }
+  },
+);
+
+it.skipIf(skipped)(
+  'the built CLI accepts a no-slash self-hosted profile and refuses an old production issuer without connecting',
+  { timeout: 30_000 },
+  async () => {
+    const refused = {
+      appOrigin: 'https://app.getdurin.com',
+      accountIssuer: 'https://auth.getdurin.com/',
+      accountClientId: 'bearer-OLD-ACCESS-9f3c',
+      principalId: 'user_one',
+      workosOrganizationId: 'org_one',
+      organizationId: 'org_internal',
+      environment: 'production' as const,
+      resource: `https://mcp.getdurin.com/mcp/u/${'a'.repeat(64)}`,
+      mcpIssuer: 'https://auth.getdurin.com/',
+      development: false,
+    };
+    const accepted = {
+      ...refused,
+      appOrigin: 'https://durin.acme.test',
+      accountIssuer: 'https://durin.acme.test',
+      accountClientId: 'account',
+      resource: `https://durin.acme.test/mcp/u/${'b'.repeat(64)}`,
+      mcpIssuer: 'https://durin.acme.test',
+    };
+    const profileId = (scope: typeof refused) =>
+      createHash('sha256').update(JSON.stringify(scope)).digest('hex');
+    const writeProfile = async (home: string, scope: typeof refused) => {
+      const id = profileId(scope);
+      await mkdir(join(home, 'profiles'), { recursive: true });
+      await writeFile(join(home, 'active'), `${id}\n`);
+      await writeFile(
+        join(home, 'profiles', `${id}.json`),
+        JSON.stringify({ ...scope, version: 1, id }),
+      );
+    };
+    const blocked = { blockNetwork: true };
+    const refusedRun = await durin(
+      ['tools', 'list'],
+      (home) => writeProfile(home, refused),
+      blocked,
+    );
+    expect(refusedRun.code).toBe(1);
+    expect(refusedRun.output).toContain('must be exactly auth.getdurin.com over HTTPS');
+    expect(refusedRun.output).toContain('Run durin to sign in again.');
+    expect(refusedRun.output).not.toContain('bearer-OLD-ACCESS-9f3c');
+    expect(refusedRun.output).not.toContain('durin-e2e-network-blocked');
+    const acceptedRun = await durin(
+      ['profiles', 'list'],
+      (home) => writeProfile(home, accepted),
+      blocked,
+    );
+    expect(acceptedRun.code).toBe(0);
+    expect(acceptedRun.output).toContain(profileId(accepted));
+    expect(acceptedRun.output).toContain('"mcpIssuer": "https://durin.acme.test"');
+    expect(acceptedRun.output).not.toContain('"refused"');
+    expect(acceptedRun.output).not.toContain('must be exactly auth.getdurin.com');
+    expect(acceptedRun.output).not.toContain("issuer isn't trusted");
+    expect(acceptedRun.output).not.toContain('durin-e2e-network-blocked');
+  },
+);
+
+it.skipIf(skipped)(
+  'the built CLI logs out a refused profile without connecting',
+  { timeout: 30_000 },
+  async () => {
+    const scope = {
+      appOrigin: 'https://app.getdurin.com',
+      accountIssuer: 'https://evil.example/',
+      accountClientId: 'bearer-OLD-ACCESS-9f3c',
+      principalId: 'user_one',
+      workosOrganizationId: 'org_one',
+      organizationId: 'org_internal',
+      environment: 'production' as const,
+      resource: `https://mcp.getdurin.com/mcp/u/${'a'.repeat(64)}`,
+      mcpIssuer: 'https://evil.example/',
+      development: false,
+    };
+    const id = createHash('sha256').update(JSON.stringify(scope)).digest('hex');
+    let profileGone = false;
+    let revocationGone = false;
+    const { code, output } = await durin(
+      ['logout', '--profile', id],
+      async (home) => {
+        await mkdir(join(home, 'profiles'), { recursive: true });
+        await mkdir(join(home, 'revocations'), { recursive: true });
+        await writeFile(join(home, 'active'), `${id}\n`);
+        await writeFile(
+          join(home, 'profiles', `${id}.json`),
+          JSON.stringify({ ...scope, version: 1, id }),
+        );
+        await writeFile(join(home, 'revocations', `${id}.unrevoked.json`), '{"grants":[]}\n');
+      },
+      {
+        blockNetwork: true,
+        inspect: async (home) => {
+          profileGone = await readFile(join(home, 'profiles', `${id}.json`), 'utf8').then(
+            () => false,
+            () => true,
+          );
+          revocationGone = await readFile(
+            join(home, 'revocations', `${id}.unrevoked.json`),
+            'utf8',
+          ).then(
+            () => false,
+            () => true,
+          );
+        },
+      },
+    );
+    expect(code).toBe(0);
+    expect(output).toContain('The server session was not revoked');
+    expect(output).not.toContain('bearer-OLD-ACCESS-9f3c');
+    expect(output).not.toContain('durin-e2e-network-blocked');
+    expect(profileGone).toBe(true);
+    expect(revocationGone).toBe(true);
   },
 );
 

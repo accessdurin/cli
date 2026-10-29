@@ -75,9 +75,9 @@ describe('organization profile hosts', () => {
   const production = {
     ...scope,
     appOrigin: 'https://app.getdurin.com',
-    accountIssuer: 'https://auth.getdurin.com/',
+    accountIssuer: 'https://auth.getdurin.com',
     resource: `https://mcp.getdurin.com${personal}`,
-    mcpIssuer: 'https://auth.getdurin.com/',
+    mcpIssuer: 'https://auth.getdurin.com',
   };
   const local = {
     ...scope,
@@ -90,9 +90,9 @@ describe('organization profile hosts', () => {
   const staging = {
     ...scope,
     appOrigin: 'https://moria.app.getdurin.com',
-    accountIssuer: 'https://resilient-tiger-64-staging.authkit.app/',
+    accountIssuer: 'https://resilient-tiger-64-staging.authkit.app',
     resource: `https://moria.mcp.getdurin.com${personal}`,
-    mcpIssuer: 'https://resilient-tiger-64-staging.authkit.app/',
+    mcpIssuer: 'https://resilient-tiger-64-staging.authkit.app',
   };
   const bindingId = (value: object) =>
     createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -181,7 +181,12 @@ describe('organization profile hosts', () => {
         'Run durin to sign in again.',
       );
       await expect(new FileProfiles(directory).load()).rejects.toThrow(host);
-      await expect(new FileProfiles(directory).list()).rejects.toThrow(host);
+      const listed = await new FileProfiles(directory).list();
+      expect(listed.profiles).toEqual([]);
+      expect(listed.refused.map((entry) => entry.reason).join('\n')).toContain(host);
+      expect(listed.refused.map((entry) => entry.reason).join('\n')).toContain(
+        'Run durin to sign in again.',
+      );
     },
   );
 });

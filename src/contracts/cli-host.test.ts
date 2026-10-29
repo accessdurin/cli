@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   canonicalIssuer,
+  comparableIssuer,
   cliHostRoles,
   deploymentHostAllowlist,
   profileHostAllowlist,
@@ -70,9 +71,13 @@ describe('host pinning', () => {
     'accepts a %s on the app origin host for a deployment without an allowlist',
     (role) => {
       expect(untrustedCliHost(role, url(role, 'https://durin.acme.test'), custom)).toBeUndefined();
-      expect(
-        untrustedCliHost(role, url(role, 'https://durin.acme.test:443'), custom),
-      ).toBeUndefined();
+      const onDefaultPort = untrustedCliHost(
+        role,
+        url(role, 'https://durin.acme.test:443'),
+        custom,
+      );
+      const issuer = role === 'mcpIssuer' || role === 'accountIssuer';
+      expect(onDefaultPort === undefined).toBe(!issuer);
     },
   );
 
@@ -376,6 +381,35 @@ describe('account host pinning', () => {
       ).toBe('https://resilient-tiger-64-staging.authkit.app');
     },
   );
+
+  it('names the exact WorkOS spelling when the issuer has a port or uppercase letters', () => {
+    const message =
+      'must be written exactly as https://acme-tenant.authkit.app: lowercase, with no :443, //, spaces, NUL or backslash.';
+    expect(
+      untrustedCliHost('accountIssuer', 'https://acme-tenant.authkit.app:443', custom),
+    ).toContain(message);
+    expect(untrustedCliHost('accountIssuer', 'https://ACME-TENANT.AUTHKIT.APP/', custom)).toContain(
+      message,
+    );
+    expect(
+      untrustedCliHost('accountIssuer', 'https://acme-tenant.authkit.app', custom),
+    ).toBeUndefined();
+    expect(
+      untrustedCliHost('accountIssuer', 'https://acme-tenant.authkit.app/', custom),
+    ).toBeUndefined();
+  });
+
+  it('compares one trailing slash as the same issuer and keeps //, a path, case, and a port different', () => {
+    const scope = { appOrigin: 'https://h', development: false };
+    const compared = (value: string) => comparableIssuer('mcpIssuer', value, scope);
+    expect(compared('https://h')).toBe(compared('https://h/'));
+    expect(compared('https://h/')).not.toBe(compared('https://h//'));
+    expect(compared('https://h/x')).not.toBe(compared('https://h/x/'));
+    expect(compared('https://h')).not.toBe(compared('https://H/'));
+    expect(compared('https://h')).not.toBe(compared('https://h:443'));
+    expect(compared('https://h')).not.toBe(compared('https://h:443/'));
+    expect(compared('https://h')).not.toBe(compared('https://other'));
+  });
 
   it('keeps a self-hosted app’s issuers as written', () => {
     expect(canonicalIssuer('mcpIssuer', 'https://durin.acme.test/', custom)).toBe(

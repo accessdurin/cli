@@ -3,7 +3,8 @@ import { z } from 'zod';
 export const cliAuthConfigSchema = z
   .object({
     clientId: z.string().min(1),
-    issuer: z.url(),
+    // Plain string, checked as written. z.url() trims, which would accept a padded issuer.
+    issuer: z.string().min(1),
     providerOrigin: z.url(),
     appOrigin: z.url(),
   })
