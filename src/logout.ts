@@ -3,12 +3,18 @@ import { z } from 'zod';
 import { CliError } from './cli-options.js';
 import type { CliProfile } from './contracts/cli-profile.js';
 import type { CredentialStore } from './ports/credential-store.js';
+import type { RevocationMarker } from './ports/revocation-marker.js';
+import type { PendingRevocations, UnrevokedGrant } from './ports/pending-revocations.js';
 import { McpOAuthProvider } from './mcp-oauth.js';
+import { withProfileLock } from './profile-lock.js';
+import { FilePendingRevocations } from './revocation-marker.js';
 import { secureFetch } from './safe-fetch.js';
+import { profileHostAllowlist } from './contracts/cli-host.js';
 
 type Options = {
   readonly profile: CliProfile;
   readonly store: CredentialStore;
+  readonly marker: RevocationMarker;
   readonly request: typeof fetch;
   readonly force?: boolean;
 };
@@ -18,16 +24,15 @@ export type SignOutResult = {
   readonly remote: RevocationStatus;
   readonly local: 'cleared' | 'retained';
 };
-/** The authorization server was unreachable or busy, so revocation may succeed later. */
+/**
+ * The authorization server did not confirm the revocation, so the grant may still be honoured
+ * and revocation should be retried. Captive portals and proxies answer with redirects and
+ * 4xx pages, so only a 2xx from the revocation endpoint counts as revoked.
+ */
 class TransientRevocationError extends Error {}
 const retryableStatus = (status: number): boolean => status === 429 || status >= 500;
-const redirected = (error: unknown): boolean =>
-  error instanceof TypeError &&
-  error.cause instanceof Error &&
-  error.cause.message === 'unexpected redirect';
-/** Without an HTTP answer the server may still honour the grant; a refused redirect is an answer. */
-const transientNetworkFailure = (error: unknown): boolean =>
-  !(error instanceof CliError) && !redirected(error);
+/** Only a refused unsafe destination is final; anything else, a refused redirect included, is not. */
+const transientNetworkFailure = (error: unknown): boolean => !(error instanceof CliError);
 const transientFailures =
   (request: typeof fetch): typeof fetch =>
   async (input, init) => {
@@ -40,46 +45,136 @@ const transientFailures =
     throw new TransientRevocationError(`MCP authorization server returned ${response.status}.`);
   };
 
-/** Only a transient revocation failure keeps the grant, unless forced, so logout can retry. */
+/** A 2xx body that is not metadata may come from a portal or proxy rather than the server. */
+const unparseable = (error: unknown): boolean =>
+  error instanceof SyntaxError || (error instanceof Error && error.name === 'ZodError');
+
+/**
+ * Only a transient revocation failure keeps the grant, unless forced, so logout can retry.
+ * The profile is marked before any request and cleared only once its credentials are gone, so
+ * a logout that is interrupted or throws leaves the profile blocked until sign-out finishes.
+ * A profile that cannot be marked cannot be blocked, so its grant is never kept.
+ */
 export async function signOutMcp(options: Options): Promise<SignOutResult> {
   const provider = new McpOAuthProvider({ profile: options.profile, store: options.store });
-  const outcome = await revokeGrant(options, provider).catch(() => 'failed' as const);
-  if (outcome === 'retry' && !options.force) return { remote: 'failed', local: 'retained' };
+  const blocked = await options.marker.mark().then(
+    () => true,
+    () => false,
+  );
+  const outcome = await storedGrant(provider)
+    .then((grant) => (grant ? revokeGrant(options.profile, grant, options.request) : 'unavailable'))
+    .catch(() => 'failed' as const);
+  if ([outcome === 'retry', blocked, !options.force].every(Boolean))
+    return { remote: 'failed', local: 'retained' };
   await provider.invalidateCredentials('all');
+  await options.marker.clear();
   return { remote: outcome === 'retry' ? 'failed' : outcome, local: 'cleared' };
 }
-async function revokeGrant(
-  options: Options,
-  provider: McpOAuthProvider,
-): Promise<RevocationStatus | 'retry'> {
+
+/**
+ * Runs before a sign-in that replaces a grant an unfinished logout kept. The kept grant is
+ * revoked, or handed to the pending list when the server cannot confirm that, and then deleted,
+ * so the new sign-in can never refresh or reuse it.
+ */
+export async function retireKeptGrant(options: {
+  readonly profile: CliProfile;
+  readonly store: CredentialStore;
+  readonly pending: PendingRevocations;
+  readonly request: typeof fetch;
+}): Promise<void> {
+  const provider = new McpOAuthProvider({ profile: options.profile, store: options.store });
+  const grant = await storedGrant(provider).catch(() => undefined);
+  if (grant && !(await revocationFinished(options.profile, grant, options.request)))
+    await options.pending.add(grant);
+  await provider.invalidateCredentials('all');
+}
+
+/** A command spends at most this long on the pending list, so it is never held up for long. */
+const PENDING_RETRY_DEADLINE = 10_000;
+const withDeadline =
+  (request: typeof fetch, deadline: AbortSignal): typeof fetch =>
+  (input, init) =>
+    request(input, {
+      ...init,
+      signal: init?.signal ? AbortSignal.any([init.signal, deadline]) : deadline,
+    });
+/**
+ * Best effort, run by commands that use a profile: retries revoking grants that an earlier
+ * sign-in replaced, and forgets each one only once the server revokes it or offers no
+ * revocation. It never waits for a busy profile and never fails the command.
+ */
+export async function retryPendingRevocations(
+  directory: string,
+  profile: CliProfile,
+  store: CredentialStore,
+  request: typeof fetch = fetch,
+): Promise<void> {
+  const pending = new FilePendingRevocations(directory, profile.id, store);
+  const retry = async () => {
+    const deadline = AbortSignal.timeout(PENDING_RETRY_DEADLINE);
+    const remaining: UnrevokedGrant[] = [];
+    for (const grant of await pending.entries())
+      if (!(await revocationFinished(profile, grant, withDeadline(request, deadline))))
+        remaining.push(grant);
+    await pending.replace(remaining);
+  };
+  const waiting = await pending.entries().catch(() => []);
+  if (waiting.length > 0) await withProfileLock(directory, profile.id, retry, 0).catch(() => {});
+}
+
+async function storedGrant(provider: McpOAuthProvider): Promise<UnrevokedGrant | undefined> {
   const tokens = await provider.tokens();
-  if (!tokens) return 'unavailable';
+  if (!tokens) return undefined;
   const client = await provider.clientInformation();
-  if (!client) return 'unavailable';
-  const request = transientFailures(secureFetch(options.profile.development, options.request));
-  return revokeRemotely({ request, clientId: client.client_id, tokens }, options.profile).catch(
-    (error: unknown) => {
-      if (error instanceof TransientRevocationError) return 'retry' as const;
-      throw error;
-    },
+  if (!client) return undefined;
+  return {
+    clientId: client.client_id,
+    accessToken: tokens.access_token,
+    ...(tokens.refresh_token ? { refreshToken: tokens.refresh_token } : {}),
+  };
+}
+/** Only a revoked grant, or a server without revocation, can be forgotten safely. */
+const revocationFinished = (
+  profile: CliProfile,
+  grant: UnrevokedGrant,
+  request: typeof fetch,
+): Promise<boolean> =>
+  revokeGrant(profile, grant, request).then(
+    (outcome) => outcome === 'revoked' || outcome === 'unavailable',
+    () => false,
   );
+async function revokeGrant(
+  profile: CliProfile,
+  grant: UnrevokedGrant,
+  request: typeof fetch,
+): Promise<RevocationStatus | 'retry'> {
+  const guarded = transientFailures(secureFetch(profileHostAllowlist(profile), request));
+  return revokeRemotely({ request: guarded, grant }, profile).catch((error: unknown) => {
+    if (error instanceof TransientRevocationError) return 'retry' as const;
+    throw error;
+  });
 }
 async function revokeRemotely(
-  input: {
-    request: typeof fetch;
-    clientId: string;
-    tokens: { refresh_token?: string | undefined; access_token: string };
-  },
+  input: { request: typeof fetch; grant: UnrevokedGrant },
   profile: CliProfile,
 ): Promise<RevocationStatus> {
   const metadata = await discoverAuthorizationServerMetadata(profile.mcpIssuer, {
     fetchFn: input.request,
+  }).catch((error: unknown) => {
+    if (!unparseable(error)) throw error;
+    throw new TransientRevocationError('MCP authorization server metadata was unreadable.', {
+      cause: error,
+    });
   });
+  // Discovery gives up when every metadata URL answers 4xx, which a portal or proxy may send.
+  if (!metadata)
+    throw new TransientRevocationError('MCP authorization server metadata was not found.');
+  // Only the server's own metadata can say that it offers no revocation.
   const endpoint = revocationSchema.parse(metadata).revocation_endpoint;
   if (!endpoint) return 'unavailable';
-  const target = { request: input.request, endpoint, clientId: input.clientId };
-  await revokeToken({ ...target, token: input.tokens.refresh_token, hint: 'refresh_token' });
-  await revokeToken({ ...target, token: input.tokens.access_token, hint: 'access_token' });
+  const target = { request: input.request, endpoint, clientId: input.grant.clientId };
+  await revokeToken({ ...target, token: input.grant.refreshToken, hint: 'refresh_token' });
+  await revokeToken({ ...target, token: input.grant.accessToken, hint: 'access_token' });
   return 'revoked';
 }
 async function revokeToken(input: {
@@ -100,5 +195,6 @@ async function revokeToken(input: {
     }),
   });
   await response.body?.cancel();
-  if (!response.ok) throw new Error('MCP grant revocation failed.');
+  if (!response.ok)
+    throw new TransientRevocationError(`MCP grant revocation returned ${response.status}.`);
 }

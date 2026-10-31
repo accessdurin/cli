@@ -1,3 +1,4 @@
+import type { CliProfile } from './contracts/cli-profile.js';
 import type { CredentialStore } from './ports/credential-store.js';
 import type { PollingClock } from './ports/cli-auth.js';
 import type { AccountIntent, SetupUi } from './ports/cli-setup.js';
@@ -12,9 +13,12 @@ import { authorizeMcp, mcpIssuer } from './setup-mcp.js';
 import { pollingClock } from './polling-clock.js';
 import { secureFetch } from './safe-fetch.js';
 import { withProfileLock } from './profile-lock.js';
+import { FilePendingRevocations, FileRevocationMarker } from './revocation-marker.js';
+import { retryPendingRevocations } from './logout.js';
 import { installRuntime } from './install-runtime.js';
 import { verifySavedBridge } from './verify-bridge.js';
 import { CliError } from './cli-options.js';
+import { deploymentHostAllowlist } from './contracts/cli-host.js';
 
 type Options = {
   readonly appOrigin: string;
@@ -30,9 +34,15 @@ type Options = {
 };
 export async function runSetup(options: Options): Promise<void> {
   const context = await setupContext(options);
-  const { intent, request, clock } = context;
+  const { intent, clock } = context;
   options.ui.stage('Authenticate your Durin account');
-  const account = await setupAccount({ ...options, request, intent, clock });
+  // setupAccount guards its own requests: its hosts depend on the account issuer it learns.
+  const account = await setupAccount({
+    ...options,
+    request: options.request ?? fetch,
+    intent,
+    clock,
+  });
   options.ui.stage('Complete organization onboarding');
   await onboardOrganization({
     api: account.api,
@@ -58,7 +68,7 @@ async function setupContext(options: Options) {
   return {
     ...options,
     intent,
-    request: secureFetch(options.development, options.request ?? fetch),
+    request: secureFetch(deploymentHostAllowlist(options), options.request ?? fetch),
     store: options.store ?? new NativeCredentialStore(),
     clock: setupClock(options),
   };
@@ -67,7 +77,7 @@ async function setupAgent(
   options: Awaited<ReturnType<typeof setupContext>>,
   account: Awaited<ReturnType<typeof setupAccount>>,
 ): Promise<void> {
-  const { request, store } = options;
+  const { request } = options;
   const workspace = await account.api.workspace();
   assertWorkspace(account.identity, workspace);
   const agent = await chosenAgent(options);
@@ -83,7 +93,7 @@ async function setupAgent(
     organizationId: workspace.organization.id,
     environment: workspace.settings.environment,
     resource: endpoint.url,
-    mcpIssuer: await mcpIssuer(endpoint.url, request, options.development),
+    mcpIssuer: await mcpIssuer(endpoint.url, request, options),
     development: options.development,
   });
   const profiles = new FileProfiles(options.directory);
@@ -97,9 +107,7 @@ async function setupAgent(
   await writeBridgeConfig(agent, bridge);
   options.ui.agent.configured(agent.configPath);
   options.ui.stage('Sign in to this organization’s Durin MCP');
-  await withProfileLock(options.directory, profile.id, () =>
-    authorizeMcp({ profile, store, request, open: options.ui.openAuthorization }),
-  );
+  await signInMcp({ ...options, profile, open: options.ui.openAuthorization });
   options.ui.stage('Verify the saved agent bridge');
   const toolCount = await verifySavedBridge(agent, bridge);
   await profiles.activate(profile.id);
@@ -109,6 +117,27 @@ async function setupAgent(
     profileId: profile.id,
     toolCount,
   });
+}
+/** Signs the profile in to its MCP server, first retrying revocations an earlier sign-in left. */
+export async function signInMcp(input: {
+  readonly directory: string;
+  readonly profile: CliProfile;
+  readonly store: CredentialStore;
+  readonly request: typeof fetch;
+  readonly open: (url: string) => Promise<void>;
+}): Promise<number> {
+  const { directory, profile, store, request } = input;
+  await retryPendingRevocations(directory, profile, store, request);
+  return withProfileLock(directory, profile.id, () =>
+    authorizeMcp({
+      profile,
+      store,
+      marker: new FileRevocationMarker(directory, profile.id),
+      pending: new FilePendingRevocations(directory, profile.id, store),
+      request,
+      open: input.open,
+    }),
+  );
 }
 async function chosenAgent(options: Options): Promise<AgentConfig> {
   const key = await options.ui.agent.choose();

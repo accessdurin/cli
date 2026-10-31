@@ -60,16 +60,18 @@ async function waitForLock(path: string, owner: string, deadline: number): Promi
   await setTimeout(100);
   return waitForLock(path, owner, deadline);
 }
+/** `patience` is how long to wait for another process to release the profile. */
 export async function withProfileLock<T>(
   directory: string,
   profileId: string,
   work: () => Promise<T>,
+  patience = 90_000,
 ): Promise<T> {
   const locks = join(directory, 'locks');
   await mkdir(locks, { recursive: true, mode: 0o700 });
   const path = join(locks, `${cliProfileIdSchema.parse(profileId)}.lock`);
   const owner = JSON.stringify({ pid: process.pid, nonce: randomUUID() });
-  await waitForLock(path, owner, Date.now() + 90_000);
+  await waitForLock(path, owner, Date.now() + patience);
   try {
     return await work();
   } finally {

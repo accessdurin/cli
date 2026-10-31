@@ -5,7 +5,7 @@ agent, and authorize that organization's Durin MCP. Setup verifies the saved MCP
 bridge before recommending that you open the selected harness. It never starts an
 agent conversation. Agent selection is interactive; `--agent` and `-a` are rejected.
 
-Requires Node 24.15 or later in the Node 24 release line and an unlocked OS
+Requires Node 24.22.1 or later in the Node 24 release line and an unlocked OS
 credential store. This repository contains the standalone CLI and the client contracts it consumes.
 
 ## Product boundaries
@@ -53,6 +53,57 @@ with `npm install --global @accessdurin/cli`. Publishing this Git repository alo
 does not make the package available on npm.
 The default app origin is `https://app.getdurin.com`. That deployment must have
 AuthKit CLI authentication and MCP authorization configured before onboarding works.
+Setup accepts each host it is given only if the selected app uses it. Hosts match
+exactly, never by suffix, and so do ports: the hosts below are allowed only on the
+default HTTPS port (443, written out or not, except in an issuer, which must leave
+it out), and the app's own host only on the
+app's port:
+
+| app                      | MCP endpoint             | MCP sign-in server                       | account sign-in issuer                   | account sign-in service |
+| ------------------------ | ------------------------ | ---------------------------------------- | ---------------------------------------- | ----------------------- |
+| `app.getdurin.com`       | `mcp.getdurin.com`       | `auth.getdurin.com`                      | `auth.getdurin.com`                      | `api.workos.com`        |
+| `moria.app.getdurin.com` | `moria.mcp.getdurin.com` | `resilient-tiger-64-staging.authkit.app` | `resilient-tiger-64-staging.authkit.app` | `api.workos.com`        |
+
+- **Issuers are exact.** On these two apps, each sign-in server and account
+  sign-in issuer must be written exactly as the origin in the table, such as
+  `https://auth.getdurin.com`, with at most one trailing slash. Anything else is
+  refused, even when it parses to the same address: uppercase, a port (even
+  `:443`), a path, query, fragment or user name, or an encoded or unusual
+  spelling. durin saves and uses it as `https://<host>`, without the slash, as
+  the sign-in server names itself.
+- **The app's own host.** These two apps also accept their own host as the MCP
+  endpoint and the account sign-in service, but never as a sign-in server or
+  account sign-in issuer. So production refuses `https://app.getdurin.com` as its
+  account issuer.
+- **Trailing dot.** The `--app-url` host is matched without one trailing dot, so
+  `https://app.getdurin.com.` follows production's rules and is never treated as
+  self-hosted. A host with more than one trailing dot, such as
+  `https://app.getdurin.com..`, is refused.
+- **Self-hosted apps.** Any other `--app-url` is a self-hosted deployment. It must
+  serve every role from its own host, with one exception: its account sign-in
+  issuer may instead be a WorkOS issuer. That is an HTTPS address on exactly
+  `api.workos.com`, or on any single-label AuthKit tenant such as
+  `acme.authkit.app` (not `authkit.app` itself or deeper names).
+- **WorkOS for self-hosted apps.** durin doesn't pin which AuthKit tenant a
+  self-hosted app uses, so any single-label `*.authkit.app` issuer lets setup reach
+  `api.workos.com` as its account sign-in service. With any other account issuer,
+  a self-hosted deployment never contacts `api.workos.com`.
+- **Loopback.** Loopback hosts need `--dev`, both as an MCP or sign-in host and as
+  the `--app-url`. That covers `localhost` and its subdomains, all of
+  `127.0.0.0/8`, `[::1]`, IPv4-mapped `[::ffff:127.x.x.x]` in any spelling, and
+  `0.0.0.0` and `[::]`, ignoring case and one trailing dot.
+- **When hosts are checked.** The account hosts come from the app's
+  `/auth/cli/config` and are checked before device sign-in starts. Saved profiles
+  are checked again whenever they load; one that points elsewhere is refused until
+  you run `durin` to sign in again.
+- **Every request.** Each request is checked against these hosts before anything
+  is sent, including the token, registration and revocation endpoints that the
+  sign-in server's metadata names and any metadata address an MCP server's `401`
+  answer points to. Redirects are never followed.
+- **What each step reaches.** Setup reaches only the app, its MCP endpoint and
+  sign-in server, and its account sign-in service. A saved profile reaches only
+  its MCP endpoint and sign-in server. durin refuses any other host and names it
+  in the error.
 
 ## Claude Code plugin
 
@@ -109,9 +160,9 @@ It does not trust a saved completion flag. No pasted endpoint or token is requir
 | `--input <file\|->`       | `tools call`; a JSON object, at most 1 MiB; `-` reads stdin              |
 | `--idempotency-key <key>` | Required for `tools call`; retain it on retries                          |
 | `--approval-id <id>`      | `tools call`; resume the exact independently approved operation          |
-| `--force`                 | `logout`; clear local credentials even if revocation fails               |
+| `--force`                 | `logout`; clear local credentials and lift the block if revocation fails |
 | `--app-url <origin>`      | Interactive setup; use another HTTPS Durin deployment                    |
-| `--dev`                   | Interactive setup; additionally allow guarded loopback HTTP              |
+| `--dev`                   | Interactive setup; allow loopback hosts, including guarded HTTP          |
 | `-h`, `--help`            | Show usage                                                               |
 
 Unknown, misplaced, and extra arguments fail instead of being silently ignored.
@@ -186,15 +237,42 @@ but not the approval. A call with no response or a protocol error keeps both. Re
 expire 24 hours after their last change, after which an identical call is a new
 operation, even while its approval is pending.
 
-MCP credentials use macOS Keychain, Windows Credential Manager, or Linux Secret
-Service. There is no plaintext fallback. Account-session tokens remain in memory
-only during onboarding. `logout` affects the selected CLI-owned MCP grant, retains
-config/profile metadata, and reports remote revocation separately. If the
-authorization server gives no HTTP answer (a connection, DNS, or TLS failure, or a
-timeout), rate-limits, or returns a server error, the grant stays stored so that
-`durin logout` can retry; `durin logout --force` clears it anyway. A redirect, a 4xx
-response, or missing or unsafe metadata still clears it locally. Other clients'
-OAuth grants and browser sessions are unaffected.
+MCP credentials use macOS Keychain, Windows Credential Manager, or Linux Secret Service.
+There is no plaintext fallback. Account-session tokens remain in memory only during
+onboarding. `logout` affects the selected CLI-owned MCP grant, retains config/profile
+metadata, and reports remote revocation separately. If the authorization server doesn't
+confirm the revocation, the grant stays stored so that `durin logout` can retry. That
+covers no HTTP answer (a connection, DNS, or TLS failure, or a timeout), a redirect or
+any 4xx or 5xx answer from the revocation endpoint (captive portals and proxies send
+these too), and metadata that is missing or unreadable. Only a 2xx answer counts as
+revoked. `durin logout` marks the profile in `<config-dir>/revocations/` before it
+contacts the server and removes the mark only after the local credentials are gone, so a
+logout that is interrupted (for example with Ctrl-C) or fails partway still counts as
+unfinished. Anything left at the mark's path counts, even a damaged file or a broken
+symlink. If durin can't write the mark (for example, because the disk is full), logout
+clears the grant locally rather than keep it without a block. Until sign-out finishes,
+every MCP call through `durin mcp serve`, `durin tools …`, and `durin verify` is
+refused, and the grant is neither used nor refreshed. A bridge that was already running
+closes within about a second, ending its event stream; a bridge started while sign-out
+is unfinished stays open so that each call explains why it is refused. The block lifts
+when a retried `durin logout` succeeds, when `durin logout --force` clears the grant
+locally (it works offline), or when you sign in to the profile again with `durin`.
+Signing in again never reuses the kept grant: durin first retries revoking it, then
+deletes it. If the authorization server still can't confirm the revocation, durin moves
+the old grant's tokens to their own entry in the same OS credential store, keeps only a
+private index (ids and timestamps, no tokens) in `<config-dir>/revocations/`, and
+continues signing in. If the credential store can't take them, sign-in stops and the
+profile stays blocked, with the old grant where it was. Later `durin mcp serve`, `durin
+tools …`, `durin verify`, `durin logout`, and `durin` sign-ins for that profile retry
+those revocations for up to 10 seconds without waiting for a busy profile, and forget
+each old grant once it is revoked or the server says it offers no revocation. A failed
+retry never stops the command. Sign-out finishes without revoking only when the server's
+own metadata lists no revocation endpoint, or when it lists an unsafe one, or one on
+another host, that durin will never call; then the grant is cleared locally. If the authorization server revokes
+the grant itself, the next MCP call through a bridge or `durin tools …` is refused after
+one refused refresh, the stored tokens are deleted rather than retried, and durin asks
+you to sign in again with `durin`. Other clients' OAuth grants and browser sessions are
+unaffected.
 
 If a process dies while holding a profile lock, the CLI reports its exact lock path.
 Stop Durin and the profile's bridges before removing that abandoned lock, then retry
@@ -258,7 +336,7 @@ on a clean source checkout and review all findings before publishing.
 
 ## Publish to npm
 
-Publish from this standalone repository using Node 24.15 or later in the Node 24
+Publish from this standalone repository using Node 24.22.1 or later in the Node 24
 release line and pnpm 11.21.0. The monorepo workspace package remains private.
 You need access to the `@accessdurin` npm scope, either as its account owner or
 through the `accessdurin` npm organization. Browser login does not authenticate

@@ -5,7 +5,17 @@ import { NativeCredentialStore } from './credentials.js';
 import { McpOAuthProvider } from './mcp-oauth.js';
 import { RemoteMcpClient } from './remote-mcp.js';
 import { withProfileLock } from './profile-lock.js';
+import { assertSignOutFinished, FileRevocationMarker } from './revocation-marker.js';
 import { secureFetch } from './safe-fetch.js';
+import { retryPendingRevocations } from './logout.js';
+import { profileHostAllowlist } from './contracts/cli-host.js';
+
+/** Checked under the profile lock, so no request slips past a logout that is still revoking. */
+const withSignedInProfile = <T>(directory: string, profileId: string, work: () => Promise<T>) =>
+  withProfileLock(directory, profileId, async () => {
+    await assertSignOutFinished(new FileRevocationMarker(directory, profileId));
+    return work();
+  });
 
 export async function profileConnection(options: CliOptions) {
   const profile = await new FileProfiles(options.directory)
@@ -15,13 +25,18 @@ export async function profileConnection(options: CliOptions) {
         'No valid organization profile. Run durin in a terminal to complete setup.',
       );
     });
+  const store = new NativeCredentialStore();
+  await retryPendingRevocations(options.directory, profile, store);
+  const marker = new FileRevocationMarker(options.directory, profile.id);
   return {
     profile,
     resource: profile.resource,
     development: profile.development,
-    authorization: new McpOAuthProvider({ profile, store: new NativeCredentialStore() }),
-    fetch: secureFetch(profile.development),
-    serialize: (work: () => Promise<void>) => withProfileLock(options.directory, profile.id, work),
+    marker,
+    authorization: new McpOAuthProvider({ profile, store, marker }),
+    fetch: secureFetch(profileHostAllowlist(profile)),
+    serialize: (work: () => Promise<void>) =>
+      withSignedInProfile(options.directory, profile.id, work),
   };
 }
 export async function withProfileClient<T>(
@@ -29,7 +44,7 @@ export async function withProfileClient<T>(
   work: (client: RemoteMcpClient) => Promise<T>,
 ): Promise<T> {
   const connection = await profileConnection(options);
-  return withProfileLock(options.directory, connection.profile.id, async () => {
+  return withSignedInProfile(options.directory, connection.profile.id, async () => {
     const client = new RemoteMcpClient(connection);
     try {
       await client.connect();

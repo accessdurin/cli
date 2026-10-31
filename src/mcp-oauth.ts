@@ -10,8 +10,11 @@ import type {
   StoredOAuthTokens,
 } from '@modelcontextprotocol/client';
 import type { CredentialStore } from './ports/credential-store.js';
+import type { RevocationMarker } from './ports/revocation-marker.js';
+import { assertSignOutFinished } from './revocation-marker.js';
 import type { CliProfile } from './contracts/cli-profile.js';
 import { safeCliUrl } from './contracts/cli-url.js';
+import { canonicalIssuer } from './contracts/cli-host.js';
 
 type Authorization = {
   readonly redirectUrl: string;
@@ -22,10 +25,14 @@ type Options = {
   readonly profile: CliProfile;
   readonly store: CredentialStore;
   readonly authorization?: Authorization;
+  /** Given for MCP sessions, which must not use or refresh the grant while sign-out is unfinished. */
+  readonly marker?: RevocationMarker;
 };
 type CredentialKind = 'client' | 'tokens';
-const signInRequired = () =>
-  new CliError('MCP sign-in is required. Run durin in a terminal to authorize this organization.');
+/** Also covers a grant the server revoked: the SDK deletes its tokens when a refresh is refused. */
+export const SIGN_IN_AGAIN =
+  'This durin profile isn’t signed in to its organization’s MCP server: it never signed in, or its sign-in ended or was revoked. Run durin in a terminal to sign in again.';
+const signInRequired = () => new CliError(SIGN_IN_AGAIN);
 const bindingSchema = z.object({ issuer: z.string() });
 const clientMetadataSchema = z.object({
   redirect_uris: z.array(z.url()).optional(),
@@ -105,7 +112,8 @@ export class McpOAuthProvider implements OAuthClientProvider {
       JSON.stringify(parseClient(value, this.options.profile.mcpIssuer)),
     );
   }
-  tokens(context?: OAuthClientInformationContext): Promise<StoredOAuthTokens | undefined> {
+  async tokens(context?: OAuthClientInformationContext): Promise<StoredOAuthTokens | undefined> {
+    if (this.options.marker) await assertSignOutFinished(this.options.marker);
     return this.load('tokens', parseTokens, context);
   }
   async saveTokens(
@@ -128,8 +136,13 @@ export class McpOAuthProvider implements OAuthClientProvider {
     return new URL(this.options.profile.resource);
   }
 
+  /**
+   * The SDK names the sign-in server as the MCP server's metadata spells it, so a known app's
+   * https://<host>/ is the same issuer as https://<host>. Nothing else is.
+   */
   saveDiscoveryState(state: OAuthDiscoveryState): void {
-    if (state.authorizationServerUrl !== this.options.profile.mcpIssuer)
+    const issuer = (url: string) => canonicalIssuer('mcpIssuer', url, this.options.profile);
+    if (issuer(state.authorizationServerUrl) !== issuer(this.options.profile.mcpIssuer))
       throw new CliError('MCP authorization issuer does not match the selected profile.');
     this.discovery = state;
   }

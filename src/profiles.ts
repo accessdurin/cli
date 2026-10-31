@@ -4,6 +4,7 @@ import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promise
 import { dirname, join } from 'node:path';
 import { z } from 'zod';
 import type { CliProfiles } from './ports/cli-profiles.js';
+import { cliProfileHostRoles } from './contracts/cli-host.js';
 import {
   cliProfileIdSchema,
   cliProfileSchema,
@@ -17,9 +18,16 @@ export function createProfile(input: CliProfileScope): CliProfile {
   const id = createHash('sha256').update(JSON.stringify(scope)).digest('hex');
   return { ...scope, version: 1, id };
 }
+const invalidProfile = (error: z.ZodError): string => {
+  const host = error.issues.find(
+    (issue) =>
+      issue.code === 'custom' && cliProfileHostRoles.some((role) => issue.path[0] === role),
+  );
+  return host ? `${host.message} Run durin to sign in again.` : 'Invalid Durin profile binding.';
+};
 const parseProfile = (value: unknown): CliProfile => {
   const parsed = cliProfileSchema.safeParse(value);
-  if (!parsed.success) throw new CliError('Invalid Durin profile binding.');
+  if (!parsed.success) throw new CliError(invalidProfile(parsed.error));
   const { id, version: _version, ...scope } = parsed.data;
   const expected = createProfile(scope);
   if (id !== expected.id)
@@ -63,7 +71,8 @@ export class FileProfiles implements CliProfiles {
   }
 }
 
-async function atomicWrite(path: string, value: string): Promise<void> {
+/** Writes a private file so that readers see either the old or the new contents, never a mix. */
+export async function atomicWrite(path: string, value: string): Promise<void> {
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
   const temporary = `${path}.${randomUUID()}.tmp`;
   try {

@@ -27,7 +27,7 @@ plugin. The plugin is designed for Claude Code's local terminal and MCP support.
 
 ## Connect your organization
 
-Run `/durin:setup`. You need Claude Code, Node 24.15 or later in the Node 24
+Run `/durin:setup`. You need Claude Code, Node 24.22.1 or later in the Node 24
 release line, and an unlocked OS credential store. Install the CLI from this
 public repository using the [installation instructions](references/cli-installation.md).
 CLI 1.0.1 contains fixes for current MCP setup; npm 1.0.0 lacks those fixes.
