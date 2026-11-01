@@ -78,44 +78,37 @@ describe('loopback hosts', () => {
     expect(loopbackCliHost(host)).toBe(false);
   });
 
-  it.each(loopbackOrigins)('needs --dev for an MCP endpoint on %s', (origin) => {
-    const value = `${origin}${personal}`;
-    expect(untrustedCliHost('resource', value, production)).toContain('--dev');
-    expect(untrustedCliHost('resource', value, { ...production, development: true })).toBe(
-      undefined,
-    );
-  });
-
-  it.each(loopbackOrigins)('needs --dev for an --app-url of %s that serves itself', (origin) => {
-    const appOrigin = new URL(origin).origin;
-    for (const role of ['resource', 'mcpIssuer', 'accountIssuer', 'accountProvider'] as const) {
-      const value = role === 'resource' ? `${appOrigin}${personal}` : `${appOrigin}/`;
-      expect(untrustedCliHost(role, value, { appOrigin, development: false })).toContain('--dev');
-      expect(untrustedCliHost(role, value, { appOrigin, development: true })).toBeUndefined();
-    }
-    expect(deploymentHostAllowlist({ appOrigin, development: false }).hosts).toEqual([]);
-  });
-
-  it.each(loopbackOrigins)('saves a profile on %s only with --dev', (origin) => {
-    const appOrigin = new URL(origin).origin;
-    const scope = {
-      appOrigin,
-      accountIssuer: `${appOrigin}/`,
-      accountClientId: 'client_account',
-      principalId: 'user_one',
-      workosOrganizationId: 'org_provider',
-      organizationId: 'org_one',
-      environment: 'production' as const,
-      resource: `${appOrigin}${personal}`,
-      mcpIssuer: `${appOrigin}/`,
-    };
-    expect(cliProfileScopeSchema.safeParse({ ...scope, development: false }).success).toBe(false);
-    expect(cliProfileScopeSchema.safeParse({ ...scope, development: true }).success).toBe(true);
-  });
-
-  it.each(loopbackOrigins)('allows HTTP on %s only with --dev', (origin) => {
-    const value = `${origin.replace('https:', 'http:')}:5272/`;
-    expect(safeCliUrl(value, false)).toBe(false);
-    expect(safeCliUrl(value, true)).toBe(true);
-  });
+  it.each(loopbackOrigins)(
+    'requires --dev throughout the URL and profile boundary for %s',
+    (origin) => {
+      const resource = `${origin}${personal}`;
+      expect(untrustedCliHost('resource', resource, production)).toContain('--dev');
+      expect(untrustedCliHost('resource', resource, { ...production, development: true })).toBe(
+        undefined,
+      );
+      const appOrigin = new URL(origin).origin;
+      for (const role of ['resource', 'mcpIssuer', 'accountIssuer', 'accountProvider'] as const) {
+        const value = role === 'resource' ? `${appOrigin}${personal}` : `${appOrigin}/`;
+        expect(untrustedCliHost(role, value, { appOrigin, development: false })).toContain('--dev');
+        expect(untrustedCliHost(role, value, { appOrigin, development: true })).toBeUndefined();
+      }
+      expect(deploymentHostAllowlist({ appOrigin, development: false }).hosts).toEqual([]);
+      const scope = {
+        appOrigin,
+        accountIssuer: `${appOrigin}/`,
+        accountClientId: 'client_account',
+        principalId: 'user_one',
+        workosOrganizationId: 'org_provider',
+        organizationId: 'org_one',
+        environment: 'production' as const,
+        resource: `${appOrigin}${personal}`,
+        mcpIssuer: `${appOrigin}/`,
+      };
+      expect(cliProfileScopeSchema.safeParse({ ...scope, development: false }).success).toBe(false);
+      expect(cliProfileScopeSchema.safeParse({ ...scope, development: true }).success).toBe(true);
+      const http = `${origin.replace('https:', 'http:')}:5272/`;
+      expect(safeCliUrl(http, false)).toBe(false);
+      expect(safeCliUrl(http, true)).toBe(true);
+    },
+  );
 });

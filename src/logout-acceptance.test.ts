@@ -104,25 +104,8 @@ it('SETH-M1b: while revocation is in flight (process may be killed), the profile
   expect(await marker.pending()).toBe(true);
 });
 
-// (L) 401/403/404/400 and 3xx from the revocation endpoint (captive portal / proxy) must count as retry.
-it.each([400, 401, 403, 404])(
-  'SETH-L1 revocation endpoint answering %i keeps tokens and marks retry',
-  async (status) => {
-    const values = new Map<string, string>();
-    const provider = await signedIn(values);
-    const marker = memoryMarker();
-    const result = await signOutMcp({
-      profile,
-      store: memoryStore(values),
-      marker,
-      request: server(() => new Response('<html>portal</html>', { status })),
-    });
-    expect(result).toEqual({ remote: 'failed', local: 'retained' });
-    expect(Boolean(await provider.tokens())).toBe(true);
-    expect(await marker.pending()).toBe(true);
-  },
-);
-it.each([401, 403, 404])(
+// SETH-L1: the revocation statuses, refused redirects and metadata 404 are in logout.test.ts.
+it.each([401, 403])(
   'SETH-L1 metadata endpoint answering %i (captive portal) keeps tokens and marks retry',
   async (status) => {
     const values = new Map<string, string>();
@@ -142,25 +125,6 @@ it.each([401, 403, 404])(
     expect(Boolean(await provider.tokens())).toBe(true);
   },
 );
-it('SETH-L1 revocation endpoint redirecting (302 captive portal) keeps tokens and marks retry', async () => {
-  const values = new Map<string, string>();
-  const provider = await signedIn(values);
-  const marker = memoryMarker();
-  const redirect: typeof fetch = async (url) => {
-    if (String(url).includes('.well-known')) return meta();
-    throw new TypeError('fetch failed', { cause: new Error('unexpected redirect') });
-  };
-  const result = await signOutMcp({
-    profile,
-    store: memoryStore(values),
-    marker,
-    request: redirect,
-  });
-  expect(result).toEqual({ remote: 'failed', local: 'retained' });
-  expect(Boolean(await provider.tokens())).toBe(true);
-  expect(await marker.pending()).toBe(true);
-});
-
 // (L) revocation-marker.ts:23 uses stat(); a dangling symlink at the marker path reads as "not pending".
 it('SETH-L2: a dangling symlink at the marker path still blocks (lstat)', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'qa-marker-symlink-'));

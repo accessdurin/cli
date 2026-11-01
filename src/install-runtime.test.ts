@@ -32,15 +32,11 @@ const versionDirectory = async (config: string): Promise<string> => {
   return join(config, 'runtime', version!);
 };
 
-it('keeps an installed CLI and its credential-store dependency after the original package disappears', async () => {
+it('reuses an identical runtime and keeps its CLI and dependency after the original package disappears', async () => {
   const installed = await installRuntime(join(directory, 'config'), program);
+  await expect(installRuntime(join(directory, 'config'), program)).resolves.toBe(installed);
   await rm(join(directory, 'source'), { recursive: true });
   expect((await promisify(execFile)(process.execPath, [installed])).stdout).toBe('function');
-});
-
-it('reuses an identical installed runtime', async () => {
-  const first = await installRuntime(join(directory, 'config'), program);
-  await expect(installRuntime(join(directory, 'config'), program)).resolves.toBe(first);
 });
 
 it('installs a different credential-store build beside the existing runtime', async () => {

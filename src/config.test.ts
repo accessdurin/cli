@@ -1,4 +1,14 @@
-import { mkdtemp, readFile, writeFile, mkdir, rm, stat, symlink, lstat } from 'node:fs/promises';
+import {
+  chmod,
+  mkdtemp,
+  readFile,
+  writeFile,
+  mkdir,
+  rm,
+  stat,
+  symlink,
+  lstat,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -71,17 +81,21 @@ describe('agent configuration adapters', () => {
     },
   );
   it.each(CASES)(
-    'writes the actual $key format, round-trips and preserves settings',
+    'creates the $key config, then updates, round-trips and preserves settings',
     async ({ key, path, root, value }) => {
       const home = await homeDirectory();
       const agent = agentsFor(home)[key]!;
       expect(agent.configPath).toBe(join(home, path));
+      await writeConfig(agent, ENDPOINT);
+      expect(endpointFrom(await readFile(agent.configPath, 'utf8'), agent)).toBe(ENDPOINT);
       const initial =
         agent.format === 'toml'
           ? '# keep comment\nmodel = "keep"\n[mcp_servers.other]\ncommand = "keep"\n'
           : `{\n// keep comment\n"theme":"keep", "${root}": {"other": {"command":"keep"}}\n}`;
       await mkdir(dirname(agent.configPath), { recursive: true });
       await writeFile(agent.configPath, initial);
+      // The existing-file case must still prove that writeConfig hardens its permissions.
+      await chmod(agent.configPath, 0o644);
       const before = parseConfig(initial, agent);
       await writeConfig(agent, ENDPOINT);
       const saved = await readFile(agent.configPath, 'utf8');
@@ -94,12 +108,6 @@ describe('agent configuration adapters', () => {
       expect(await readFile(agent.configPath, 'utf8')).toBe(saved);
     },
   );
-
-  it.each(CASES)('creates $key config in an empty home', async ({ key }) => {
-    const agent = agentsFor(await homeDirectory())[key]!;
-    await writeConfig(agent, ENDPOINT);
-    expect(endpointFrom(await readFile(agent.configPath, 'utf8'), agent)).toBe(ENDPOINT);
-  });
 
   it.each(['null', '[]', '{', '{"mcpServers":[]}', '{"mcpServers":null}'])(
     'leaves malformed config untouched: %s',

@@ -1,5 +1,7 @@
-import { execFile } from 'node:child_process';
+import { execFile, spawnSync } from 'node:child_process';
 import { chmod, mkdtemp, rm } from 'node:fs/promises';
+import { createServer, type ServerResponse } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -7,11 +9,12 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { build } from 'vite';
 
 const exec = promisify(execFile);
+// All built-CLI tests share this build; the remaining suites import the source directly.
 beforeAll(async () => {
   await build({ logLevel: 'silent' });
-});
+}, 60_000);
 
-describe('CLI public interface', () => {
+describe.concurrent('CLI public interface', () => {
   it('requires a terminal for onboarding and documents all three access paths', async () => {
     await expect(exec(process.execPath, ['dist/cli.js'])).rejects.toMatchObject({
       code: 1,
@@ -71,3 +74,106 @@ describe('CLI public interface', () => {
     ).rejects.toMatchObject({ code: 1, stderr: expect.stringContaining('Unknown option') });
   });
 });
+
+/** Onboarding needs a terminal; util-linux `script` runs the built CLI in one. */
+const terminal = spawnSync('script', ['--version'], { encoding: 'utf8' });
+const hasTerminal = !terminal.error && terminal.stdout.includes('util-linux');
+/** Without `script` these tests skip locally, but fail in CI, which must run them. */
+const skipped = !hasTerminal && !process.env.CI;
+const quoted = (value: string) => `'${value.replaceAll("'", `'\\''`)}'`;
+/** Runs the built CLI with its own config directory and home, so no saved state is shared. */
+const durin = async (args: readonly string[]) => {
+  if (!hasTerminal)
+    throw new Error('These end-to-end tests need util-linux `script`, which CI must install.');
+  const home = await mkdtemp(join(tmpdir(), 'durin-e2e-'));
+  const command = [
+    process.execPath,
+    join(process.cwd(), 'dist', 'cli.js'),
+    ...args,
+    '--config-dir',
+    home,
+  ];
+  try {
+    return await exec('script', ['-qec', command.map(quoted).join(' '), '/dev/null'], {
+      env: { PATH: process.env.PATH, HOME: home, TERM: 'xterm' },
+      timeout: 30_000,
+    }).then(
+      ({ stdout }) => ({ code: 0, output: stdout }),
+      (error: { code: number; stdout: string }) => ({ code: error.code, output: error.stdout }),
+    );
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+};
+
+/** Records requests and connections, including attempted TLS handshakes. */
+const localServer = async (reply: (path: string, response: ServerResponse) => void) => {
+  const hits: string[] = [];
+  let connections = 0;
+  const server = createServer((request, response) => {
+    hits.push(`${request.method} ${request.url}`);
+    reply(request.url ?? '', response);
+  });
+  server.on('connection', () => {
+    connections += 1;
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address() as AddressInfo;
+  const close = () => {
+    server.closeAllConnections();
+    return new Promise<void>((resolve) => server.close(() => resolve()));
+  };
+  return { port, origin: `http://127.0.0.1:${port}`, hits, connections: () => connections, close };
+};
+
+it.skipIf(skipped)(
+  'with --dev, the built CLI reads a local deployment’s config, then starts device sign-in on its WorkOS',
+  { timeout: 30_000 },
+  async () => {
+    const workos = await localServer((_path, response) => {
+      response.writeHead(503).end();
+    });
+    const app = await localServer((path, response) => {
+      if (path !== '/auth/cli/config') return void response.writeHead(404).end();
+      response.writeHead(200, { 'content-type': 'application/json' }).end(
+        JSON.stringify({
+          clientId: 'client_account',
+          appOrigin: app.origin,
+          issuer: `${app.origin}/`,
+          providerOrigin: workos.origin,
+        }),
+      );
+    });
+    try {
+      const { code, output } = await durin(['login', '--dev', '--app-url', app.origin]);
+      expect(output).toContain('Unable to start account sign-in.');
+      expect(code).toBe(1);
+      expect(app.hits).toEqual(['GET /auth/cli/config']);
+      expect(workos.hits).toEqual(['POST /user_management/authorize/device']);
+    } finally {
+      await Promise.all([app.close(), workos.close()]);
+    }
+  },
+);
+
+it.skipIf(skipped)(
+  'without --dev, the built CLI refuses a loopback app URL before connecting to it',
+  { timeout: 30_000 },
+  async () => {
+    const app = await localServer((_path, response) => {
+      response.writeHead(503).end();
+    });
+    try {
+      const host = `127.0.0.1:${app.port}`;
+      const { code, output } = await durin(['login', '--app-url', `https://${host}`]);
+      expect(output).toContain(`durin didn’t contact ${host}.`);
+      expect(output).toContain('Local addresses are only allowed with --dev.');
+      expect(code).toBe(1);
+      expect(app.hits).toEqual([]);
+      // Only the connection count can detect an attempted TLS handshake with this HTTP server.
+      expect(app.connections()).toBe(0);
+    } finally {
+      await app.close();
+    }
+  },
+);
