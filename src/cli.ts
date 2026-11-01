@@ -1,4 +1,10 @@
 #!/usr/bin/env node
+import {
+  flushTelemetry,
+  initializeTelemetry,
+  reportUnexpectedError,
+  traceCommand,
+} from './telemetry.js';
 import { validateCommandArguments } from './command-arguments.js';
 import { cliOptions, CliError, HELP, type CliOptions } from './cli-options.js';
 import { wizard } from './commands/wizard.js';
@@ -20,6 +26,7 @@ const COMMANDS: Readonly<Record<string, (options: CliOptions) => Promise<void>>>
   logout: logoutCommand,
 };
 sanitizeConsole(console);
+initializeTelemetry();
 async function main(): Promise<void> {
   const options = cliOptions(process.argv.slice(2));
   if (options.values.help) {
@@ -34,12 +41,14 @@ async function main(): Promise<void> {
   await handler(options);
 }
 void Promise.resolve()
-  .then(main)
+  .then(() => traceCommand(main))
   .catch((error: unknown) => {
     const message = error instanceof CliError ? error.message : safeError(error);
     process.stderr.write(`${message}\n`);
     process.exitCode = 1;
-  });
+    reportUnexpectedError(error);
+  })
+  .finally(flushTelemetry);
 const safeError = (error: unknown): string => {
   if (
     error instanceof TypeError &&

@@ -16,7 +16,7 @@ export default defineConfig({
     },
     rolldownOptions: {
       platform: 'node',
-      external: [...builtinModules, /^node:/, '@napi-rs/keyring'],
+      external: [...builtinModules, /^node:/, '@napi-rs/keyring', '@sentry/node-cpu-profiler'],
     },
     outDir: 'dist',
     emptyOutDir: true,

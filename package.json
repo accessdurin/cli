@@ -26,6 +26,9 @@
     "@modelcontextprotocol/core": "2.3.1",
     "@modelcontextprotocol/server": "2.3.1",
     "@napi-rs/keyring": "2.1.0",
+    "@sentry/node": "11.10.0",
+    "@sentry/node-cpu-profiler": "2.4.4",
+    "@sentry/profiling-node": "11.10.0",
     "jsonc-parser": "3.3.1",
     "smol-toml": "1.9.1",
     "zod": "4.1.13"
