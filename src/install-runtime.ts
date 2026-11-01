@@ -17,6 +17,7 @@ import { CliError } from './cli-options.js';
 import { assertPrivateDirectory } from './private-directory.js';
 
 const manifestSchema = z.object({
+  dependencies: z.record(z.string(), z.string()).default({}),
   optionalDependencies: z.record(z.string(), z.string()).default({}),
 });
 const packageDirectory = (name: string, from: string): string =>
@@ -29,20 +30,24 @@ const optionalDirectory = (name: string, from: string): string | null => {
     throw error;
   }
 };
-async function copyCredentialStore(source: string, target: string): Promise<void> {
-  const directory = packageDirectory('@napi-rs/keyring', source);
-  await cp(directory, join(target, 'node_modules/@napi-rs/keyring'), {
+async function copyRuntimePackage(directory: string, target: string): Promise<void> {
+  await cp(directory, target, {
     recursive: true,
     dereference: true,
   });
   const manifest = manifestSchema.parse(
     JSON.parse(await readFile(join(directory, 'package.json'), 'utf8')),
   );
+  const from = join(directory, 'package.json');
+  await Promise.all(
+    Object.keys(manifest.dependencies).map((name) =>
+      copyRuntimePackage(packageDirectory(name, from), join(target, 'node_modules', name)),
+    ),
+  );
   await Promise.all(
     Object.keys(manifest.optionalDependencies).map(async (name) => {
-      const path = optionalDirectory(name, join(directory, 'index.js'));
-      if (path)
-        await cp(path, join(target, 'node_modules', name), { recursive: true, dereference: true });
+      const path = optionalDirectory(name, from);
+      if (path) await copyRuntimePackage(path, join(target, 'node_modules', name));
     }),
   );
 }
@@ -57,7 +62,11 @@ export async function installRuntime(directory: string, source: string): Promise
     await assertPrivateDirectory(runtime);
     await writeFile(join(temporary, 'package.json'), '{"type":"module"}\n', { mode: 0o600 });
     await writeFile(join(temporary, 'cli.js'), code, { mode: 0o600 });
-    await copyCredentialStore(source, temporary);
+    await Promise.all(
+      ['@napi-rs/keyring', '@sentry/node-cpu-profiler'].map((name) =>
+        copyRuntimePackage(packageDirectory(name, source), join(temporary, 'node_modules', name)),
+      ),
+    );
     await restrictTree(temporary);
     const digest = await treeDigest(temporary);
     const id = createHash('sha256').update(digest).digest('hex');

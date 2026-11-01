@@ -37,7 +37,7 @@ const durin = async (args: readonly string[]) => {
   const command = [process.execPath, join(outDir, 'cli.js'), ...args, '--config-dir', home];
   try {
     return await exec('script', ['-qec', command.map(quoted).join(' '), '/dev/null'], {
-      env: { PATH: process.env.PATH, HOME: home, TERM: 'xterm' },
+      env: { PATH: process.env.PATH, HOME: home, TERM: 'xterm', NODE_ENV: 'test' },
       timeout: 30_000,
     }).then(
       ({ stdout }) => ({ code: 0, output: stdout }),

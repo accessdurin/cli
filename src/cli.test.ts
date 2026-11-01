@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { build } from 'vite';
+import { installRuntime } from './install-runtime.js';
 
 const exec = promisify(execFile);
 beforeAll(async () => {
@@ -12,15 +13,22 @@ beforeAll(async () => {
 });
 
 describe('CLI public interface', () => {
-  it('requires a terminal for onboarding and documents all three access paths', async () => {
+  it('requires a terminal for onboarding and documents all three access paths from an isolated runtime', async () => {
     await expect(exec(process.execPath, ['dist/cli.js'])).rejects.toMatchObject({
       code: 1,
       stderr: expect.stringContaining('terminal'),
     });
-    const { stdout } = await exec(process.execPath, ['dist/cli.js', '--help']);
-    expect(stdout).toContain('tools list');
-    expect(stdout).toContain('mcp serve');
-    expect(stdout).toContain('mcp endpoint');
+    const directory = await mkdtemp(join(tmpdir(), 'durin-cli-runtime-'));
+    try {
+      const runtime = await installRuntime(directory, join(process.cwd(), 'dist/cli.js'));
+      const { stdout, stderr } = await exec(process.execPath, [runtime, '--help']);
+      expect(stdout).toContain('tools list');
+      expect(stdout).toContain('mcp serve');
+      expect(stdout).toContain('mcp endpoint');
+      expect(stderr).toBe('');
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
   it.each([
     ['tools', 'list', 'extra'],

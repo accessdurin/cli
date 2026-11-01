@@ -302,6 +302,19 @@ must retain compatibility with the service's public responses.
 
 ## Credentials and publication
 
+The CLI reports unexpected command failures, uncaught exceptions, and unhandled
+promise rejections to Durin's Sentry CLI project using a public DSN embedded
+in the executable. Reports include the CLI version, platform, error type, and
+stack locations. Error messages are replaced with a fixed description; absolute
+paths, credentials, command arguments, tool payloads, user details, and console
+output are excluded. Expected usage and authorization errors are not reported.
+Command execution is traced at 100%, with trace-driven CPU profiling sampled at
+100% per CLI session. Profiles include function names and relative frame locations;
+absolute paths are removed. The native profiler and its dependencies are copied
+into installed runtimes alongside the credential store. Reporting is best effort,
+with a two-second flush timeout after commands finish.
+Reporting is disabled when `NODE_ENV=test`.
+
 Never commit local environment files, API keys, account sessions, client profiles,
 private keys, or credential-store exports. These are not required to build or test.
 The secret check reports file names and credential categories, never their values.
