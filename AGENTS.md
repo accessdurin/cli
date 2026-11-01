@@ -2,6 +2,8 @@
 
 ## Keep tests lean without losing confidence
 
+- Proactively consolidate or remove redundant tests as much as possible to keep
+  the suite lean and CI fast, without reducing consistency, confidence or coverage.
 - Before adding a test, check whether an existing case can cover the behavior.
   Prefer extending it over repeating the same scenario and setup.
 - Consolidate duplicate tests and share expensive setup only when test isolation,
