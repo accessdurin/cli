@@ -82,37 +82,19 @@ const run = async (values: Map<string, string>, marker: ReturnType<typeof memory
 const tokenKey = (values: Map<string, string>) =>
   [...values.keys()].find((k) => k.includes('tokens'))!;
 
-it('re-sign-in with kept tokens revokes the old grant before it clears the block', async () => {
-  const values = new Map<string, string>();
-  await run(values, memoryMarker()); // first sign-in stores tokens
-  const marker = memoryMarker(true); // failed logout: tokens retained + marker set
-  const second = await run(values, marker);
-  expect(await marker.pending()).toBe(false); // block lifted
-  expect(second.seen.some((r) => /revoke/i.test(r))).toBe(true); // old grant revoked
-});
-
-it('SETH-H: sign-in with marker + stored refresh token revokes and deletes the kept grant BEFORE auth() (no silent refresh)', async () => {
+it('SETH-H: re-sign-in revokes the kept grant before auth, replaces its tokens and clears the block', async () => {
   const values = new Map<string, string>();
   await run(values, memoryMarker());
   const kept = values.get(tokenKey(values));
-  const second = await run(values, memoryMarker(true));
+  const marker = memoryMarker(true);
+  const second = await run(values, marker);
   const revokeAt = second.seen.findIndex((r) => /revoke/i.test(r));
   const refreshAt = second.seen.findIndex((r) => r === 'POST /token');
-  console.log('QA SETH-H requests:', JSON.stringify(second.seen));
   expect(revokeAt).toBeGreaterThanOrEqual(0);
   expect(refreshAt === -1 || revokeAt < refreshAt).toBe(true);
   expect(second.opened.length).toBe(1); // fresh browser sign-in, kept tokens never reused
   expect(values.get(tokenKey(values))).not.toBe(kept);
-});
-
-it('SETH REQUIRED: re-sign-in with marker revokes kept tokens and never reuses them', async () => {
-  const values = new Map<string, string>();
-  await run(values, memoryMarker());
-  const kept = values.get(tokenKey(values));
-  const second = await run(values, memoryMarker(true));
-  expect(second.seen.some((r) => /revoke/i.test(r))).toBe(true);
-  expect(second.opened.length).toBe(1);
-  expect(values.get(tokenKey(values))).not.toBe(kept);
+  expect(await marker.pending()).toBe(false);
 });
 
 const oauthFixtureRequest: typeof fetch = async (input, init) => {

@@ -118,20 +118,15 @@ it('finishes an unfinished sign-out when this profile signs in again', async () 
   const directory = await mkdtemp(join(tmpdir(), 'durin-revocation-sign-in-'));
   try {
     await new FileRevocationMarker(directory, profile.id).mark();
-    expect(await new FileRevocationMarker(directory, profile.id).pending()).toBe(true);
-    expect(await signIn(new FileRevocationMarker(directory, profile.id))).toBe(1);
-    expect(await new FileRevocationMarker(directory, profile.id).pending()).toBe(false);
+    const marker = new FileRevocationMarker(directory, profile.id);
+    const cleared = vi.spyOn(marker, 'clear');
+    expect(await marker.pending()).toBe(true);
+    expect(await signIn(marker)).toBe(1);
+    expect(cleared).toHaveBeenCalledOnce();
+    expect(await marker.pending()).toBe(false);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
-});
-
-it('clears an unfinished sign-out once the new sign-in is authorized', async () => {
-  const marker = memoryMarker(true);
-  const cleared = vi.spyOn(marker, 'clear');
-  expect(await signIn(marker)).toBe(1);
-  expect(cleared).toHaveBeenCalledOnce();
-  expect(await marker.pending()).toBe(false);
 });
 
 it('authorizes with the exact personal MCP resource without injecting Durin scopes', async () => {
@@ -377,11 +372,27 @@ const signInAgain = async (input: {
 const storedTokens = (values: Map<string, string>) =>
   new McpOAuthProvider({ profile, store: memoryStore(values) }).tokens();
 
+const expectFreshSignIn = ({ server, opened }: Awaited<ReturnType<typeof signInAgain>>) => {
+  const firstRevocation = server.requests.findIndex(({ path }) => path === '/revoke');
+  expect(firstRevocation).toBeGreaterThanOrEqual(0);
+  expect(server.requests.slice(0, firstRevocation).map(({ path }) => path)).not.toContain('/token');
+  expect(server.sent('/token').map((body) => body.get('grant_type'))).toEqual([
+    'authorization_code',
+  ]);
+  const otherRequests = server.requests.filter(({ path }) => path !== '/revoke');
+  expect(otherRequests.map(({ body }) => body).join()).not.toMatch(/kept/u);
+  expect(server.sent('/register')).toHaveLength(1);
+  expect(opened).toHaveLength(1);
+  expect(sessions.tokens).toEqual(['synthetic-mcp-access']);
+};
+
 it('revokes and deletes the kept grant before signing in again after an unfinished logout', async () => {
   const values = new Map<string, string>();
   const marker = memoryMarker(true);
   const pending = memoryPending();
-  const { tools, server } = await signInAgain({ values, marker, pending, revoke: accepted });
+  const result = await signInAgain({ values, marker, pending, revoke: accepted });
+  const { tools, server } = result;
+  expectFreshSignIn(result);
   expect(tools).toBe(1);
   expect(
     server
@@ -413,7 +424,9 @@ it.each([
     const values = new Map<string, string>();
     const marker = memoryMarker(true);
     const pending = memoryPending();
-    const { tools } = await signInAgain({ values, marker, pending, revoke });
+    const result = await signInAgain({ values, marker, pending, revoke });
+    const { tools } = result;
+    expectFreshSignIn(result);
     expect(tools).toBe(1);
     expect(pending.grants).toEqual([kept]);
     expect([...values.values()].join()).not.toMatch(/kept/u);
@@ -422,29 +435,6 @@ it.each([
     expect(await marker.pending()).toBe(false);
   },
 );
-
-it.each([
-  ['revocation succeeds', accepted],
-  ['revocation fails', busy],
-] as const)('never reuses the kept grant when signing in again (%s)', async (_name, revoke) => {
-  const { server, opened } = await signInAgain({
-    values: new Map(),
-    marker: memoryMarker(true),
-    pending: memoryPending(),
-    revoke,
-  });
-  const firstRevocation = server.requests.findIndex(({ path }) => path === '/revoke');
-  expect(firstRevocation).toBeGreaterThanOrEqual(0);
-  expect(server.requests.slice(0, firstRevocation).map(({ path }) => path)).not.toContain('/token');
-  expect(server.sent('/token').map((body) => body.get('grant_type'))).toEqual([
-    'authorization_code',
-  ]);
-  const otherRequests = server.requests.filter(({ path }) => path !== '/revoke');
-  expect(otherRequests.map(({ body }) => body).join()).not.toMatch(/kept/u);
-  expect(server.sent('/register')).toHaveLength(1);
-  expect(opened).toHaveLength(1);
-  expect(sessions.tokens).toEqual(['synthetic-mcp-access']);
-});
 
 const withDirectory = async (work: (directory: string) => Promise<void>) => {
   const directory = await mkdtemp(join(tmpdir(), 'durin-pending-revocations-'));

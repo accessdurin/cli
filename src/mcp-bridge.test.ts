@@ -2,15 +2,18 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createInterface } from 'node:readline';
 import { PassThrough } from 'node:stream';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { auth, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { cliOptions, CliError } from './cli-options.js';
 import { McpStdioBridge } from './mcp-bridge.js';
 import { McpOAuthProvider } from './mcp-oauth.js';
+import { signOutMcp } from './logout.js';
 import { profileConnection } from './profile-client.js';
 import { createProfile, FileProfiles } from './profiles.js';
 import { FileRevocationMarker } from './revocation-marker.js';
+import { withProfileLock } from './profile-lock.js';
 import { toolCommand } from './tool-commands.js';
 
 const keyring = vi.hoisted(() => new Map<string, string>());
@@ -69,6 +72,7 @@ beforeEach(async () => {
   for (const [key, value] of values) keyring.set(key, value);
 });
 afterEach(async () => {
+  vi.useRealTimers();
   keyring.clear();
   await rm(directory, { recursive: true, force: true });
 });
@@ -184,6 +188,24 @@ const usesOldGrant = ({ authorization, body }: Recorded) =>
 const openBridge = async (server: ReturnType<typeof durinServer>) => {
   const input = new PassThrough();
   const output = new PassThrough();
+  // Observe every emitted line, including messages the test never explicitly reads.
+  const received: unknown[] = [];
+  const queued: unknown[] = [];
+  const waiting: ((message: unknown) => void)[] = [];
+  const lines = createInterface({ input: output });
+  lines.on('line', (line) => {
+    const message: unknown = JSON.parse(line);
+    received.push(message);
+    const resolve = waiting.shift();
+    if (resolve) resolve(message);
+    else queued.push(message);
+  });
+  const next = async () =>
+    queued.length > 0
+      ? queued.shift()
+      : new Promise<unknown>((resolve) => {
+          waiting.push(resolve);
+        });
   const errors: string[] = [];
   const connection = await profileConnection(
     cliOptions(['mcp', 'serve', '--config-dir', directory]),
@@ -196,14 +218,6 @@ const openBridge = async (server: ReturnType<typeof durinServer>) => {
     onError: (message) => errors.push(message),
   });
   await bridge.start();
-  const lines = output[Symbol.asyncIterator]();
-  const received: unknown[] = [];
-  const next = async () => {
-    const { value } = await lines.next();
-    const message: unknown = JSON.parse(String(value));
-    received.push(message);
-    return message;
-  };
   const write = (message: unknown) => input.write(`${JSON.stringify(message)}\n`);
   write({
     jsonrpc: '2.0',
@@ -221,13 +235,39 @@ const openBridge = async (server: ReturnType<typeof durinServer>) => {
   return { bridge, next, write, received, errors, stream: server.streams[0]! };
 };
 
-it('stops delivering an open bridge’s event stream once another process marks sign-out unfinished', async () => {
+it('SETH-M2: stops delivering an open bridge’s event stream after another process fails to log out', async () => {
   const server = durinServer();
   const open = await openBridge(server);
   try {
     open.stream.push({ jsonrpc: '2.0', method: 'notifications/tools/list_changed' });
     expect(await open.next()).toMatchObject({ method: 'notifications/tools/list_changed' });
-    await markedByAnotherProcess();
+    const result = await withProfileLock(directory, profile.id, () =>
+      signOutMcp({
+        profile,
+        store: {
+          read: async (key) => keyring.get(key) ?? null,
+          write: async (key, value) => {
+            keyring.set(key, value);
+          },
+          remove: async (key) => {
+            keyring.delete(key);
+          },
+        },
+        marker: new FileRevocationMarker(directory, profile.id),
+        request: async (url) =>
+          String(url).includes('.well-known')
+            ? Response.json({
+                issuer,
+                authorization_endpoint: `${issuer}authorize`,
+                token_endpoint: `${issuer}token`,
+                response_types_supported: ['code'],
+                revocation_endpoint: `${issuer}revoke`,
+              })
+            : new Response(null, { status: 503 }),
+      }),
+    );
+    expect(result).toEqual({ remote: 'failed', local: 'retained' });
+    expect(await new FileRevocationMarker(directory, profile.id).pending()).toBe(true);
     const sent = server.requests.length;
     open.stream.push({ jsonrpc: '2.0', method: 'notifications/resources/list_changed' });
     await vi.waitFor(() => expect(open.stream.signal?.aborted).toBe(true), { timeout: 3_000 });
@@ -240,11 +280,14 @@ it('stops delivering an open bridge’s event stream once another process marks 
 });
 
 it('closes an open bridge’s event stream once sign-out is unfinished, even when it is quiet', async () => {
+  // Advance the real watcher's interval while leaving stream I/O and timeout guards real.
+  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
   const server = durinServer();
   const open = await openBridge(server);
   try {
     await markedByAnotherProcess();
     const sent = server.requests.length;
+    await vi.advanceTimersByTimeAsync(1_000);
     await vi.waitFor(() => expect(open.stream.signal?.aborted).toBe(true), { timeout: 3_000 });
     expect(open.errors.join('\n')).toMatch(pendingMessage);
     expect(server.requests.slice(sent).filter(usesOldGrant)).toEqual([]);

@@ -6,7 +6,6 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
-import { setTimeout } from 'node:timers/promises';
 import { expect, it, vi } from 'vitest';
 import { secureFetch } from './safe-fetch.js';
 import { signOutMcp } from './logout.js';
@@ -218,14 +217,20 @@ it('SETH-8-M1d: a 401 naming resource_metadata on another host is not followed b
   });
   await bridge.start();
   try {
+    const reply = output[Symbol.asyncIterator]().next();
     input.write(
       `${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'x', arguments: {} } })}\n`,
     );
-    await setTimeout(500);
+    const { value } = await reply;
+    expect(JSON.parse(String(value))).toMatchObject({
+      id: 1,
+      error: { code: -32000, message: expect.any(String) },
+    });
+    expect(hosts).toContain(`POST mcp.getdurin.com${new URL(resource).pathname}`);
+    expect(evilHit(hosts)).toEqual([]);
   } finally {
     await bridge.close();
   }
-  expect(evilHit(hosts)).toEqual([]);
 });
 
 it('gives a saved profile’s MCP connection a fetch that reaches only that profile’s hosts', async () => {

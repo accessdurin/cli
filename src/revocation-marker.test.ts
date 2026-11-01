@@ -236,15 +236,6 @@ it('unblocks the profile when logout --force runs offline', async () => {
   await expectUnblocked();
 });
 
-it('leaves the bridge and durin tools working after a successful logout', async () => {
-  expect(await logout({ store: await signedInStore(), request: revoked })).toEqual({
-    remote: 'revoked',
-    local: 'cleared',
-  });
-  expect(await new FileRevocationMarker(directory, profile.id).pending()).toBe(false);
-  await expectUnblocked();
-});
-
 it('keeps the block across a restart, reading only what was saved on disk', async () => {
   await logout({ store: await signedInStore(), request: busy });
   const restarted = await mkdtemp(join(tmpdir(), 'durin-revocation-restart-'));
