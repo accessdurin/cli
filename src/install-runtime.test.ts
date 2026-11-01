@@ -18,10 +18,30 @@ beforeEach(async () => {
     JSON.stringify({ name: '@napi-rs/keyring', main: 'index.js' }),
   );
   await writeFile(join(dependency, 'index.js'), 'exports.AsyncEntry = class {};');
+  const packages = [
+    ['@sentry/node-cpu-profiler', 'node-abi', "exports.CpuProfilerBindings = require('node-abi');"],
+    ['node-abi', 'semver', "module.exports = require('semver');"],
+    ['semver', null, "exports.version = 'profile';"],
+  ] as const;
+  await Promise.all(
+    packages.map(async ([name, required, code]) => {
+      const path = join(source, 'node_modules', name);
+      await mkdir(path, { recursive: true });
+      await writeFile(
+        join(path, 'package.json'),
+        JSON.stringify({
+          name,
+          main: 'index.js',
+          dependencies: required === null ? {} : { [required]: '1.0.0' },
+        }),
+      );
+      await writeFile(join(path, 'index.js'), code);
+    }),
+  );
   program = join(source, 'cli.js');
   await writeFile(
     program,
-    'import { AsyncEntry } from "@napi-rs/keyring"; process.stdout.write(typeof AsyncEntry);',
+    'import { AsyncEntry } from "@napi-rs/keyring"; import { CpuProfilerBindings } from "@sentry/node-cpu-profiler"; process.stdout.write(typeof AsyncEntry + ":" + CpuProfilerBindings.version);',
   );
 });
 afterEach(async () => {
@@ -36,7 +56,9 @@ it('reuses an identical runtime and keeps its CLI and dependency after the origi
   const installed = await installRuntime(join(directory, 'config'), program);
   await expect(installRuntime(join(directory, 'config'), program)).resolves.toBe(installed);
   await rm(join(directory, 'source'), { recursive: true });
-  expect((await promisify(execFile)(process.execPath, [installed])).stdout).toBe('function');
+  expect((await promisify(execFile)(process.execPath, [installed])).stdout).toBe(
+    'function:profile',
+  );
 });
 
 it('installs a different credential-store build beside the existing runtime', async () => {
@@ -49,7 +71,9 @@ it('installs a different credential-store build beside the existing runtime', as
   const installed = await installRuntime(config, program);
   const versions = (await readdir(join(config, 'runtime'))).filter((name) => name !== 'cli.mjs');
   expect(versions).toHaveLength(2);
-  expect((await promisify(execFile)(process.execPath, [installed])).stdout).toBe('function');
+  expect((await promisify(execFile)(process.execPath, [installed])).stdout).toBe(
+    'function:profile',
+  );
 });
 
 it.each([

@@ -148,3 +148,14 @@ pnpm exec vitest run --coverage --coverage.reporter=json --coverage.reporter=jso
 The local ignored directory `node_modules/.cache/test-sweep/results/` contains
 the benchmark samples, complete baseline/candidate test reports, coverage union
 comparison, mutation failures and verification logs from this sweep.
+
+## Validation after merging Sentry support
+
+Merged `main` at `eb90558` into the PR after Sentry reporting and CPU profiling
+landed. The consolidated CLI suite retains the new isolated-runtime assertions
+and runs terminal subprocesses with `NODE_ENV=test`. Runtime-installation fixtures
+also retain the native profiler and transitive-dependency checks.
+
+The complete Linux `pnpm verify` passes with 782 tests passed and the same two
+existing skips: 784 tests in 37 files. The runtime and coverage measurements above
+describe the original `b8f777e` baseline comparison before Sentry support landed.
