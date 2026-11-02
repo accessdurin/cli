@@ -32,6 +32,8 @@ If your organization uses a different deployment, use its administrator-provided
 HTTPS origin with `durin --app-url <origin>`. Retain an explicit `--config-dir`
 on later commands if you used a custom directory during setup.
 
+The CLI sends scrubbed error reports and traces to Sentry; set `DO_NOT_TRACK=1` to turn this off.
+
 After a publisher verifies that 1.0.1 exists on npm, the equivalent pinned
 installation is `npm install --global @accessdurin/cli@1.0.1`. Publication of this
 GitHub repository alone does not publish the npm package.
