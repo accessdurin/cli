@@ -12,7 +12,7 @@ pnpm 11.21.0, build the reviewed source revision in a fresh directory:
 ```sh
 git clone https://github.com/accessdurin/cli.git durin-cli
 cd durin-cli
-git checkout --detach b224e2bfe357130b42470b1628b5bc7f8ec92d7d
+git checkout --detach 699dbefb2cc3d8f54908f3364e42cd6cb27f2009
 pnpm install --frozen-lockfile
 pnpm verify
 pnpm pack --pack-destination .
