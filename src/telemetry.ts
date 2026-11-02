@@ -14,11 +14,14 @@ const argumentError = (error: TypeError): boolean =>
 const expectedError = (error: unknown): boolean =>
   error instanceof CliError || (error instanceof TypeError && argumentError(error));
 
+const trackingDisabled = (): boolean =>
+  ['1', 'true'].includes(process.env.DO_NOT_TRACK?.toLowerCase() ?? '');
+
 export function initializeTelemetry(): void {
   try {
     Sentry.init({
       dsn: SENTRY_DSN,
-      enabled: process.env.NODE_ENV !== 'test',
+      enabled: process.env.NODE_ENV !== 'test' && !trackingDisabled(),
       release: `@accessdurin/cli@${version}`,
       environment: 'production',
       debug: false,

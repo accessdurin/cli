@@ -35,6 +35,7 @@ const rejectionListeners = process.listeners('unhandledRejection');
 beforeAll(() => {
   vi.stubEnv('SENTRY_DSN', 'https://override@invalid.example/1');
   vi.stubEnv('NODE_ENV', 'production');
+  vi.stubEnv('DO_NOT_TRACK', undefined);
   initializeTelemetry();
 });
 beforeEach(() => {
@@ -65,6 +66,7 @@ it('uses the embedded DSN and sends scrubbed diagnostics through the real SDK be
     projectId: '4512354708422656',
   });
   const options = client.getOptions();
+  expect(options.enabled).toBe(true);
   expect(options.integrations.map(({ name }) => name)).toEqual([
     'ProfilingIntegration',
     'Dedupe',
@@ -182,4 +184,14 @@ it('profiles command spans and removes sensitive span attributes and native fram
   expect(serialized).toContain('"cli.command"');
   expect(serialized).toContain('sentry.profiler_id');
   expect(serialized).toContain('"filename"');
+});
+
+it.each(['1', 'true', 'TRUE'])('sends nothing when DO_NOT_TRACK=%s', async (value) => {
+  vi.stubEnv('DO_NOT_TRACK', value);
+  initializeTelemetry();
+  expect(Sentry.getClient()!.getOptions().enabled).toBe(false);
+  reportUnexpectedError(new Error('opted out'));
+  await traceCommand(() => Promise.resolve('completed'));
+  await flushTelemetry();
+  expect(recorded.envelopes).toHaveLength(0);
 });
