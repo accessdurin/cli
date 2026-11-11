@@ -201,3 +201,24 @@ it('never stores or replays an approval ID that is unsafe on a command line', as
   );
   expect(controlOf(await bridge.outgoing({ ...request, id: 2 }))).toEqual(first);
 });
+
+it.each(['error', 'passthrough'] as const)(
+  'forgets request correlation after %s without losing the pending operation',
+  async (kind) => {
+    const bridge = new BridgeCalls(memoryLedger());
+    const first = controlOf(await bridge.outgoing(request));
+    if (kind === 'error')
+      await bridge.deliver(
+        { jsonrpc: '2.0', id: 1, error: { code: -32000, message: 'Failed' } },
+        ignoreDelivery,
+      );
+    // JSON-RPC IDs may be reused by a client after a response or a failed send.
+    if (kind === 'passthrough')
+      await bridge.outgoing({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
+    const result = { jsonrpc: '2.0' as const, id: 1, result: { tools: [] } };
+    const send = vi.fn<(message: JSONRPCMessage) => Promise<void>>(ignoreDelivery);
+    await bridge.deliver(result, send);
+    expect(send).toHaveBeenCalledWith(result);
+    expect(controlOf(await bridge.outgoing({ ...request, id: 2 }))).toEqual(first);
+  },
+);

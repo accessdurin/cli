@@ -4,19 +4,13 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { callbackInput, type CallbackInput } from './oauth-callback-input.js';
 
 type AuthorizationCode = { readonly code: string; readonly issuer?: string };
-const ignore = (_value: unknown): void => {};
 const deferredCode = () => {
-  let resolveCode: (value: AuthorizationCode) => void = ignore;
-  let rejectCode: (error: Error) => void = ignore;
-  const result = new Promise<AuthorizationCode>((resolve, reject) => {
-    resolveCode = resolve;
-    rejectCode = reject;
-  });
+  const { promise: result, resolve, reject } = Promise.withResolvers<AuthorizationCode>();
   void result.catch(() => {});
   return {
     result,
-    resolve: (value: AuthorizationCode) => resolveCode(value),
-    reject: (error: Error) => rejectCode(error),
+    resolve,
+    reject,
   };
 };
 const MESSAGES = {

@@ -125,6 +125,9 @@ node scripts/release-metadata.mjs release --write-formula
 production install to `pnpm-lock.yaml`, includes the running Node binary, and
 starts the packaged CLI before archiving it. Linux also builds `.deb` packages
 with `dpkg-deb`. Packages go in ignored `release/`; temporary staging is ignored.
+Packages include the CLI's MIT license, bundled dependency notices, native package
+licenses, and the exact Node version's full license at `runtime/LICENSE`. See
+[license provenance](../licenses/README.md) when updating dependencies or Node.
 The metadata script generates `SHA256SUMS`, `durin.rb`, and the Windows installer.
 Review and commit the regenerated `Formula/durin.rb` with the version change.
 

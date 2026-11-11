@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { z } from 'zod';
 import {
   isJSONRPCRequest,
+  isJSONRPCErrorResponse,
   isJSONRPCResultResponse,
   type JSONRPCMessage,
   type JSONRPCRequest,
@@ -82,6 +83,7 @@ export class BridgeCalls {
   constructor(private readonly ledger: CliCallLedger) {}
 
   async outgoing(message: JSONRPCMessage): Promise<JSONRPCMessage> {
+    if (isJSONRPCRequest(message)) this.requests.delete(message.id);
     if (!nativeCall(message)) return message;
     return this.prepareCall(message);
   }
@@ -106,10 +108,15 @@ export class BridgeCalls {
     message: JSONRPCMessage,
     send: (message: JSONRPCMessage) => Promise<void>,
   ): Promise<void> {
+    this.forgetError(message);
     if (!isJSONRPCResultResponse(message)) return send(message);
     const tracked = this.requests.get(message.id);
     if (!tracked) return send(message);
     return this.deliverCall(message, tracked, send);
+  }
+  private forgetError(message: JSONRPCMessage): void {
+    if (!isJSONRPCErrorResponse(message)) return;
+    if (message.id !== undefined) this.requests.delete(message.id);
   }
   private async deliverCall(
     message: JSONRPCResultResponse,

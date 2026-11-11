@@ -41,6 +41,7 @@ run(
 await materializeRuntimeModules();
 await mkdir(join(stage, 'dist'), { recursive: true });
 await cp('dist/cli.js', join(stage, 'dist', 'cli.js'));
+await cp('dist/THIRD_PARTY_LICENSES.md', join(stage, 'dist', 'THIRD_PARTY_LICENSES.md'));
 await cp('LICENSE', join(stage, 'LICENSE'));
 await cp('README.md', join(stage, 'README.md'));
 await mkdir(join(stage, 'runtime'), { recursive: true });
@@ -48,6 +49,8 @@ await cp(
   process.execPath,
   join(stage, 'runtime', process.platform === 'win32' ? 'node.exe' : 'node'),
 );
+// This exact-version upstream license includes Node's bundled third-party notices.
+await cp(`licenses/node-v${process.versions.node}-LICENSE`, join(stage, 'runtime', 'LICENSE'));
 await writeLaunchers();
 run(join(stage, 'runtime', process.platform === 'win32' ? 'node.exe' : 'node'), [
   join(stage, 'dist', 'cli.js'),

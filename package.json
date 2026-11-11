@@ -53,7 +53,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+ssh://git@github.com/accessdurin/cli.git"
+    "url": "git+https://github.com/accessdurin/cli.git"
+  },
+  "homepage": "https://github.com/accessdurin/cli#readme",
+  "bugs": {
+    "url": "https://github.com/accessdurin/cli/issues"
   },
   "publishConfig": {
     "access": "public",

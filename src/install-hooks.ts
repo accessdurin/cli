@@ -37,7 +37,7 @@ export async function installHooks(
     installation.format === 'opencode'
       ? await planManagedFile(installation.target, after, pluginDigest(previous))
       : { path: installation.target, before, after };
-  // Validate both files before modifying the harness. The checker config is saved first.
+  // Record ownership only after the harness configuration was saved successfully.
   const handler = generatedHookHandler({
     format: installation.format,
     bridge,
@@ -46,8 +46,8 @@ export async function installHooks(
   });
   const saved =
     JSON.stringify({ ...installation, handler, assetDigest: textDigest(after) }, null, 2) + '\n';
-  await saveFileChange({ path, before: previous, after: saved });
   await saveFileChange(change);
+  await saveFileChange({ path, before: previous, after: saved });
 }
 const previousHandlerFrom = (raw: string | null) =>
   raw === null ? undefined : hookInstallationSchema.parse(JSON.parse(raw)).handler;

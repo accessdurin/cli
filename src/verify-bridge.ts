@@ -41,6 +41,11 @@ export async function verifySavedBridge(
 
 const bridgeEnvironment = (): Record<string, string> => ({
   ...getDefaultEnvironment(),
+  ...Object.fromEntries(
+    ['DO_NOT_TRACK', 'NODE_ENV']
+      .filter((key) => process.env[key] !== undefined)
+      .map((key) => [key, process.env[key] as string]),
+  ),
   ...(process.env.NODE_EXTRA_CA_CERTS
     ? { NODE_EXTRA_CA_CERTS: process.env.NODE_EXTRA_CA_CERTS }
     : {}),

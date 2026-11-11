@@ -90,8 +90,15 @@ export class DurinAccountApi implements OrganizationOnboardingApi {
       ? this.options.accessToken
       : this.options.accessToken();
   }
-  private async send(method: string, path: string, body: unknown, retry = true): Promise<Response> {
-    const response = await this.options.fetch(new URL(`/api${path}`, this.options.appOrigin), {
+  private async send(method: string, path: string, body: unknown): Promise<Response> {
+    const response = await this.sendOnce(method, path, body);
+    if (response.status !== 401 || !this.options.refresh) return response;
+    await response.body?.cancel();
+    await this.options.refresh();
+    return this.sendOnce(method, path, body);
+  }
+  private sendOnce(method: string, path: string, body: unknown): Promise<Response> {
+    return this.options.fetch(new URL(`/api${path}`, this.options.appOrigin), {
       method,
       redirect: 'error',
       signal: AbortSignal.timeout(15_000),
@@ -103,16 +110,7 @@ export class DurinAccountApi implements OrganizationOnboardingApi {
       },
       ...requestBody(body),
     });
-    const refresh = refreshHandler(response.status, retry, this.options.refresh);
-    if (refresh) {
-      await response.body?.cancel();
-      await refresh();
-      return this.send(method, path, body, false);
-    }
-    return response;
   }
 }
 
 const requestBody = (body: unknown) => (body === undefined ? {} : { body: JSON.stringify(body) });
-const refreshHandler = (status: number, retry: boolean, refresh: Options['refresh']) =>
-  status === 401 && retry ? refresh : undefined;

@@ -1,0 +1,2 @@
+# Preserve the upstream Node license verbatim, including its original whitespace.
+licenses/node-v*-LICENSE -whitespace

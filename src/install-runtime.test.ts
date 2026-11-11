@@ -1,4 +1,4 @@
-import { chmod, mkdtemp, mkdir, readdir, writeFile, rm } from 'node:fs/promises';
+import { chmod, mkdtemp, mkdir, readFile, readdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFile } from 'node:child_process';
@@ -39,6 +39,8 @@ beforeEach(async () => {
     }),
   );
   program = join(source, 'cli.js');
+  await writeFile(join(directory, 'LICENSE'), 'CLI license fixture');
+  await writeFile(join(source, 'THIRD_PARTY_LICENSES.md'), 'Dependency license fixture');
   await writeFile(
     program,
     'import { AsyncEntry } from "@napi-rs/keyring"; import { CpuProfilerBindings } from "@sentry/node-cpu-profiler"; process.stdout.write(typeof AsyncEntry + ":" + CpuProfilerBindings.version);',
@@ -55,6 +57,11 @@ const versionDirectory = async (config: string): Promise<string> => {
 it('reuses an identical runtime and keeps its CLI and dependency after the original package disappears', async () => {
   const installed = await installRuntime(join(directory, 'config'), program);
   await expect(installRuntime(join(directory, 'config'), program)).resolves.toBe(installed);
+  const version = await versionDirectory(join(directory, 'config'));
+  expect(await readFile(join(version, 'LICENSE'), 'utf8')).toBe('CLI license fixture');
+  expect(await readFile(join(version, 'THIRD_PARTY_LICENSES.md'), 'utf8')).toBe(
+    'Dependency license fixture',
+  );
   await rm(join(directory, 'source'), { recursive: true });
   expect((await promisify(execFile)(process.execPath, [installed])).stdout).toBe(
     'function:profile',
