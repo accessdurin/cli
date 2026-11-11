@@ -3,7 +3,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { Readable } from 'node:stream';
 import { spawn } from 'node:child_process';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
+import * as managedFiles from './managed-files.js';
 import { agentsFor, type HookFormat } from './agents.js';
 import { installSkills } from './install-skills.js';
 import { installHooks } from './install-hooks.js';
@@ -14,6 +15,7 @@ import { planManagedFile, saveFileChange } from './managed-files.js';
 
 const temporary: string[] = [];
 afterEach(async () => {
+  vi.restoreAllMocks();
   await Promise.all(temporary.splice(0).map((path) => rm(path, { recursive: true, force: true })));
 });
 const fixture = async () => {
@@ -95,6 +97,9 @@ it.each(formats)(
     expect(await installSkills(agent)).toBe(5);
     expect(await installSkills(agent)).toBe(5);
     const skills = await readdir(agent.skillsDirectory!);
+    expect(
+      await readFile(join(agent.skillsDirectory!, 'durin-tools', 'LICENSE'), 'utf8'),
+    ).toContain('MIT License');
     expect(skills).toEqual(
       expect.arrayContaining([
         'durin-setup',
@@ -153,6 +158,36 @@ it('keeps mixed third-party hook groups and refuses disabled or malformed config
   expect(command).toContain(bridge.nodePath);
   expect(command).toContain('exit $LASTEXITCODE');
 });
+
+it.each(['skills', 'hooks'] as const)(
+  'keeps the previous %s manifest when saving its artifact fails',
+  async (kind) => {
+    const f = await fixture();
+    const agent = agentsFor(f.home).claude!;
+    const install = () =>
+      kind === 'skills' ? installSkills(agent) : installHooks(agent, f.bridge, f.checker);
+    await install();
+    const manifest =
+      kind === 'skills'
+        ? join(agent.skillsDirectory!, 'durin-hooks', '.durin-install.json')
+        : join(f.bridge.configDirectory, 'hooks', 'claude.json');
+    const target =
+      kind === 'skills'
+        ? join(agent.skillsDirectory!, 'durin-hooks', 'SKILL.md')
+        : agent.hookConfig!.path;
+    const before = await readFile(manifest, 'utf8');
+    const save = managedFiles.saveFileChange;
+    const attempted: string[] = [];
+    vi.spyOn(managedFiles, 'saveFileChange').mockImplementation(async (change) => {
+      attempted.push(change.path);
+      if (change.path === target) throw new Error('Simulated interrupted write');
+      await save(change);
+    });
+    await expect(install()).rejects.toThrow('Simulated interrupted write');
+    expect(attempted).not.toContain(manifest);
+    expect(await readFile(manifest, 'utf8')).toBe(before);
+  },
+);
 
 it('preserves edited skills/plugins and rejects changed files and symlink targets before replacement', async () => {
   const f = await fixture();

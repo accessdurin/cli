@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { chmod, lstat, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
-import { join, relative } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 import { z } from 'zod';
 import { CliError } from './cli-options.js';
 import { assertPrivateDirectory } from './private-directory.js';
@@ -16,6 +16,7 @@ export async function installRuntime(directory: string, source: string): Promise
     await assertPrivateDirectory(runtime);
     await writeFile(join(temporary, 'package.json'), '{"type":"module"}\n', { mode: 0o600 });
     await writeFile(join(temporary, 'cli.js'), code, { mode: 0o600 });
+    await copyRuntimeLicenses(source, temporary);
     await Promise.all(
       ['@napi-rs/keyring', '@sentry/node-cpu-profiler'].map((name) =>
         copyRuntimePackage(packageDirectory(name, source), join(temporary, 'node_modules', name)),
@@ -34,6 +35,17 @@ export async function installRuntime(directory: string, source: string): Promise
   } finally {
     await rm(temporary, { recursive: true, force: true });
   }
+}
+async function copyRuntimeLicenses(source: string, target: string): Promise<void> {
+  const files = [
+    [join(dirname(source), '..', 'LICENSE'), 'LICENSE'],
+    [join(dirname(source), 'THIRD_PARTY_LICENSES.md'), 'THIRD_PARTY_LICENSES.md'],
+  ] as const;
+  await Promise.all(
+    files.map(async ([path, name]) =>
+      writeFile(join(target, name), await readFile(path), { mode: 0o600 }),
+    ),
+  );
 }
 const ignoreExistingVersion = (error: unknown): void => {
   if (!z.object({ code: z.enum(['EEXIST', 'ENOTEMPTY']) }).safeParse(error).success) throw error;

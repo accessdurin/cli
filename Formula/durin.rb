@@ -2,7 +2,7 @@ class Durin < Formula
   desc "Organization tools and coding-agent setup through Durin"
   homepage "https://github.com/accessdurin/cli"
   url "https://github.com/accessdurin/cli/releases/download/v1.1.0/durin-cli-1.1.0.tgz"
-  sha256 "d42d7fb21ddf1f4eec2ee2dd8eaf9c22d8c0b607ca2a4446545c9343a24dec24"
+  sha256 "6188413b56f2f9ea94fe40cfc14ac976b341827f970e8dfa142137af6508631e"
   license "MIT"
 
   depends_on "node@24"

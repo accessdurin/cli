@@ -38,7 +38,8 @@ or configure the native Endpoint Client.
 ## Run from this repository
 
 ```sh
-git clone git@github.com:accessdurin/cli.git
+npm install --global pnpm@11.21.0
+git clone https://github.com/accessdurin/cli.git
 cd cli
 pnpm install --frozen-lockfile
 pnpm build
@@ -340,10 +341,15 @@ are stored in this repository. Local tests do not prove hosted provider readines
 or acceptance by every installed agent harness.
 
 `src/contracts` contains only the wire schemas this client consumes. `src/ports`
-defines the CLI's narrow interfaces; adapters remain in `src`. The CLI has no
-workspace dependency and does not require the private Durin monorepo to build.
-The original source was extracted from Durin commit `a8b187a`; contract updates
-must retain compatibility with the service's public responses.
+defines the CLI's narrow interfaces; adapters remain in `src`. The CLI builds
+independently, with no private repository or workspace dependency. Update client
+contracts with compatibility tests for the server responses the CLI consumes.
+
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for local setup,
+verification, and pull requests, and [SECURITY.md](SECURITY.md) for confidential
+vulnerability reports. The [state audit](docs/cli-state-audit.md) explains which
+state belongs to the server, which local records are required, and the fixes from
+the repository review.
 
 ## Credentials and publication
 
@@ -358,7 +364,16 @@ Command execution is traced at 100%, with trace-driven CPU profiling sampled at
 absolute paths are removed. The native profiler and its dependencies are copied
 into installed runtimes alongside the credential store. Reporting is best effort,
 with a two-second flush timeout after commands finish.
-Reporting is disabled when `NODE_ENV=test`.
+To disable reporting, traces, and profiling, set `DO_NOT_TRACK=1` (or `true`) in
+the environment that starts the CLI and your agent. For a single invocation:
+
+```sh
+DO_NOT_TRACK=1 durin verify --profile <profile-id>
+```
+
+In PowerShell, use `$env:DO_NOT_TRACK = '1'` before running `durin` or starting
+your agent. Setup passes this choice to its verification subprocess. Reporting
+is also disabled when `NODE_ENV=test`; local hook commands do not initialize it.
 
 Never commit local environment files, API keys, account sessions, client profiles,
 private keys, or credential-store exports. These are not required to build or test.
@@ -369,13 +384,14 @@ on a clean source checkout and review all findings before publishing.
 ## Publish to npm
 
 Publish from this standalone repository using Node 24.22.1 or later in the Node 24
-release line and pnpm 11.21.0. The monorepo workspace package remains private.
+release line and pnpm 11.21.0. Publishing requires maintainer access to npm;
+building, testing, and contributing do not.
 You need access to the `@accessdurin` npm scope, either as its account owner or
 through the `accessdurin` npm organization. Browser login does not authenticate
 your terminal; `npm whoami` checks the terminal's session.
 
 ```sh
-git clone git@github.com:accessdurin/cli.git
+git clone https://github.com/accessdurin/cli.git
 cd cli
 pnpm install --frozen-lockfile
 pnpm verify
@@ -390,8 +406,9 @@ Complete npm's authentication/2FA prompt when requested. The package's
 `publishConfig` selects the public npm registry and public access; this does not
 change the GitHub repository's visibility. `prepublishOnly` runs `pnpm verify`,
 and `prepack` builds the executable. The commands explicitly enable those hooks
-even when npm's `ignore-scripts` setting is enabled. The package contains only `dist/cli.js`,
-`package.json`, this README, and the MIT `LICENSE`.
+even when npm's `ignore-scripts` setting is enabled. The package contains `dist/cli.js`,
+generated `dist/THIRD_PARTY_LICENSES.md`, `package.json`, this README, and the MIT
+`LICENSE`.
 
 After publishing, check the registry and run the released executable:
 
@@ -409,4 +426,7 @@ and [`npm publish` reference](https://docs.npmjs.com/cli/v11/commands/npm-publis
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+Durin's code and documentation are MIT licensed. See [LICENSE](LICENSE). The
+Claude plugin includes its own [copy](plugins/durin/LICENSE). Dependencies and
+the Node runtime retain their upstream licenses; see [license provenance and
+distribution](licenses/README.md).

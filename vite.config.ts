@@ -8,6 +8,7 @@ export default defineConfig({
     mainFields: ['module', 'main'],
   },
   build: {
+    license: { fileName: 'THIRD_PARTY_LICENSES.md' },
     target: 'node24',
     lib: {
       entry: resolve(import.meta.dirname, 'src/cli.ts'),

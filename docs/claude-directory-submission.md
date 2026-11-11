@@ -46,9 +46,11 @@ Its resources, README, and license are inside the plugin folder. It contains no
 hooks, MCP declaration, executable, package install hook, environment credential
 reference, or symlink. Onboarding delegates MCP registration and credential
 handling to the separately installed CLI, preserving its profile binding.
-CLI 1.0.1 is available in source; npm currently offers only 1.0.0. Before public
-launch, publish/verify the compatible CLI release and update the bundled
-installation reference, or explicitly retain the tested source installation.
+Use the CLI version declared in `package.json` and follow the bundled
+[installation reference](../plugins/durin/references/cli-installation.md). Before
+public launch, verify that the compatible version is published to the intended
+package channel, or explicitly retain the tested source installation. Repository
+versions and registry availability can differ.
 
 In a fresh Claude Code session, test local loading:
 
