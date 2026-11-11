@@ -32,6 +32,9 @@ function commandLine(input: HookConfiguration): string {
   const args = hookArguments(input.bridge, input.harness);
   if (!(input.windows ?? process.platform === 'win32')) return args.map(shellQuote).join(' ');
   const script = `& ${args.map(powershellQuote).join(' ')}; exit $LASTEXITCODE`;
+  // These harnesses already launch PowerShell. Exit that shell explicitly so a
+  // denial stays exit 2 rather than PowerShell -Command normalizing it to 1.
+  if (['claude', 'cursor'].includes(input.format)) return script;
   return `powershell.exe -NoProfile -NonInteractive -EncodedCommand ${Buffer.from(script, 'utf16le').toString('base64')}`;
 }
 export function updatedHookConfig(raw: string, input: HookConfiguration): string {

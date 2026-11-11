@@ -150,9 +150,8 @@ it('keeps mixed third-party hook groups and refuses disabled or malformed config
   }
   const windows = JSON.parse(updatedHookConfig('{}', { ...input, windows: true }));
   const command = windows.hooks.PreToolUse[0].hooks[0].command as string;
-  const script = Buffer.from(command.split(' ').at(-1)!, 'base64').toString('utf16le');
-  expect(script).toContain(bridge.nodePath);
-  expect(script).toContain('exit $LASTEXITCODE');
+  expect(command).toContain(bridge.nodePath);
+  expect(command).toContain('exit $LASTEXITCODE');
 });
 
 it('preserves edited skills/plugins and rejects changed files and symlink targets before replacement', async () => {
@@ -288,39 +287,46 @@ it('awaits generated OpenCode V1/V2 callbacks and propagates a denied tool call'
   ).rejects.toThrow('denied or failed');
 });
 
-it('executes generated Unix/PowerShell hooks with quoted paths, JSON stdin, and denial exit status', async () => {
-  const f = await fixture();
-  const special = join(f.home, "agent's $(touch injected)");
-  const runtimeFixture = {
-    ...f,
-    bridge: {
-      ...f.bridge,
-      cliPath: join(special, 'runtime.mjs'),
-      configDirectory: join(special, 'config'),
-    },
-  };
-  await writeHookRuntime(runtimeFixture);
-  const agent = agentsFor(f.home).claude!;
-  await installHooks(agent, runtimeFixture.bridge, f.checker);
-  const config = JSON.parse(await readFile(agent.hookConfig!.path, 'utf8'));
-  const command = config.hooks.PreToolUse[0].hooks[0].command as string;
-  const invoke = (code: number) =>
-    new Promise<number | null>((resolve, reject) => {
-      const executable = process.platform === 'win32' ? 'powershell.exe' : '/bin/sh';
-      const args =
-        process.platform === 'win32'
-          ? ['-NoProfile', '-NonInteractive', '-Command', command]
-          : ['-c', command];
-      const child = spawn(executable, args, { cwd: f.home, stdio: ['pipe', 'ignore', 'ignore'] });
-      child.once('error', reject);
-      child.once('close', resolve);
-      child.stdin.end(JSON.stringify({ ...canonical, tool_input: { code } }));
+it.each(['claude', 'codex'] as const)(
+  'executes the %s shell hook with quoted paths, JSON stdin, and denial exit status',
+  async (format) => {
+    const f = await fixture();
+    const special = join(f.home, "agent's $(touch injected)");
+    const runtimeFixture = {
+      ...f,
+      bridge: {
+        ...f.bridge,
+        cliPath: join(special, 'runtime.mjs'),
+        configDirectory: join(special, 'config'),
+      },
+    };
+    await writeHookRuntime(runtimeFixture);
+    const agent = agentsFor(f.home)[format]!;
+    await installHooks(agent, runtimeFixture.bridge, f.checker);
+    const config = JSON.parse(await readFile(agent.hookConfig!.path, 'utf8'));
+    const command = config.hooks.PreToolUse[0].hooks[0].command as string;
+    const invoke = (code: number) =>
+      new Promise<number | null>((resolve, reject) => {
+        const windowsShell = format === 'claude' ? 'powershell.exe' : 'cmd.exe';
+        const executable = process.platform === 'win32' ? windowsShell : '/bin/sh';
+        const args =
+          process.platform === 'win32' ? windowsArguments(format, command) : ['-c', command];
+        const child = spawn(executable, args, { cwd: f.home, stdio: ['pipe', 'ignore', 'ignore'] });
+        child.once('error', reject);
+        child.once('close', resolve);
+        child.stdin.end(JSON.stringify({ ...canonical, tool_input: { code } }));
+      });
+    expect(await invoke(0)).toBe(0);
+    expect(JSON.parse(await readFile(f.capture, 'utf8'))).toEqual({
+      ...canonical,
+      tool_input: { code: 0 },
     });
-  expect(await invoke(0)).toBe(0);
-  expect(JSON.parse(await readFile(f.capture, 'utf8'))).toEqual({
-    ...canonical,
-    tool_input: { code: 0 },
-  });
-  expect(await invoke(2)).toBe(2);
-  await expect(readFile(join(f.home, 'injected'))).rejects.toMatchObject({ code: 'ENOENT' });
-});
+    expect(await invoke(2)).toBe(2);
+    await expect(readFile(join(f.home, 'injected'))).rejects.toMatchObject({ code: 'ENOENT' });
+  },
+);
+
+const windowsArguments = (format: string, command: string): string[] =>
+  format === 'claude'
+    ? ['-NoProfile', '-NonInteractive', '-Command', command]
+    : ['/d', '/s', '/c', command];

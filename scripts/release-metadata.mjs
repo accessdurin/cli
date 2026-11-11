@@ -8,7 +8,7 @@ const { version } = JSON.parse(await readFile('package.json', 'utf8'));
 const name = `durin-cli-${version}.tgz`;
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const sha256 = digest(await readFile(join(directory, name)));
-const formula = `class Durin < Formula\n  desc "Organization tools and coding-agent setup through Durin"\n  homepage "https://github.com/accessdurin/cli"\n  url "https://github.com/accessdurin/cli/releases/download/v${version}/${name}"\n  sha256 "${sha256}"\n  license "MIT"\n\n  depends_on "node@24"\n\n  def install\n    system "npm", "install", *std_npm_args, "--ignore-scripts"\n    bin.write_env_script libexec/"bin/durin", PATH: "#{Formula["node@24"].opt_bin}:$PATH"\n  end\n\n  test do\n    assert_match "durin", shell_output("#{bin}/durin --help")\n  end\nend\n`;
+const formula = `class Durin < Formula\n  desc "Organization tools and coding-agent setup through Durin"\n  homepage "https://github.com/accessdurin/cli"\n  url "https://github.com/accessdurin/cli/releases/download/v${version}/${name}"\n  sha256 "${sha256}"\n  license "MIT"\n\n  depends_on "node@24"\n\n  def install\n    system "npm", "install", *std_npm_args, "--ignore-scripts"\n    (bin/"durin").write_env_script libexec/"bin/durin", PATH: "#{Formula["node@24"].opt_bin}:$PATH"\n  end\n\n  test do\n    assert_match "durin", shell_output("#{bin}/durin --help")\n  end\nend\n`;
 await writeFile(join(directory, 'durin.rb'), formula);
 if (process.argv.includes('--write-formula')) {
   await mkdir('Formula', { recursive: true });
