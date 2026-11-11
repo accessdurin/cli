@@ -6,7 +6,7 @@ import { NativeCredentialStore } from './credentials.js';
 import { FileProfiles, createProfile } from './profiles.js';
 import { agentInstalled } from './agent-installed.js';
 import { localAgents, type AgentConfig } from './agents.js';
-import { writeBridgeConfig } from './bridge-config.js';
+import { type BridgeConfiguration, writeBridgeConfig } from './bridge-config.js';
 import { setupAccount } from './setup-account.js';
 import { onboardOrganization } from './onboard-organization.js';
 import { authorizeMcp, mcpIssuer } from './setup-mcp.js';
@@ -19,6 +19,8 @@ import { installRuntime } from './install-runtime.js';
 import { verifySavedBridge } from './verify-bridge.js';
 import { CliError } from './cli-options.js';
 import { deploymentHostAllowlist } from './contracts/cli-host.js';
+import { installSkills } from './install-skills.js';
+import { installHooks } from './install-hooks.js';
 
 type Options = {
   readonly appOrigin: string;
@@ -110,6 +112,7 @@ async function setupAgent(
   await signInMcp({ ...options, profile, open: options.ui.openAuthorization });
   options.ui.stage('Verify the saved agent bridge');
   const toolCount = await verifySavedBridge(agent, bridge);
+  await setupIntegrations(options, agent, bridge);
   await profiles.activate(profile.id);
   options.ui.agent.ready({
     organization: workspace.organization.name,
@@ -141,6 +144,13 @@ export async function signInMcp(input: {
 }
 async function chosenAgent(options: Options): Promise<AgentConfig> {
   const key = await options.ui.agent.choose();
+  return key === 'custom' ? customAgent(options) : standardAgent(options, key);
+}
+async function customAgent(options: Options): Promise<AgentConfig> {
+  if (!options.ui.agent.custom) throw new CliError('Provide a custom harness descriptor.');
+  return options.ui.agent.custom();
+}
+function standardAgent(options: Options, key: string): AgentConfig {
   const agents = setupAgents(options);
   const agent = Object.hasOwn(agents, key) ? agents[key] : undefined;
   if (!agent) throw new CliError('Choose a supported agent during onboarding.');
@@ -150,6 +160,18 @@ async function chosenAgent(options: Options): Promise<AgentConfig> {
     );
   return agent;
 }
+async function setupIntegrations(
+  options: Options,
+  agent: AgentConfig,
+  bridge: BridgeConfiguration,
+) {
+  options.ui.stage('Install Durin agent skills and local hooks');
+  const skills = await installSkills(agent);
+  const checker = await chooseChecker(options, agent);
+  if (checker) await installHooks(agent, bridge, checker);
+  options.ui.agent.integrations?.({ skills, hooks: Boolean(checker), custom: isCustom(agent) });
+}
+const isCustom = (agent: AgentConfig): boolean => agent.id?.startsWith('custom') ?? false;
 const setupAgents = (options: Options) => options.agents ?? localAgents();
 function assertWorkspace(
   identity: { principalId: string; organizationId: string },
@@ -168,3 +190,8 @@ function assertWorkspace(
 }
 
 const setupClock = (options: Options): PollingClock => options.clock ?? pollingClock();
+
+async function chooseChecker(options: Options, agent: AgentConfig) {
+  if (!agent.hookConfig) return null;
+  return options.ui.agent.checker?.(agent);
+}

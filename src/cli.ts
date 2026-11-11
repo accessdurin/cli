@@ -12,7 +12,11 @@ import { profileCommand, logoutCommand } from './profile-commands.js';
 import { toolCommand } from './tool-commands.js';
 import { mcpCommand, verifyProfile } from './mcp-command.js';
 import { assertPrivateDirectory } from './private-directory.js';
-import { sanitizeConsole } from './terminal-text.js';
+import { sanitizeConsole, terminalText } from './terminal-text.js';
+import { hookCommand } from './install-hooks.js';
+import { readHookInstallation, runHook } from './hook-runner.js';
+
+const localHook = process.argv[2] === 'hooks' && process.argv[3] === 'run';
 
 const COMMANDS: Readonly<Record<string, (options: CliOptions) => Promise<void>>> = {
   '': wizard,
@@ -24,9 +28,18 @@ const COMMANDS: Readonly<Record<string, (options: CliOptions) => Promise<void>>>
   verify: verifyProfile,
   profiles: profileCommand,
   logout: logoutCommand,
+  hooks: async (options) => {
+    if (options.positionals[1] !== 'run') return hookCommand(options);
+    const installation = await readHookInstallation(
+      options.directory,
+      options.values.harness ?? '',
+    );
+    await runHook(installation, process.stdin);
+    if (installation.format === 'cursor') process.stdout.write('{"permission":"allow"}\n');
+  },
 };
 sanitizeConsole(console);
-initializeTelemetry();
+if (!localHook) initializeTelemetry();
 async function main(): Promise<void> {
   const options = cliOptions(process.argv.slice(2));
   if (options.values.help) {
@@ -43,10 +56,10 @@ async function main(): Promise<void> {
 void Promise.resolve()
   .then(() => traceCommand(main))
   .catch((error: unknown) => {
-    const message = error instanceof CliError ? error.message : safeError(error);
-    process.stderr.write(`${message}\n`);
-    process.exitCode = 1;
-    reportUnexpectedError(error);
+    const message = error instanceof CliError ? error.message : unexpectedMessage(error);
+    process.stderr.write(`${terminalText(message)}\n`);
+    process.exitCode = localHook ? 2 : 1;
+    if (!localHook) reportUnexpectedError(error);
   })
   .finally(flushTelemetry);
 const safeError = (error: unknown): string => {
@@ -61,3 +74,6 @@ const safeError = (error: unknown): string => {
 
 const commandHandler = (command: string) =>
   Object.hasOwn(COMMANDS, command) ? COMMANDS[command] : undefined;
+
+const unexpectedMessage = (error: unknown): string =>
+  localHook ? 'Durin could not complete this local hook check.' : safeError(error);

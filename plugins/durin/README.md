@@ -8,7 +8,7 @@ when a call needs approval or returns an uncertain result.
 
 The CLI connects Claude to governed MCP tools. The separately installed Durin
 Endpoint Client checks local tool activity and uses its own device enrollment.
-This plugin does not install Endpoint or its hooks. See the CLI's
+This plugin does not install Endpoint. CLI setup can now install portable skills and configure local hooks using an installed helper or a custom checker; see the [agent setup guide](../../docs/agent-setup.md). See the CLI's
 [product boundaries](../../README.md#product-boundaries) for authorization, data
 handling and harness coverage.
 
@@ -30,8 +30,7 @@ plugin. The plugin is designed for Claude Code's local terminal and MCP support.
 Run `/durin:setup`. You need Claude Code, Node 24.22.1 or later in the Node 24
 release line, and an unlocked OS credential store. Install the CLI from this
 public repository using the [installation instructions](references/cli-installation.md).
-CLI 1.0.1 contains fixes for current MCP setup; npm 1.0.0 lacks those fixes.
-Use the source installation until CLI 1.0.1 is published.
+CLI 1.1.0 adds portable skill and hook setup. Use the source installation until that version is published.
 
 Complete `durin` in your own interactive terminal. Choose login or signup, your
 organization, and **Claude Code**, then complete browser authorization. Account
@@ -43,6 +42,8 @@ The CLI writes a profile-pinned MCP bridge to your Claude Code user configuratio
 and verifies its authenticated tool catalog. Restart Claude Code to load a newly
 configured bridge. The plugin does not declare a second MCP server, so selecting
 another active CLI profile cannot redirect the existing bridge.
+
+CLI setup also installs the portable `durin-*` skills from [accessdurin/skills](https://github.com/accessdurin/skills). The plugin commands below remain optional Claude-specific entry points.
 
 ## Skills
 

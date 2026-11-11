@@ -11,9 +11,22 @@ export interface AgentConfig {
   readonly urlKey: string;
   readonly transport: Readonly<Record<string, string | boolean>>;
   readonly bridge: 'arguments' | 'command-array';
-  readonly bridgeTransport: Readonly<Record<string, string | boolean>>;
+  readonly bridgeTransport: Readonly<Record<string, string | boolean | readonly string[]>>;
   readonly authentication: string;
+  readonly id?: string;
+  readonly skillsDirectory?: string;
+  readonly hookConfig?: { readonly path: string; readonly format: HookFormat };
 }
+
+export type HookFormat =
+  | 'claude'
+  | 'codex'
+  | 'cursor'
+  | 'windsurf'
+  | 'opencode'
+  | 'gemini'
+  | 'copilot'
+  | 'custom';
 
 type AgentDefinition = Omit<AgentConfig, 'configPath'> & {
   readonly path: (home: string, env: NodeJS.ProcessEnv) => string;
@@ -68,6 +81,28 @@ const AGENTS: Readonly<Record<string, AgentDefinition>> = {
     bridgeTransport: {},
     authentication: 'Open Windsurf Cascade MCP settings and authenticate Durin.',
   },
+  gemini: {
+    name: 'Gemini CLI',
+    path: (home) => join(home, '.gemini', 'settings.json'),
+    format: 'jsonc',
+    serverKey: 'mcpServers',
+    urlKey: 'url',
+    transport: {},
+    bridge: 'arguments',
+    bridgeTransport: {},
+    authentication: '',
+  },
+  copilot: {
+    name: 'GitHub Copilot CLI',
+    path: (home, env) => join(env.COPILOT_HOME ?? join(home, '.copilot'), 'mcp-config.json'),
+    format: 'jsonc',
+    serverKey: 'mcpServers',
+    urlKey: 'url',
+    transport: {},
+    bridge: 'arguments',
+    bridgeTransport: { type: 'local', tools: ['*'] },
+    authentication: '',
+  },
   opencode: {
     name: 'OpenCode',
     path: openCodePath,
@@ -88,14 +123,47 @@ export const agentsFor = (
   Object.fromEntries(
     Object.entries(AGENTS).map(([key, { path, ...agent }]) => [
       key,
-      { ...agent, configPath: path(home, env) },
+      { ...agent, configPath: path(home, env), ...integrationPaths(key, home, env) },
     ]),
   );
 
 export const localAgents = () => agentsFor(homedir(), process.env);
-export const agentOptions = () =>
-  Object.entries(localAgents()).map(([value, config]) => ({
+export const agentOptions = () => [
+  ...Object.entries(localAgents()).map(([value, config]) => ({
     value,
     label: config.name,
     hint: agentInstalled(value) ? 'installed' : 'not detected; install before continuing',
-  }));
+  })),
+  { value: 'custom', label: 'Custom harness', hint: 'Use a harness descriptor JSON file' },
+];
+
+const envRoot = (env: NodeJS.ProcessEnv, key: string, fallback: string) => env[key] ?? fallback;
+function harnessRoots(home: string, env: NodeJS.ProcessEnv): Record<string, string> {
+  return {
+    claude: envRoot(env, 'CLAUDE_CONFIG_DIR', join(home, '.claude')),
+    codex: envRoot(env, 'CODEX_HOME', join(home, '.codex')),
+    cursor: join(home, '.cursor'),
+    windsurf: join(home, '.codeium', 'windsurf'),
+    gemini: join(home, '.gemini'),
+    copilot: envRoot(env, 'COPILOT_HOME', join(home, '.copilot')),
+    opencode: join(envRoot(env, 'XDG_CONFIG_HOME', join(home, '.config')), 'opencode'),
+  };
+}
+function hookPath(id: string, root: string): string {
+  const special: Record<string, string> = {
+    claude: 'settings.json',
+    gemini: 'settings.json',
+    copilot: join('hooks', 'durin.json'),
+    opencode: join('plugins', 'durin.js'),
+  };
+  return join(root, special[id] ?? 'hooks.json');
+}
+function integrationPaths(id: string, home: string, env: NodeJS.ProcessEnv) {
+  const root = harnessRoots(home, env)[id] ?? join(home, '.agents');
+  const skillsDirectory = id === 'codex' ? join(home, '.agents', 'skills') : join(root, 'skills');
+  return {
+    id,
+    skillsDirectory,
+    hookConfig: { path: hookPath(id, root), format: id as HookFormat },
+  };
+}

@@ -1,5 +1,5 @@
 import { execFile, spawnSync } from 'node:child_process';
-import { chmod, mkdtemp, rm } from 'node:fs/promises';
+import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { createServer, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -8,6 +8,8 @@ import { promisify } from 'node:util';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { build } from 'vite';
 import { installRuntime } from './install-runtime.js';
+import { installHooks } from './install-hooks.js';
+import { agentsFor } from './agents.js';
 
 const exec = promisify(execFile);
 // All built-CLI tests share this build; the remaining suites import the source directly.
@@ -29,6 +31,61 @@ describe.concurrent('CLI public interface', () => {
       expect(stdout).toContain('mcp serve');
       expect(stdout).toContain('mcp endpoint');
       expect(stderr).toBe('');
+      const checkerPath = join(directory, 'checker.mjs');
+      await writeFile(
+        checkerPath,
+        "let input=''; for await (const part of process.stdin) input+=part; process.exit(JSON.parse(input).tool_input.deny ? 2 : 0);",
+      );
+      await installHooks(
+        agentsFor(directory).claude!,
+        {
+          nodePath: process.execPath,
+          cliPath: runtime,
+          profileId: 'a'.repeat(64),
+          configDirectory: directory,
+        },
+        { command: process.execPath, args: [checkerPath], timeoutMs: 1000 },
+      );
+      const input = {
+        hook_event_name: 'PreToolUse',
+        session_id: 's',
+        tool_use_id: 't',
+        tool_name: 'Bash',
+        tool_input: {},
+      };
+      const run = (deny: boolean) => {
+        const request = exec(process.execPath, [
+          runtime,
+          'hooks',
+          'run',
+          '--harness',
+          'claude',
+          '--config-dir',
+          directory,
+        ]);
+        request.child.stdin!.end(JSON.stringify({ ...input, tool_input: { deny } }));
+        return request;
+      };
+      await expect(run(false)).resolves.toMatchObject({ stdout: '', stderr: '' });
+      await expect(run(true)).rejects.toMatchObject({
+        code: 2,
+        stderr: expect.stringContaining('denied'),
+      });
+      const status = await exec(process.execPath, [
+        runtime,
+        'hooks',
+        'status',
+        '--config-dir',
+        directory,
+      ]);
+      expect(JSON.parse(status.stdout)).toMatchObject([
+        {
+          harness: 'claude',
+          checker: 'available',
+          configuration: 'installed',
+          execution: 'not-verified',
+        },
+      ]);
     } finally {
       await rm(directory, { recursive: true, force: true });
     }

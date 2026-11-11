@@ -8,7 +8,7 @@ existing profile-pinned MCP bridge.
 
 1. Check `node --version`, `claude --version`, and whether `durin --help` works.
    durin requires Node >=24.22.1 <25 and an unlocked OS credential store. If the
-   CLI is absent or predates the 1.0.1 setup fixes, read
+   CLI is absent or predates the 1.1.0 skill and hook setup, read
    [the installation reference](../../references/cli-installation.md) and guide
    the user through it. `durin` has no version flag; do not invent one. Inspect
    the installed package metadata if its version is unknown.
@@ -40,3 +40,5 @@ Use it instead of constructing a generic `.mcp.json`, editing permissions, or
 creating a second server. A bridge includes an explicit `--profile` and
 `--config-dir`; changing `durin profiles use` does not change that bridge's
 organization. Account login does not substitute for MCP consent.
+
+CLI 1.1.0 also installs the portable Durin skills and offers a supported installed Endpoint helper or custom local checker. Let the user choose the checker. Do not claim hook execution or Endpoint enrollment from MCP verification; reopen Claude after setup.

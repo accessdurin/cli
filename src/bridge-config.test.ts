@@ -22,6 +22,8 @@ const args = [
 const CASES = [
   { key: 'claude', value: { type: 'stdio', command: '/opt/node', args } },
   { key: 'codex', value: { command: '/opt/node', args } },
+  { key: 'gemini', value: { command: '/opt/node', args } },
+  { key: 'copilot', value: { type: 'local', tools: ['*'], command: '/opt/node', args } },
   { key: 'cursor', value: { command: '/opt/node', args } },
   { key: 'windsurf', value: { command: '/opt/node', args } },
   { key: 'opencode', value: { type: 'local', enabled: true, command: ['/opt/node', ...args] } },

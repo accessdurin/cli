@@ -13,3 +13,6 @@ coverage/
 *.p12
 *.pfx
 .DS_Store
+release/
+.release-stage/
+.deb-stage/

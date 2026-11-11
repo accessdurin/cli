@@ -20,6 +20,8 @@ Usage:
                                 Invoke a tool; retain the key when retrying
   durin mcp serve               Serve the selected profile over stdio
   durin mcp endpoint            Print the personal URL for a direct MCP client
+  durin hooks status            Show local checker and hook configuration status
+  durin hooks run --harness <id> Run a configured local pre-tool checker (JSON stdin)
 
 Options:
   --profile <id>                Select an explicit organization profile
@@ -28,6 +30,7 @@ Options:
   --force                       logout: clear the local grant even if revocation fails
   --app-url <origin>            Durin app origin (default: https://app.getdurin.com)
   --dev                        Allow loopback hosts and HTTP for local development
+  --harness <id>                hooks run: selected built-in or custom harness
   -h, --help                   Show this help
 
 Agent selection happens during onboarding. Direct MCP clients authorize separately.
@@ -46,6 +49,7 @@ function parseCliArgs(args: readonly string[]) {
       'app-url': { type: 'string' },
       dev: { type: 'boolean' },
       force: { type: 'boolean' },
+      harness: { type: 'string' },
     },
   });
   return { values, positionals };
