@@ -1,56 +1,10 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { createRequire } from 'node:module';
-import {
-  chmod,
-  cp,
-  lstat,
-  mkdir,
-  readFile,
-  readdir,
-  rename,
-  rm,
-  writeFile,
-} from 'node:fs/promises';
-import { dirname, join, relative } from 'node:path';
+import { chmod, lstat, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import { join, relative } from 'node:path';
 import { z } from 'zod';
 import { CliError } from './cli-options.js';
 import { assertPrivateDirectory } from './private-directory.js';
-
-const manifestSchema = z.object({
-  dependencies: z.record(z.string(), z.string()).default({}),
-  optionalDependencies: z.record(z.string(), z.string()).default({}),
-});
-const packageDirectory = (name: string, from: string): string =>
-  dirname(createRequire(from).resolve(`${name}/package.json`));
-const optionalDirectory = (name: string, from: string): string | null => {
-  try {
-    return packageDirectory(name, from);
-  } catch (error) {
-    if (z.object({ code: z.literal('MODULE_NOT_FOUND') }).safeParse(error).success) return null;
-    throw error;
-  }
-};
-async function copyRuntimePackage(directory: string, target: string): Promise<void> {
-  await cp(directory, target, {
-    recursive: true,
-    dereference: true,
-  });
-  const manifest = manifestSchema.parse(
-    JSON.parse(await readFile(join(directory, 'package.json'), 'utf8')),
-  );
-  const from = join(directory, 'package.json');
-  await Promise.all(
-    Object.keys(manifest.dependencies).map((name) =>
-      copyRuntimePackage(packageDirectory(name, from), join(target, 'node_modules', name)),
-    ),
-  );
-  await Promise.all(
-    Object.keys(manifest.optionalDependencies).map(async (name) => {
-      const path = optionalDirectory(name, from);
-      if (path) await copyRuntimePackage(path, join(target, 'node_modules', name));
-    }),
-  );
-}
+import { copyRuntimePackage, packageDirectory } from './runtime-packages.js';
 
 export async function installRuntime(directory: string, source: string): Promise<string> {
   const code = await readFile(source);

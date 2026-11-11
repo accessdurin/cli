@@ -1,6 +1,6 @@
 {
   "name": "@accessdurin/cli",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "type": "module",
   "bin": {
     "durin": "dist/cli.js"
@@ -18,7 +18,10 @@
     "format:check": "prettier --check .",
     "secrets:check": "node scripts/check-secrets.mjs",
     "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm secrets:check",
-    "prepublishOnly": "pnpm verify"
+    "prepublishOnly": "pnpm verify",
+    "skills:sync": "node scripts/sync-skills.mjs",
+    "package:release": "node scripts/package-release.mjs",
+    "release:metadata": "node scripts/release-metadata.mjs"
   },
   "dependencies": {
     "@clack/prompts": "1.8.1",
@@ -39,7 +42,8 @@
     "vite": "^8.2.4",
     "vitest": "^4.1.12",
     "oxlint": "^1.81.0",
-    "prettier": "^3.6.2"
+    "prettier": "^3.6.2",
+    "pnpm": "11.21.0"
   },
   "engines": {
     "node": ">=24.22.1 <25"

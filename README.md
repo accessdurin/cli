@@ -2,7 +2,7 @@
 
 Run `durin` to choose login or signup, complete organization onboarding, choose an
 agent, and authorize that organization's Durin MCP. Setup verifies the saved MCP
-bridge before recommending that you open the selected harness. It never starts an
+bridge, installs Durin skills, and offers local hook configuration before recommending that you reopen the selected harness. It never starts an
 agent conversation. Agent selection is interactive; `--agent` and `-a` are rejected.
 
 Requires Node 24.22.1 or later in the Node 24 release line and an unlocked OS
@@ -18,7 +18,7 @@ You can use either client independently, or configure both for the same organiza
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Tool access      | The CLI configures an MCP bridge and invokes tools; the gateway checks access, policy and required independent approval. | Local policies record violations. Default rules flag activity; an optional custom checker can reject a call through a supported harness hook.       |
 | Authorization    | Account login and organization-specific MCP consent establish the CLI profile and tool grant.                            | Separate device enrollment authorizes organization reporting; it does not grant MCP tool access.                                                    |
-| Harness coverage | Setup adapters for Claude Code, Codex, Cursor, Windsurf and OpenCode.                                                    | Local Claude Code and Codex activity; Codex desktop hook execution remains unverified. CLI support for a harness does not imply Endpoint coverage.  |
+| Harness coverage | Setup adapters for Claude Code, Codex, Cursor, Windsurf, OpenCode, Gemini CLI, Copilot CLI and custom harnesses.         | Local Claude Code and Codex activity; Codex desktop hook execution remains unverified. CLI support for a harness does not imply Endpoint coverage.  |
 | Data sent        | Invoked tool arguments go to the selected Durin gateway and, on execution, the provider.                                 | Organization reporting sends violation metadata, not commands, arguments, paths, prompts or transcripts. Without enrollment, violations stay local. |
 
 Gateway authorization applies to requests routed through Durin. Unrelated shell
@@ -27,8 +27,9 @@ A gateway-authorized call can still trigger an Endpoint violation: the two check
 answer different questions. An Endpoint flag is not a gateway denial, and an absence
 of flags does not authorize a tool call.
 
-CLI onboarding does not install Endpoint or its hooks, and Endpoint sign-in does
-not configure a CLI profile. Their grants and credentials are separate; choose the
+CLI onboarding does not install the native Endpoint app or enroll a device. It can
+install agent hooks that invoke an existing supported Endpoint helper or a custom
+local checker. Endpoint sign-in does not configure a CLI profile. Their grants and credentials are separate; choose the
 intended organization in each client. `durin verify` checks the selected profile's
 authenticated MCP catalog, not Endpoint enrollment, hook execution or device health.
 The CLI's `durin mcp endpoint` command prints an MCP resource URL; it does not start
@@ -47,7 +48,7 @@ node dist/cli.js
 
 The examples below use `durin` for this executable. To install a local build, run
 `pnpm pack --pack-destination /tmp/durin-cli-release`, then install the resulting
-archive with `npm install --global /tmp/durin-cli-release/accessdurin-cli-1.0.1.tgz`.
+archive with `npm install --global /tmp/durin-cli-release/accessdurin-cli-1.1.0.tgz`.
 After the first npm release, run `pnpx @accessdurin/cli` or install the executable
 with `npm install --global @accessdurin/cli`. Publishing this Git repository alone
 does not make the package available on npm.
@@ -105,6 +106,19 @@ app's port:
   its MCP endpoint and sign-in server. durin refuses any other host and names it
   in the error.
 
+## Skills, hooks, and operating-system packages
+
+Interactive setup installs five portable skills from a pinned snapshot of
+[accessdurin/skills](https://github.com/accessdurin/skills). It also offers local
+pre-tool hooks using an installed supported Endpoint helper or a selected custom
+checker. See [agent setup](docs/agent-setup.md) for the setup prompt, supported
+harnesses, custom descriptors, preservation rules, and hook/reporting boundaries.
+
+[Distribution documentation](docs/distribution.md) covers Homebrew, Debian/Ubuntu
+packages, Windows per-user installation, portable archives, and the release workflow.
+Those channels require publishing their matching release; this repository does not
+publish packages merely by adding packaging files.
+
 ## Claude Code plugin
 
 The [Durin plugin](plugins/durin/README.md) adds `/durin:setup`, `/durin:verify`,
@@ -127,10 +141,10 @@ package and Claude plugin are distributed separately.
 2. Select a verified organization, or create one if you have no memberships.
 3. Answer the organization's required questions in the CLI. Complete payment setup
    in the browser when requested; the CLI waits for payment and tenant readiness.
-4. Choose Claude Code, Codex, Cursor, Windsurf, or OpenCode. Install the harness first.
+4. Choose Claude Code, Codex, Cursor, Windsurf, OpenCode, Gemini CLI, Copilot CLI, or a custom harness. Install the harness first.
 5. Authorize that organization's MCP in the browser. This consent is separate from
    your account login. The CLI checks the saved bridge and authenticated tool catalog.
-6. Open your chosen harness when setup finishes. An empty catalog is reported as
+6. Install the bundled Durin skills and choose an installed Endpoint helper, a custom local checker, or continuing without hooks. Reopen your chosen harness when setup finishes. An empty catalog is reported as
    connected with no tools; ask an administrator to enable a connection or grant access.
 
 `durin login`, `durin signup`, and `durin install` start or resume the same journey.
@@ -151,6 +165,8 @@ It does not trust a saved completion flag. No pasted endpoint or token is requir
 | `durin tools call <name> --input <file\|-> --idempotency-key <key>` | Invoke a governed tool                                                        |
 | `durin mcp serve`                                                   | Start a noninteractive stdio bridge                                           |
 | `durin mcp endpoint`                                                | Print the personal endpoint for a direct MCP client                           |
+| `durin hooks status`                                                | Inspect local checker and hook configuration; execution remains unverified    |
+| `durin hooks run --harness <id>`                                    | Run a configured local checker with JSON input on stdin                       |
 | `durin logout`                                                      | Revoke the selected MCP grant where supported and clear its local credentials |
 
 | Flag                      | Applies to                                                               |
@@ -191,13 +207,16 @@ All adapters configure the CLI's stdio bridge. Entries are named
 `durin-<first 12 characters of profile ID>` and pin the complete organization profile.
 Changing the active terminal profile does not redirect an existing harness connection.
 
-| Agent       | Default user configuration                              | Bridge shape                                    |
-| ----------- | ------------------------------------------------------- | ----------------------------------------------- |
-| Claude Code | `~/.claude.json`                                        | `mcpServers`, `type: stdio`, `command` + `args` |
-| Codex       | `~/.codex/config.toml`                                  | `mcp_servers`, `command` + `args`               |
-| Cursor      | `~/.cursor/mcp.json`                                    | `mcpServers`, `command` + `args`                |
-| Windsurf    | `~/.codeium/windsurf/mcp_config.json`                   | `mcpServers`, `command` + `args`                |
-| OpenCode    | `~/.config/opencode/opencode.json` or existing `.jsonc` | `mcp`, `type: local`, `command` array           |
+| Agent          | Default user configuration                              | Bridge shape                                    |
+| -------------- | ------------------------------------------------------- | ----------------------------------------------- |
+| Claude Code    | `~/.claude.json`                                        | `mcpServers`, `type: stdio`, `command` + `args` |
+| Codex          | `~/.codex/config.toml`                                  | `mcp_servers`, `command` + `args`               |
+| Cursor         | `~/.cursor/mcp.json`                                    | `mcpServers`, `command` + `args`                |
+| Windsurf       | `~/.codeium/windsurf/mcp_config.json`                   | `mcpServers`, `command` + `args`                |
+| Gemini CLI     | `~/.gemini/settings.json`                               | `mcpServers`, `command` + `args`                |
+| Copilot CLI    | `~/.copilot/mcp-config.json`                            | `mcpServers`, `type: local`, `command` + `args` |
+| Custom harness | Descriptor-selected JSONC or TOML                       | Configurable server key and bridge shape        |
+| OpenCode       | `~/.config/opencode/opencode.json` or existing `.jsonc` | `mcp`, `type: local`, `command` array           |
 
 Claude honors `CLAUDE_CONFIG_DIR`; Codex honors `CODEX_HOME`; OpenCode honors
 `OPENCODE_CONFIG` and `XDG_CONFIG_HOME`. Unrelated settings and comments are preserved.

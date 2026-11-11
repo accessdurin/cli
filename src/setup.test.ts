@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { runSetup } from './setup.js';
 import { setupAccount } from './setup-account.js';
+import type { SetupUi } from './ports/cli-setup.js';
 
 vi.mock('./setup-account.js', async (original) => {
   const actual = await original<typeof import('./setup-account.js')>();
@@ -14,6 +15,14 @@ vi.mock('./onboard-organization.js', () => ({
   onboardOrganization: vi.fn<() => Promise<void>>(async () => {}),
 }));
 vi.mock('./agent-installed.js', () => ({ agentInstalled: () => true }));
+vi.mock('./install-runtime.js', () => ({
+  installRuntime: async () => '/tmp/durin-test-runtime.mjs',
+}));
+vi.mock('./verify-bridge.js', () => ({ verifySavedBridge: async () => 3 }));
+vi.mock('./setup-mcp.js', async (original) => {
+  const actual = await original<typeof import('./setup-mcp.js')>();
+  return { ...actual, authorizeMcp: async () => 3 };
+});
 
 it('starts with login/signup and cannot configure an agent when native account authorization is unavailable', async () => {
   const events: string[] = [];
@@ -99,13 +108,20 @@ describe('setup MCP host pinning', () => {
 
   const setupWith = async (
     endpoint: string,
-    options: { appOrigin?: string; development?: boolean; issuer?: string } = {},
+    options: {
+      appOrigin?: string;
+      development?: boolean;
+      issuer?: string;
+      integrations?: boolean;
+    } = {},
   ) => {
     const appOrigin = options.appOrigin ?? 'https://app.getdurin.com';
     const directory = await mkdtemp(join(tmpdir(), 'durin-setup-hosts-'));
     directories.push(directory);
     const agentConfig = join(directory, 'claude.json');
     const requested: string[] = [];
+    const integrations = vi.fn<NonNullable<SetupUi['agent']['integrations']>>();
+    const ready = vi.fn<SetupUi['agent']['ready']>();
     vi.mocked(setupAccount).mockResolvedValueOnce(verifiedAccount(appOrigin, endpoint));
     const request: typeof fetch = async (input) => {
       const url = new URL(input instanceof Request ? input.url : String(input));
@@ -124,6 +140,9 @@ describe('setup MCP host pinning', () => {
       agents: {
         claude: {
           name: 'Claude Code',
+          id: 'claude',
+          skillsDirectory: join(directory, 'skills'),
+          hookConfig: { path: join(directory, 'hooks.json'), format: 'claude' },
           configPath: agentConfig,
           format: 'jsonc',
           serverKey: 'mcpServers',
@@ -146,7 +165,14 @@ describe('setup MCP host pinning', () => {
           },
           payment: async () => {},
         },
-        agent: { choose: async () => 'claude', configured: () => {}, ready: () => {} },
+        agent: {
+          choose: async () => 'claude',
+          configured: () => {},
+          ready,
+          integrations,
+          checker: async () =>
+            options.integrations ? { command: process.execPath, args: [], timeoutMs: 1000 } : null,
+        },
         openAuthorization: async () => {},
         stage: () => {},
       },
@@ -158,10 +184,28 @@ describe('setup MCP host pinning', () => {
     return {
       outcome,
       requested,
+      integrations: integrations.mock.calls,
+      ready: ready.mock.calls,
+      skillsInstalled: existsSync(join(directory, 'skills', 'durin-tools', 'SKILL.md')),
+      hooksInstalled: existsSync(join(directory, 'hooks.json')),
       savedProfile: existsSync(join(directory, 'profiles')),
       configuredAgent: existsSync(agentConfig),
     };
   };
+
+  it('installs skills and the chosen local hooks after MCP verification and reports readiness', async () => {
+    const result = await setupWith(`https://mcp.getdurin.com${personal}`, {
+      issuer: 'https://auth.getdurin.com',
+      integrations: true,
+    });
+    expect(result.outcome).toBeNull();
+    expect(result.skillsInstalled).toBe(true);
+    expect(result.hooksInstalled).toBe(true);
+    expect(result.integrations).toEqual([[{ skills: 5, hooks: true, custom: false }]]);
+    expect(result.ready).toMatchObject([
+      [{ organization: 'One', agent: 'Claude Code', toolCount: 3 }],
+    ]);
+  });
 
   it('contacts the production MCP gateway named by the app', async () => {
     const { requested } = await setupWith(`https://mcp.getdurin.com${personal}`);
