@@ -25,11 +25,11 @@ var commands = map[string]command{
 	"login":    plain(app.Wizard),
 	"signup":   plain(app.Wizard),
 	"install":  plain(app.Wizard),
-	"tools":    plain(app.ToolCommand),
-	"mcp":      plain(app.McpCommand),
-	"verify":   plain(app.VerifyProfile),
+	"tools":    app.ToolCommand,
+	"mcp":      app.McpCommand,
+	"verify":   app.VerifyProfile,
 	"profiles": plain(app.ProfileCommand),
-	"logout":   plain(app.LogoutCommand),
+	"logout":   app.LogoutCommand,
 	"hooks":    hooks,
 }
 

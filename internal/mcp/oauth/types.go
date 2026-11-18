@@ -180,6 +180,10 @@ func (c ClientInformation) Object() (*jsjson.Object, error) {
 	return o, nil
 }
 
+// ClientInformationFromObject is the typed view of an already parsed client information
+// object (for providers that parse stored credentials themselves).
+func ClientInformationFromObject(o *jsjson.Object) *ClientInformation { return clientInfoFromObject(o) }
+
 func clientInfoFromObject(o *jsjson.Object) *ClientInformation {
 	c := &ClientInformation{present: map[string]bool{}}
 	arr := func(key string) []string {

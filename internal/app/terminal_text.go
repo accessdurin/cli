@@ -28,3 +28,17 @@ func PrintJSON(w io.Writer, value jsjson.Value) error {
 	_, err := io.WriteString(w, jsjson.TerminalJSON(value)+"\n")
 	return err
 }
+
+var controlOrBidiExceptLayout = regexp.MustCompile(`[\x00-\x08\x0B-\x1F\x7F-\x9F]|[\x{061c}\x{200e}\x{200f}\x{202a}-\x{202e}\x{2066}-\x{2069}]`)
+
+// SanitizeConsole is what sanitizeConsole (src/terminal-text.ts) does to one console message:
+// library diagnostics can quote server responses, so only line layout (\n, \t) survives.
+func SanitizeConsole(message string) string {
+	return controlOrBidiExceptLayout.ReplaceAllString(ansi.ReplaceAllString(message, ""), "")
+}
+
+// ConsoleWarn is console.warn through the sanitized console: each message is sanitized and
+// written to w with a newline. The MCP SDK's warnings reach stderr this way.
+func ConsoleWarn(w io.Writer) func(string) {
+	return func(message string) { _, _ = io.WriteString(w, SanitizeConsole(message)+"\n") }
+}

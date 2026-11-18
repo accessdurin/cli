@@ -1,12 +1,16 @@
 package app
 
 import (
+	"bytes"
+	"context"
 	"errors"
+	"io"
 	"net/http"
 	"time"
 
 	"github.com/accessdurin/cli/internal/clierror"
 	"github.com/accessdurin/cli/internal/contracts"
+	"github.com/accessdurin/cli/internal/mcp/httpx"
 	"github.com/accessdurin/cli/internal/weburl"
 )
 
@@ -71,4 +75,45 @@ func SecureFetch(allowlist contracts.CliHostAllowlist, base *http.Client) *http.
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return ErrRedirect }
 	client.Timeout = RequestTimeout
 	return &client
+}
+
+// HTTPFetch adapts client to the MCP SDK port's fetch. The client's own redirect policy and
+// timeout apply whatever redirect mode a call asks for: a SecureFetch client refuses every
+// redirect, as secureFetch forces redirect: 'error'. A destination SecureFetch refuses comes
+// back as its expected error, as secureFetch throws a CliError before fetching; any other
+// failure to get a response is a TypeError, as fetch reports it.
+func HTTPFetch(client *http.Client) httpx.Fetch {
+	return func(ctx context.Context, url string, init *httpx.RequestInit) (*http.Response, error) {
+		if init == nil {
+			init = &httpx.RequestInit{}
+		}
+		method := init.Method
+		if method == "" {
+			method = http.MethodGet
+		}
+		var body io.Reader
+		if init.Body != nil {
+			body = bytes.NewReader(init.Body)
+		}
+		req, err := http.NewRequestWithContext(ctx, method, url, body)
+		if err != nil {
+			return nil, &httpx.TypeError{Err: err}
+		}
+		for name, values := range init.Header {
+			for _, value := range values {
+				req.Header.Add(name, value)
+			}
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			if refused, ok := clierror.As(err); ok {
+				return nil, refused
+			}
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			return nil, &httpx.TypeError{Err: err}
+		}
+		return resp, nil
+	}
 }
