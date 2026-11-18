@@ -1,0 +1,29 @@
+{
+  "description": "listMaxPages: a server that never stops paginating fails after exactly listMaxPages requests; a page repeating the previous cursor and tools ends the walk early; a server without the tools capability returns an empty list without a request; 403 insufficient_scope with onInsufficientScope 'throw'.",
+  "provider": {
+    "redirectUrl": null,
+    "clientMetadata": {"redirect_uris": ["http://127.0.0.1/cb"]},
+    "tokens": {"access_token": "at", "token_type": "Bearer", "issuer": "https://app.example.test/"}
+  },
+  "client": {"name": "Durin CLI", "version": "1.0.0", "listMaxPages": 3},
+  "transport": {"url": "https://app.example.test/mcp", "requestInit": {"redirect": "error"}, "onInsufficientScope": "throw"},
+  "routes": [
+    {"method": "POST", "path": "/mcp", "rpcMethod": "initialize", "responses": [{"status": 200, "json": {"jsonrpc": "2.0", "id": "$id", "result": {"protocolVersion": "2025-03-26", "capabilities": {"tools": {}}, "serverInfo": {"name": "s", "version": "1"}}}}]},
+    {"method": "POST", "path": "/mcp", "rpcMethod": "notifications/initialized", "responses": [{"status": 200, "text": ""}]},
+    {"method": "POST", "path": "/mcp", "rpcMethod": "tools/list", "responses": [
+      {"status": 200, "json": {"jsonrpc": "2.0", "id": "$id", "result": {"tools": [{"name": "a", "inputSchema": {"type": "object"}}], "nextCursor": "1"}}},
+      {"status": 200, "json": {"jsonrpc": "2.0", "id": "$id", "result": {"tools": [{"name": "b", "inputSchema": {"type": "object"}}], "nextCursor": "2"}}},
+      {"status": 200, "json": {"jsonrpc": "2.0", "id": "$id", "result": {"tools": [{"name": "c", "inputSchema": {"type": "object"}}], "nextCursor": "3"}}},
+      {"status": 200, "json": {"jsonrpc": "2.0", "id": "$id", "result": {"tools": [{"name": "a", "inputSchema": {"type": "object"}}], "nextCursor": "x"}}},
+      {"status": 200, "json": {"jsonrpc": "2.0", "id": "$id", "result": {"tools": [{"name": "b", "inputSchema": {"type": "object"}}], "nextCursor": "x"}}},
+      {"status": 200, "json": {"jsonrpc": "2.0", "id": "$id", "result": {"tools": [{"name": "b", "inputSchema": {"type": "object"}}], "nextCursor": "x"}}},
+      {"status": 403, "headers": {"www-authenticate": "Bearer error=\"insufficient_scope\", scope=\"mcp:admin\", error_description=\"need admin\""}}
+    ]}
+  ],
+  "steps": [
+    {"op": "connect"},
+    {"op": "listTools"},
+    {"op": "listTools"},
+    {"op": "listTools"}
+  ]
+}

@@ -1,0 +1,138 @@
+{
+  "steps": [
+    {
+      "op": "send",
+      "error": {
+        "name": "Error",
+        "message": "sign in again"
+      },
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://app.example.test/mcp/u/aaa",
+          "headers": {
+            "accept": "application/json, text/event-stream",
+            "authorization": "Bearer old-access",
+            "content-type": "application/json"
+          },
+          "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"sandbox__read_document\",\"arguments\":{}}}",
+          "redirect": "error"
+        },
+        {
+          "method": "GET",
+          "url": "https://app.example.test/.well-known/oauth-protected-resource/mcp/u/aaa",
+          "headers": {
+            "mcp-protocol-version": "2025-11-25"
+          },
+          "body": null,
+          "redirect": "manual"
+        },
+        {
+          "method": "GET",
+          "url": "https://app.example.test/.well-known/oauth-authorization-server",
+          "headers": {
+            "accept": "application/json",
+            "mcp-protocol-version": "2025-11-25"
+          },
+          "body": null,
+          "redirect": "manual"
+        },
+        {
+          "method": "POST",
+          "url": "https://app.example.test/token",
+          "headers": {
+            "accept": "application/json",
+            "content-type": "application/x-www-form-urlencoded"
+          },
+          "body": "grant_type=refresh_token&refresh_token=old-refresh&resource=https%3A%2F%2Fapp.example.test%2Fmcp%2Fu%2Faaa&client_id=client_one",
+          "redirect": "manual"
+        }
+      ],
+      "calls": [
+        [
+          "tokens",
+          null
+        ],
+        [
+          "discoveryState"
+        ],
+        [
+          "saveDiscoveryState",
+          {
+            "authorizationServerMetadata": {
+              "authorization_endpoint": "https://app.example.test/authorize",
+              "code_challenge_methods_supported": [
+                "S256"
+              ],
+              "issuer": "https://app.example.test/",
+              "response_types_supported": [
+                "code"
+              ],
+              "token_endpoint": "https://app.example.test/token"
+            },
+            "authorizationServerUrl": "https://app.example.test/",
+            "resourceMetadata": {
+              "authorization_servers": [
+                "https://app.example.test/"
+              ],
+              "resource": "https://app.example.test/mcp/u/aaa"
+            }
+          }
+        ],
+        [
+          "validateResourceURL",
+          "https://app.example.test/mcp/u/aaa",
+          "https://app.example.test/mcp/u/aaa"
+        ],
+        [
+          "clientInformation",
+          {
+            "issuer": "https://app.example.test/"
+          }
+        ],
+        [
+          "tokens",
+          {
+            "issuer": "https://app.example.test/"
+          }
+        ],
+        [
+          "invalidateCredentials",
+          "tokens"
+        ],
+        [
+          "discoveryState"
+        ],
+        [
+          "validateResourceURL",
+          "https://app.example.test/mcp/u/aaa",
+          "https://app.example.test/mcp/u/aaa"
+        ],
+        [
+          "clientInformation",
+          {
+            "issuer": "https://app.example.test/"
+          }
+        ],
+        [
+          "tokens",
+          {
+            "issuer": "https://app.example.test/"
+          }
+        ],
+        [
+          "state"
+        ]
+      ],
+      "warnings": [
+        "[mcp-sdk] OAuth \"invalid_grant\" — invalidating the stored tokens and retrying authorization. Cause: \"The grant was revoked.\""
+      ]
+    }
+  ],
+  "transportErrors": [
+    {
+      "name": "Error",
+      "message": "sign in again"
+    }
+  ]
+}

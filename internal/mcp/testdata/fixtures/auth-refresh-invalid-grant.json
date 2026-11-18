@@ -1,0 +1,170 @@
+{
+  "steps": [
+    {
+      "op": "auth",
+      "result": "REDIRECT",
+      "requests": [
+        {
+          "method": "GET",
+          "url": "https://app.example.test/.well-known/oauth-protected-resource/mcp",
+          "headers": {
+            "mcp-protocol-version": "2025-11-25"
+          },
+          "body": null,
+          "redirect": "manual"
+        },
+        {
+          "method": "GET",
+          "url": "https://app.example.test/.well-known/oauth-authorization-server",
+          "headers": {
+            "accept": "application/json",
+            "mcp-protocol-version": "2025-11-25"
+          },
+          "body": null,
+          "redirect": "manual"
+        },
+        {
+          "method": "POST",
+          "url": "https://app.example.test/token",
+          "headers": {
+            "accept": "application/json",
+            "content-type": "application/x-www-form-urlencoded"
+          },
+          "body": "grant_type=refresh_token&refresh_token=rt-old&resource=https%3A%2F%2Fapp.example.test%2Fmcp&client_id=c-1",
+          "redirect": "manual"
+        },
+        {
+          "method": "GET",
+          "url": "https://app.example.test/.well-known/oauth-protected-resource/mcp",
+          "headers": {
+            "mcp-protocol-version": "2025-11-25"
+          },
+          "body": null,
+          "redirect": "manual"
+        }
+      ],
+      "calls": [
+        [
+          "discoveryState"
+        ],
+        [
+          "saveDiscoveryState",
+          {
+            "authorizationServerMetadata": {
+              "authorization_endpoint": "https://app.example.test/authorize",
+              "authorization_response_iss_parameter_supported": true,
+              "issuer": "https://app.example.test/",
+              "response_types_supported": [
+                "code"
+              ],
+              "token_endpoint": "https://app.example.test/token"
+            },
+            "authorizationServerUrl": "https://app.example.test/"
+          }
+        ],
+        [
+          "validateResourceURL",
+          "https://app.example.test/mcp",
+          null
+        ],
+        [
+          "clientInformation",
+          {
+            "issuer": "https://app.example.test/"
+          }
+        ],
+        [
+          "saveClientInformation",
+          {
+            "client_id": "c-1",
+            "issuer": "https://app.example.test/"
+          },
+          {
+            "issuer": "https://app.example.test/"
+          }
+        ],
+        [
+          "tokens",
+          {
+            "issuer": "https://app.example.test/"
+          }
+        ],
+        [
+          "invalidateCredentials",
+          "tokens"
+        ],
+        [
+          "discoveryState"
+        ],
+        [
+          "validateResourceURL",
+          "https://app.example.test/mcp",
+          null
+        ],
+        [
+          "clientInformation",
+          {
+            "issuer": "https://app.example.test/"
+          }
+        ],
+        [
+          "tokens",
+          {
+            "issuer": "https://app.example.test/"
+          }
+        ],
+        [
+          "state"
+        ],
+        [
+          "saveCodeVerifier",
+          "<verifier>"
+        ],
+        [
+          "redirectToAuthorization",
+          "https://app.example.test/authorize?response_type=code&client_id=c-1&code_challenge=<challenge>&code_challenge_method=S256&redirect_uri=http%3A%2F%2F127.0.0.1%3A5555%2Foauth%2Fcallback&state=s2&resource=https%3A%2F%2Fapp.example.test%2Fmcp"
+        ]
+      ],
+      "warnings": [
+        "[mcp-sdk] SEP-2352: stored OAuth credential has no 'issuer' stamp (pre-upgrade storage or provider not round-tripping the value). SEP-2352 isolation is inactive for this read; ensure your provider round-trips the issuer field.",
+        "[mcp-sdk] OAuth \"invalid_grant\" — invalidating the stored tokens and retrying authorization. Cause: \"The grant was revoked.\""
+      ]
+    },
+    {
+      "op": "auth",
+      "error": {
+        "name": "IssuerMismatchError",
+        "message": "Issuer mismatch in authorization response (RFC 9207): expected \"https://app.example.test/\", received undefined"
+      },
+      "requests": [
+        {
+          "method": "GET",
+          "url": "https://app.example.test/.well-known/oauth-protected-resource/mcp",
+          "headers": {
+            "mcp-protocol-version": "2025-11-25"
+          },
+          "body": null,
+          "redirect": "manual"
+        }
+      ],
+      "calls": [
+        [
+          "discoveryState"
+        ],
+        [
+          "validateResourceURL",
+          "https://app.example.test/mcp",
+          null
+        ],
+        [
+          "clientInformation",
+          {
+            "issuer": "https://app.example.test/"
+          }
+        ]
+      ],
+      "warnings": []
+    }
+  ],
+  "transportErrors": []
+}
