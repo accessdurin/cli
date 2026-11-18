@@ -21,10 +21,10 @@ func plain(f func(*app.CliOptions, *app.IO) error) command {
 }
 
 var commands = map[string]command{
-	"":         plain(app.Wizard),
-	"login":    plain(app.Wizard),
-	"signup":   plain(app.Wizard),
-	"install":  plain(app.Wizard),
+	"":         app.Wizard,
+	"login":    app.Wizard,
+	"signup":   app.Wizard,
+	"install":  app.Wizard,
 	"tools":    plain(app.ToolCommand),
 	"mcp":      plain(app.McpCommand),
 	"verify":   plain(app.VerifyProfile),
