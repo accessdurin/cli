@@ -7,7 +7,6 @@ import (
 
 	"github.com/accessdurin/cli/internal/clierror"
 	"github.com/accessdurin/cli/internal/contracts"
-	"github.com/accessdurin/cli/internal/credentials"
 	"github.com/accessdurin/cli/internal/ports"
 	"github.com/accessdurin/cli/internal/weburl"
 )
@@ -106,7 +105,7 @@ func newSetupContext(ctx context.Context, options SetupOptions) (*setupContext, 
 	}
 	options.Request = SecureFetch(allowlist, options.Request)
 	if options.Store == nil {
-		options.Store = setupCredentialStore{credentials.NewNative("com.getdurin.cli")}
+		options.Store = NewNativeCredentialStore()
 	}
 	if options.Clock == nil {
 		options.Clock = NewPollingClock()
@@ -226,16 +225,6 @@ func SignInMcp(ctx context.Context, input SignInMcpInput) (int, error) {
 	}, DefaultLockPatience)
 }
 
-// authorizeMcpOptions are what authorizeMcp (src/setup-mcp.ts) needs.
-type authorizeMcpOptions struct {
-	Profile contracts.CliProfile
-	Store   ports.CredentialStore
-	Marker  ports.RevocationMarker
-	Pending ports.PendingRevocations
-	Request *http.Client
-	Open    func(ctx context.Context, url string) error
-}
-
 func (c *setupContext) chosenAgent(ctx context.Context) (contracts.AgentConfig, error) {
 	key, err := c.UI.Agent.Choose(ctx)
 	if err != nil {
@@ -292,28 +281,4 @@ func assertWorkspace(identity DurinSession, workspace PersonalBootstrap) error {
 		return clierror.New("Workspace does not match your verified membership.")
 	}
 	return nil
-}
-
-// setupCredentialStore is NativeCredentialStore (src/credentials.ts): the OS credential store,
-// whose failures are expected errors that say to unlock it.
-type setupCredentialStore struct{ store credentials.Store }
-
-func credentialStoreError(err error) error {
-	if err == nil {
-		return nil
-	}
-	return clierror.Wrap(credentials.UnavailableMessage, err)
-}
-
-func (s setupCredentialStore) Read(key string) (string, bool, error) {
-	value, found, err := s.store.Read(key)
-	return value, found, credentialStoreError(err)
-}
-
-func (s setupCredentialStore) Write(key, value string) error {
-	return credentialStoreError(s.store.Write(key, value))
-}
-
-func (s setupCredentialStore) Remove(key string) error {
-	return credentialStoreError(s.store.Remove(key))
 }

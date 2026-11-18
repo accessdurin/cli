@@ -36,6 +36,7 @@ type prompter struct {
 	out      io.Writer
 	messages io.Writer
 	style    promptStyles
+	terminal *promptInput // shared reader of in, once in is known to be a terminal
 }
 
 type promptStyles struct {
@@ -134,10 +135,12 @@ func (p *prompter) theme() huh.Theme {
 
 func (p *prompter) run(ctx context.Context, field huh.Field) error {
 	p.printf("%s\n", p.style.bar.Render("│"))
+	input, done := p.promptReader()
+	defer done()
 	return huh.NewForm(huh.NewGroup(field)).
 		WithTheme(p.theme()).
 		WithShowHelp(false).
-		WithInput(p.in).
+		WithInput(input).
 		WithOutput(p.out).
 		RunWithContext(ctx)
 }
