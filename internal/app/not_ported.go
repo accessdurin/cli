@@ -1,19 +1,24 @@
 package app
 
 import (
+	"context"
+	"net/http"
+
 	"github.com/accessdurin/cli/internal/clierror"
+	"github.com/accessdurin/cli/internal/contracts"
 )
 
-// TODO(go-port): the wizard stops where the setup step of the Go port takes over
-// (src/commands/wizard.ts with setup.ts and terminal-ui.ts). It already performs the checks
-// that come before that point in the TypeScript CLI, so its failures match it, and then
-// returns errNotPorted.
+// TODO(go-port): setup stops here until setup-mcp.ts is ported, before it saves a profile or
+// touches the agent's configuration.
 var errNotPorted = clierror.New("This command is not yet available in the Go build of durin.")
 
-// Wizard is `durin`, login, signup and install (src/commands/wizard.ts).
-func Wizard(options *CliOptions, io *IO) error {
-	if io.IsTTY == nil || !io.IsTTY() {
-		return clierror.New("Run durin in an interactive terminal to complete onboarding.")
-	}
-	return errNotPorted // TODO(go-port): runSetup with the terminal UI.
+// mcpIssuer is mcpIssuer (src/setup-mcp.ts): the personal endpoint's one trusted
+// authorization server, from its protected resource metadata.
+func mcpIssuer(ctx context.Context, resource string, request *http.Client, scope contracts.CliHostScope) (string, error) {
+	return "", errNotPorted // TODO(go-port): discoverOAuthProtectedResourceMetadata and host checks.
+}
+
+// authorizeMcp is authorizeMcp (src/setup-mcp.ts), run under the profile lock.
+func authorizeMcp(ctx context.Context, options authorizeMcpOptions) (int, error) {
+	return 0, errNotPorted // TODO(go-port): McpOAuthProvider, the loopback callback and RemoteMcpClient.
 }

@@ -4,16 +4,23 @@
 package app
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
+	"math"
+	"math/big"
+	"net/http"
 	"os"
 	"os/user"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -150,4 +157,117 @@ func resolvePath(p string) string {
 		return filepath.Clean(p)
 	}
 	return abs
+}
+
+// fetchInit is the part of fetch's RequestInit the CLI sets. Headers keep their order.
+type fetchInit struct {
+	Method  string
+	Header  [][2]string
+	Body    *string       // nil for no body
+	Timeout time.Duration // AbortSignal.timeout(Timeout); 0 for none
+}
+
+// cancelOnClose releases a request's timeout once its body is closed.
+type cancelOnClose struct {
+	io.ReadCloser
+	cancel context.CancelFunc
+}
+
+func (b cancelOnClose) Close() error {
+	err := b.ReadCloser.Close()
+	b.cancel()
+	return err
+}
+
+// fetch is fetch(url, {...init, redirect: 'error'}) on client (nil for http.DefaultClient).
+// Its timeout covers reading the body, as an AbortSignal does; closing the body releases it.
+func fetch(ctx context.Context, client *http.Client, url string, init fetchInit) (*http.Response, error) {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	noRedirect := *client
+	noRedirect.CheckRedirect = func(*http.Request, []*http.Request) error { return ErrRedirect }
+	cancel := context.CancelFunc(func() {})
+	if init.Timeout > 0 {
+		ctx, cancel = context.WithTimeout(ctx, init.Timeout)
+	}
+	var body io.Reader
+	if init.Body != nil {
+		body = strings.NewReader(*init.Body)
+	}
+	method := init.Method
+	if method == "" {
+		method = http.MethodGet
+	}
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+	for _, h := range init.Header {
+		req.Header.Set(h[0], h[1])
+	}
+	resp, err := noRedirect.Do(req)
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+	resp.Body = cancelOnClose{resp.Body, cancel}
+	return resp, nil
+}
+
+// responseOK is Response#ok.
+func responseOK(resp *http.Response) bool { return resp.StatusCode >= 200 && resp.StatusCode <= 299 }
+
+// responseJSON is Response#json(): the whole body, decoded as UTF-8 without a BOM, parsed as
+// JSON. It closes the body.
+func responseJSON(resp *http.Response) (jsjson.Value, error) {
+	defer resp.Body.Close()
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	return jsjson.ParseString(jsjson.DecodeUTF8StripBOM(data))
+}
+
+// jsWhiteSpace is JavaScript's WhiteSpace or LineTerminator, which String.prototype.trim and
+// Number() strip.
+func jsWhiteSpace(c rune) bool {
+	switch c {
+	case 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x20, 0xA0, 0x1680, 0x2028, 0x2029, 0x202F, 0x205F, 0x3000, 0xFEFF:
+		return true
+	}
+	return c >= 0x2000 && c <= 0x200A
+}
+
+// jsTrim is String.prototype.trim.
+func jsTrim(s string) string { return strings.TrimFunc(s, jsWhiteSpace) }
+
+var (
+	jsDecimal = regexp.MustCompile(`^[+-]?(?:Infinity|(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)$`)
+	jsRadix   = regexp.MustCompile(`^0(?:[xX][\da-fA-F]+|[oO][0-7]+|[bB][01]+)$`)
+)
+
+// jsNumber is Number(string): NaN unless the trimmed string is empty (0), a decimal literal,
+// Infinity, or a 0x/0o/0b integer.
+func jsNumber(s string) float64 {
+	s = jsTrim(s)
+	switch {
+	case s == "":
+		return 0
+	case jsRadix.MatchString(s):
+		base := map[byte]int{'x': 16, 'X': 16, 'o': 8, 'O': 8, 'b': 2, 'B': 2}[s[1]]
+		n, _ := new(big.Int).SetString(s[2:], base)
+		f, _ := new(big.Float).SetInt(n).Float64()
+		return f
+	case !jsDecimal.MatchString(s):
+		return math.NaN()
+	case strings.HasSuffix(s, "Infinity"):
+		if s[0] == '-' {
+			return math.Inf(-1)
+		}
+		return math.Inf(1)
+	}
+	f, _ := strconv.ParseFloat(s, 64) // out of range is ±Inf or ±0, as in JavaScript
+	return f
 }
