@@ -1,0 +1,257 @@
+## durin hooks status --config-dir <TMP>/config
+exit: 0
+--- stdout
+[]
+--- stderr
+## hooks directory
+hooks dir 0700
+## durin hooks run --harness claude --config-dir <TMP>/config
+exit: 2
+--- stdout
+--- stderr
+No local checker configured. Run durin in an interactive terminal.
+## durin hooks run --harness Bad_Name --config-dir <TMP>/config
+exit: 2
+--- stdout
+--- stderr
+Invalid harness identifier.
+## durin hooks run --harness claude --config-dir <TMP>/config
+exit: 0
+--- stdout
+--- stderr
+## checker received
+{"hook_event_name":"PreToolUse","session_id":"s1","tool_use_id":"t1","tool_name":"Bash","tool_input":{"command":"ls","n":1.5},"cwd":"/work","model":"m","turn_id":"turn","durin_harness":"claude"}
+⏎ (no trailing newline)
+## durin hooks run --harness codex --config-dir <TMP>/config
+exit: 0
+--- stdout
+--- stderr
+## checker received
+{"hook_event_name":"PreToolUse","session_id":"s1","tool_use_id":"t1","tool_name":"Bash","tool_input":{"command":"ls","n":1.5},"cwd":"/work","model":"m","turn_id":"turn","durin_harness":"codex"}
+⏎ (no trailing newline)
+## durin hooks run --harness custom-acme --config-dir <TMP>/config
+exit: 0
+--- stdout
+--- stderr
+## checker received
+{"hook_event_name":"PreToolUse","session_id":"s1","tool_use_id":"t1","tool_name":"Bash","tool_input":{"command":"ls","n":1.5},"cwd":"/work","model":"m","turn_id":"turn","durin_harness":"custom-acme"}
+⏎ (no trailing newline)
+## durin hooks run --harness cursor --config-dir <TMP>/config
+exit: 0
+--- stdout
+{"permission":"allow"}
+--- stderr
+## checker received
+{"hook_event_name":"PreToolUse","session_id":"c1","tool_use_id":"t2","tool_name":"Shell","tool_input":{"command":"ls"},"cwd":"/work","durin_harness":"cursor"}
+⏎ (no trailing newline)
+## durin hooks run --harness opencode --config-dir <TMP>/config
+exit: 0
+--- stdout
+--- stderr
+## checker received
+{"hook_event_name":"PreToolUse","session_id":"s3","tool_use_id":"t3","tool_name":"bash","tool_input":{"command":"pwd"},"durin_harness":"opencode"}
+⏎ (no trailing newline)
+## durin hooks run --harness gemini --config-dir <TMP>/config
+exit: 0
+--- stdout
+--- stderr
+## checker received
+{"hook_event_name":"PreToolUse","session_id":"s4","tool_use_id":"<UUID-1>","tool_name":"run_shell_command","tool_input":{"command":"ls"},"durin_harness":"gemini"}
+⏎ (no trailing newline)
+## durin hooks run --harness copilot --config-dir <TMP>/config
+exit: 0
+--- stdout
+--- stderr
+## checker received
+{"hook_event_name":"PreToolUse","session_id":"s5","tool_use_id":"t5","tool_name":"bash","tool_input":{"command":"ls"},"cwd":"/work","durin_harness":"copilot"}
+⏎ (no trailing newline)
+## durin hooks run --harness copilot --config-dir <TMP>/config
+exit: 0
+--- stdout
+--- stderr
+## checker received
+{"hook_event_name":"PreToolUse","session_id":"s5","tool_use_id":"<UUID-2>","tool_name":"bash","tool_input":{"command":"ls"},"durin_harness":"copilot"}
+⏎ (no trailing newline)
+## durin hooks run --harness windsurf --config-dir <TMP>/config
+exit: 0
+--- stdout
+--- stderr
+## checker received
+{"hook_event_name":"PreToolUse","session_id":"<UUID-3>","tool_use_id":"<UUID-4>","tool_name":"Bash","tool_input":{"command_line":"ls -la","cwd":"/work","command":"ls -la"},"cwd":"/work","durin_harness":"windsurf"}
+⏎ (no trailing newline)
+## durin hooks run --harness windsurf --config-dir <TMP>/config
+exit: 0
+--- stdout
+--- stderr
+## checker received
+{"hook_event_name":"PreToolUse","session_id":"s6","tool_use_id":"<UUID-5>","tool_name":"mcp__durin__list","tool_input":{"a":1},"durin_harness":"windsurf"}
+⏎ (no trailing newline)
+## durin hooks run --harness windsurf --config-dir <TMP>/config
+exit: 0
+--- stdout
+--- stderr
+## checker received
+{"hook_event_name":"PreToolUse","session_id":"<UUID-6>","tool_use_id":"<UUID-7>","tool_name":"Write","tool_input":{"file_path":"/work/a.txt","edits":[]},"durin_harness":"windsurf"}
+⏎ (no trailing newline)
+## durin hooks run --harness windsurf --config-dir <TMP>/config
+exit: 2
+--- stdout
+--- stderr
+Unsupported Windsurf hook event.
+## checker received
+<missing>
+## durin hooks run --harness claude --config-dir <TMP>/config
+exit: 2
+--- stdout
+--- stderr
+Invalid local hook input; the checker was not invoked.
+## checker received
+<missing>
+## durin hooks run --harness claude --config-dir <TMP>/config
+exit: 2
+--- stdout
+--- stderr
+Durin could not complete this local hook check.
+## checker received
+<missing>
+## durin hooks run --harness claude --config-dir <TMP>/config
+exit: 2
+--- stdout
+--- stderr
+Durin could not complete this local hook check.
+## checker received
+<missing>
+## durin hooks run --harness cursor --config-dir <TMP>/config
+exit: 2
+--- stdout
+--- stderr
+Durin could not complete this local hook check.
+## checker received
+<missing>
+## durin hooks run --harness claude --config-dir <TMP>/config
+exit: 2
+--- stdout
+--- stderr
+Local hook input exceeds 1 MiB.
+## checker received
+<missing>
+## durin hooks run --harness claude --config-dir <TMP>/config
+exit: 2
+--- stdout
+--- stderr
+The local checker denied this tool call.
+## checker received
+{"hook_event_name":"PreToolUse","session_id":"s1","tool_use_id":"t1","tool_name":"Bash","tool_input":{"command":"ls","n":1.5},"cwd":"/work","model":"m","turn_id":"turn","durin_harness":"claude"}
+⏎ (no trailing newline)
+## durin hooks run --harness cursor --config-dir <TMP>/config
+exit: 2
+--- stdout
+--- stderr
+The local checker denied this tool call.
+## checker received
+{"hook_event_name":"PreToolUse","session_id":"c","tool_use_id":"t","tool_name":"x","tool_input":{},"durin_harness":"cursor"}
+⏎ (no trailing newline)
+## durin hooks run --harness claude --config-dir <TMP>/config
+exit: 2
+--- stdout
+--- stderr
+The local checker failed.
+## checker received
+{"hook_event_name":"PreToolUse","session_id":"s1","tool_use_id":"t1","tool_name":"Bash","tool_input":{"command":"ls","n":1.5},"cwd":"/work","model":"m","turn_id":"turn","durin_harness":"claude"}
+⏎ (no trailing newline)
+## durin hooks run --harness claude --config-dir <TMP>/config
+exit: 2
+--- stdout
+--- stderr
+The local checker timed out.
+## checker received
+{"hook_event_name":"PreToolUse","session_id":"s1","tool_use_id":"t1","tool_name":"Bash","tool_input":{"command":"ls","n":1.5},"cwd":"/work","model":"m","turn_id":"turn","durin_harness":"claude"}
+⏎ (no trailing newline)
+## durin hooks run --harness codex --config-dir <TMP>/config
+exit: 2
+--- stdout
+--- stderr
+The selected local checker is missing or is not executable.
+## checker received
+<missing>
+## durin hooks run --harness gemini --config-dir <TMP>/config
+exit: 2
+--- stdout
+--- stderr
+The selected local checker is missing or is not executable.
+## checker received
+<missing>
+## durin hooks status --config-dir <TMP>/config
+exit: 0
+--- stdout
+[
+  {
+    "harness": "claude",
+    "target": "<TMP>/home/.claude/hooks.json",
+    "checker": "available",
+    "configuration": "installed",
+    "execution": "not-verified"
+  },
+  {
+    "harness": "codex",
+    "target": "<TMP>/home/.codex/hooks.json",
+    "checker": "unavailable",
+    "configuration": "installed",
+    "execution": "not-verified"
+  },
+  {
+    "harness": "copilot",
+    "target": "<TMP>/home/.copilot/hooks.json",
+    "checker": "available",
+    "configuration": "installed",
+    "execution": "not-verified"
+  },
+  {
+    "harness": "cursor",
+    "target": "<TMP>/home/.cursor/hooks.json",
+    "checker": "available",
+    "configuration": "missing-or-changed",
+    "execution": "not-verified"
+  },
+  {
+    "harness": "custom-acme",
+    "target": "<TMP>/home/acme.json",
+    "checker": "available",
+    "configuration": "installed",
+    "execution": "not-verified"
+  },
+  {
+    "harness": "gemini",
+    "target": "<TMP>/home/.gemini/hooks.json",
+    "checker": "unavailable",
+    "configuration": "installed",
+    "execution": "not-verified"
+  },
+  {
+    "harness": "opencode",
+    "target": "<TMP>/home/.opencode/hooks.json",
+    "checker": "available",
+    "configuration": "installed",
+    "execution": "not-verified"
+  },
+  {
+    "harness": "windsurf",
+    "target": "<TMP>/home/.windsurf/hooks.json",
+    "checker": "available",
+    "configuration": "installed",
+    "execution": "not-verified"
+  }
+]
+--- stderr
+## durin hooks status --config-dir <TMP>/config
+exit: 1
+--- stdout
+--- stderr
+Durin could not complete this request. Run durin in a terminal to verify your profile and authorization; retain the same idempotency key when retrying a tool call.
+## durin hooks run --harness zzz --config-dir <TMP>/config
+exit: 2
+--- stdout
+--- stderr
+Durin could not complete this local hook check.
+## checker received
+<missing>

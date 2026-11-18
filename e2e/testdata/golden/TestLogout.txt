@@ -1,0 +1,53 @@
+## durin logout --config-dir <TMP>/config
+exit: 0
+--- stdout
+{
+  "profile": "<PROFILE:user_01>",
+  "localMcpGrant": "cleared",
+  "remoteMcpGrant": "revoked",
+  "detail": "Agent configuration is retained. Run durin to sign in again. Other organization MCP grants are unchanged."
+}
+--- stderr
+## requests
+GET /.well-known/oauth-authorization-server [Mcp-Protocol-Version: 2025-11-25]
+POST /revoke [Content-Type: application/x-www-form-urlencoded] client_id=client-seeded&token=refresh-seeded&token_type_hint=refresh_token
+POST /revoke [Content-Type: application/x-www-form-urlencoded] client_id=client-seeded&token=access-seeded&token_type_hint=access_token
+## revocations directory
+
+## credentials
+
+## durin verify --config-dir <TMP>/config
+exit: 1
+--- stdout
+--- stderr
+This durin profile isn’t signed in to its organization’s MCP server: it never signed in, or its sign-in ended or was revoked. Run durin in a terminal to sign in again.
+## durin logout --config-dir <TMP>/config
+exit: 0
+--- stdout
+{
+  "profile": "<PROFILE:user_01>",
+  "localMcpGrant": "cleared",
+  "remoteMcpGrant": "unavailable",
+  "detail": "Agent configuration is retained. Run durin to sign in again. Other organization MCP grants are unchanged."
+}
+--- stderr
+## requests
+POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Content-Type: application/json] {"id":0,"jsonrpc":"2.0","method":"initialize","params":{"capabilities":{},"clientInfo":{"name":"Durin CLI","version":"1.0.0"},"protocolVersion":"2025-11-25"}}
+GET /.well-known/oauth-protected-resource/mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Mcp-Protocol-Version: 2025-11-25]
+GET /.well-known/oauth-authorization-server [Mcp-Protocol-Version: 2025-11-25]
+## durin logout --profile <PROFILE:user_01> --config-dir <TMP>/config
+exit: 0
+--- stdout
+{
+  "profile": "<PROFILE:user_01>",
+  "localMcpGrant": "cleared",
+  "remoteMcpGrant": "unavailable",
+  "detail": "Agent configuration is retained. Run durin to sign in again. Other organization MCP grants are unchanged."
+}
+--- stderr
+## requests
+GET /.well-known/oauth-authorization-server [Mcp-Protocol-Version: 2025-11-25]
+## revocations directory
+
+## credentials
+

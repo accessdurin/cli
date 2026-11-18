@@ -1,0 +1,195 @@
+## durin tools list --config-dir <TMP>/config
+exit: 0
+--- stdout
+{
+  "tools": [
+    {
+      "name": "github.create_issue",
+      "title": "Create issue",
+      "description": "Opens an issue\u202e with bidi",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ]
+      },
+      "annotations": {
+        "destructiveHint": true
+      }
+    },
+    {
+      "name": "linear:list/issues",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object"
+      }
+    }
+  ]
+}
+--- stderr
+## requests
+POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-seeded] [Content-Type: application/json] {"id":0,"jsonrpc":"2.0","method":"initialize","params":{"capabilities":{},"clientInfo":{"name":"Durin CLI","version":"1.0.0"},"protocolVersion":"2025-11-25"}}
+POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-seeded] [Content-Type: application/json] [Mcp-Protocol-Version: 2025-11-25] [Mcp-Session-Id: session-1] {"id":1,"jsonrpc":"2.0","method":"tools/list"}
+(notification) POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-seeded] [Content-Type: application/json] [Mcp-Protocol-Version: 2025-11-25] [Mcp-Session-Id: session-1] {"jsonrpc":"2.0","method":"notifications/initialized"}
+## durin tools inspect github.create_issue --profile <PROFILE:user_01> --config-dir <TMP>/config
+exit: 0
+--- stdout
+{
+  "name": "github.create_issue",
+  "title": "Create issue",
+  "description": "Opens an issue\u202e with bidi",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "title": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "title"
+    ]
+  },
+  "annotations": {
+    "destructiveHint": true
+  }
+}
+--- stderr
+## durin tools inspect bad name; rm -rf --profile <PROFILE:user_01> --config-dir <TMP>/config
+exit: 1
+--- stdout
+--- stderr
+Tool is unavailable in this organization. Run durin tools list.
+## durin tools inspect missing --profile <PROFILE:user_01> --config-dir <TMP>/config
+exit: 1
+--- stdout
+--- stderr
+Tool is unavailable in this organization. Run durin tools list.
+## durin verify --config-dir <TMP>/config
+exit: 0
+--- stdout
+{
+  "verified": true,
+  "availableTools": 2,
+  "detail": "Authenticated gateway catalog verified. This does not prove the agent harness has been opened."
+}
+--- stderr
+## durin mcp endpoint --config-dir <TMP>/config
+exit: 0
+--- stdout
+{
+  "profile": "<PROFILE:user_01>",
+  "resource": "<ORIGIN>/mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "authentication": "Authorize this resource in your MCP client; its grant is separate from the CLI grant."
+}
+--- stderr
+## durin tools call github.create_issue --input <TMP>/input.json --idempotency-key op-1 --config-dir <TMP>/config
+exit: 0
+--- stdout
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "created \u001b[31m"
+    }
+  ],
+  "structuredContent": {
+    "url": "https://example.com/1"
+  },
+  "_meta": {
+    "io.durin/control": {
+      "idempotencyKey": "op-1"
+    }
+  }
+}
+--- stderr
+## requests
+POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-seeded] [Content-Type: application/json] {"id":0,"jsonrpc":"2.0","method":"initialize","params":{"capabilities":{},"clientInfo":{"name":"Durin CLI","version":"1.0.0"},"protocolVersion":"2025-11-25"}}
+POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-seeded] [Content-Type: application/json] [Mcp-Protocol-Version: 2025-11-25] [Mcp-Session-Id: session-1] {"id":1,"jsonrpc":"2.0","method":"tools/call","params":{"_meta":{"io.durin/control":{"idempotencyKey":"op-1"}},"arguments":{"labels":["a"],"n":1,"title":"Bug"},"name":"github.create_issue"}}
+(notification) POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-seeded] [Content-Type: application/json] [Mcp-Protocol-Version: 2025-11-25] [Mcp-Session-Id: session-1] {"jsonrpc":"2.0","method":"notifications/initialized"}
+## durin tools call github.create_issue --input - --idempotency-key op-2 --approval-id appr_0 --config-dir <TMP>/config
+exit: 1
+--- stdout
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "denied"
+    }
+  ],
+  "isError": true
+}
+--- stderr
+## requests
+POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-seeded] [Content-Type: application/json] {"id":0,"jsonrpc":"2.0","method":"initialize","params":{"capabilities":{},"clientInfo":{"name":"Durin CLI","version":"1.0.0"},"protocolVersion":"2025-11-25"}}
+POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-seeded] [Content-Type: application/json] [Mcp-Protocol-Version: 2025-11-25] [Mcp-Session-Id: session-1] {"id":1,"jsonrpc":"2.0","method":"tools/call","params":{"_meta":{"io.durin/control":{"approvalId":"appr_0","idempotencyKey":"op-2"}},"arguments":{"title":"Again"},"name":"github.create_issue"}}
+(notification) POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-seeded] [Content-Type: application/json] [Mcp-Protocol-Version: 2025-11-25] [Mcp-Session-Id: session-1] {"jsonrpc":"2.0","method":"notifications/initialized"}
+## durin tools call github.create_issue --input - --idempotency-key op-3 --config-dir <TMP>/config
+exit: 0
+--- stdout
+{
+  "content": [],
+  "structuredContent": {
+    "approvalId": "appr_1",
+    "status": "approval_required"
+  }
+}
+--- stderr
+## durin tools call github.create_issue --input - --idempotency-key op-4 --config-dir <TMP>/config
+exit: 1
+--- stdout
+--- stderr
+Durin could not complete this request. Run durin in a terminal to verify your profile and authorization; retain the same idempotency key when retrying a tool call.
+## durin tools call github.create_issue --input - --config-dir <TMP>/config
+exit: 1
+--- stdout
+--- stderr
+Invalid call. Supply a tool name, JSON object, and --idempotency-key; use --approval-id when required.
+## durin tools call github.create_issue --idempotency-key k --config-dir <TMP>/config
+exit: 1
+--- stdout
+--- stderr
+Provide --input <JSON file|-> and --idempotency-key <key>.
+## durin tools call github.create_issue --input - --idempotency-key k --config-dir <TMP>/config
+exit: 1
+--- stdout
+--- stderr
+Invalid call. Supply a tool name, JSON object, and --idempotency-key; use --approval-id when required.
+## durin tools call github.create_issue --input - --idempotency-key k --config-dir <TMP>/config
+exit: 1
+--- stdout
+--- stderr
+Durin could not complete this request. Run durin in a terminal to verify your profile and authorization; retain the same idempotency key when retrying a tool call.
+## durin tools call github.create_issue --input - --idempotency-key bad key! --config-dir <TMP>/config
+exit: 1
+--- stdout
+--- stderr
+Invalid call. Supply a tool name, JSON object, and --idempotency-key; use --approval-id when required.
+## durin tools call bad;name --input - --idempotency-key k --config-dir <TMP>/config
+exit: 1
+--- stdout
+--- stderr
+Invalid call. Supply a tool name, JSON object, and --idempotency-key; use --approval-id when required.
+## durin tools call github.create_issue --input <TMP>/missing.json --idempotency-key k --config-dir <TMP>/config
+exit: 1
+--- stdout
+--- stderr
+Durin could not complete this request. Run durin in a terminal to verify your profile and authorization; retain the same idempotency key when retrying a tool call.
+## durin tools call github.create_issue --input - --idempotency-key k --config-dir <TMP>/config
+exit: 1
+--- stdout
+--- stderr
+Tool input exceeds 1 MiB.
+## durin tools call github.create_issue --input - --idempotency-key k --config-dir <TMP>/config
+exit: 1
+--- stdout
+--- stderr
+Durin could not complete this request. Run durin in a terminal to verify your profile and authorization; retain the same idempotency key when retrying a tool call.
+## requests

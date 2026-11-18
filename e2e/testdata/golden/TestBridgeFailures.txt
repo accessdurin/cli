@@ -1,0 +1,30 @@
+## durin mcp serve --profile <PROFILE:user_01> --config-dir <TMP>/config
+> {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"agent","version":"1"}}}
+< {"id":1,"jsonrpc":"2.0","result":{"capabilities":{"tools":{"listChanged":false}},"protocolVersion":"2025-06-18","serverInfo":{"name":"fake-durin-gateway","version":"1.0.0"}}}
+> this is not json
+exit: 0
+--- stderr
+## durin mcp serve --profile <PROFILE:user_01> --config-dir <TMP>/config
+> {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"agent","version":"1"}}}
+< {"id":1,"jsonrpc":"2.0","result":{"capabilities":{"tools":{"listChanged":false}},"protocolVersion":"2025-06-18","serverInfo":{"name":"fake-durin-gateway","version":"1.0.0"}}}
+> {"jsonrpc":"2.0","id":2,"method":"tools/list"}
+< {"error":{"code":-32000,"message":"Durin MCP request failed. Its outcome may be uncertain; retain the same idempotency key when retrying."},"id":2,"jsonrpc":"2.0"}
+exit: 0
+--- stderr
+Durin MCP transport failed.
+## durin mcp serve --profile <PROFILE:user_09> --config-dir <TMP>/config
+> {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"agent","version":"1"}}}
+< {"error":{"code":-32000,"message":"This durin profile isn’t signed in to its organization’s MCP server: it never signed in, or its sign-in ended or was revoked. Run durin in a terminal to sign in again."},"id":1,"jsonrpc":"2.0"}
+exit: 0
+--- stderr
+Durin MCP transport failed.
+## requests
+POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Content-Type: application/json] {"id":1,"jsonrpc":"2.0","method":"initialize","params":{"capabilities":{},"clientInfo":{"name":"agent","version":"1"},"protocolVersion":"2025-06-18"}}
+GET /.well-known/oauth-protected-resource/mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Mcp-Protocol-Version: 2025-11-25]
+GET /.well-known/oauth-authorization-server [Mcp-Protocol-Version: 2025-11-25]
+## durin mcp serve --profile <PROFILE:user_01> --config-dir <TMP>/config
+> {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"agent","version":"1"}}}
+< {"error":{"code":-32000,"message":"Signing out of this durin profile hasn’t finished: the authorization server could not confirm that access was revoked, so MCP calls and durin tools are blocked for this profile. Run durin logout again to finish, or durin logout --force to sign out on this computer without the server."},"id":1,"jsonrpc":"2.0"}
+exit: 0
+--- stderr
+## requests

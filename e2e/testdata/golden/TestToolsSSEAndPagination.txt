@@ -1,0 +1,63 @@
+## durin tools list --profile <PROFILE:user_01> --config-dir <TMP>/config
+exit: 0
+--- stdout
+{
+  "tools": [
+    {
+      "name": "tool_0",
+      "inputSchema": {
+        "type": "object"
+      }
+    },
+    {
+      "name": "tool_1",
+      "inputSchema": {
+        "type": "object"
+      }
+    },
+    {
+      "name": "tool_2",
+      "inputSchema": {
+        "type": "object"
+      }
+    }
+  ]
+}
+--- stderr
+## requests
+POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-seeded] [Content-Type: application/json] {"id":0,"jsonrpc":"2.0","method":"initialize","params":{"capabilities":{},"clientInfo":{"name":"Durin CLI","version":"1.0.0"},"protocolVersion":"2025-11-25"}}
+POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-seeded] [Content-Type: application/json] [Mcp-Protocol-Version: 2025-11-25] [Mcp-Session-Id: session-1] {"id":1,"jsonrpc":"2.0","method":"tools/list"}
+POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-seeded] [Content-Type: application/json] [Mcp-Protocol-Version: 2025-11-25] [Mcp-Session-Id: session-1] {"id":2,"jsonrpc":"2.0","method":"tools/list","params":{"cursor":"page-1"}}
+POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-seeded] [Content-Type: application/json] [Mcp-Protocol-Version: 2025-11-25] [Mcp-Session-Id: session-1] {"id":3,"jsonrpc":"2.0","method":"tools/list","params":{"cursor":"page-2"}}
+(notification) POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-seeded] [Content-Type: application/json] [Mcp-Protocol-Version: 2025-11-25] [Mcp-Session-Id: session-1] {"jsonrpc":"2.0","method":"notifications/initialized"}
+## durin tools call tool_1 --input - --idempotency-key op-1 --profile <PROFILE:user_01> --config-dir <TMP>/config
+exit: 0
+--- stdout
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "ok"
+    }
+  ]
+}
+--- stderr
+## requests
+POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-seeded] [Content-Type: application/json] {"id":0,"jsonrpc":"2.0","method":"initialize","params":{"capabilities":{},"clientInfo":{"name":"Durin CLI","version":"1.0.0"},"protocolVersion":"2025-11-25"}}
+POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-seeded] [Content-Type: application/json] [Mcp-Protocol-Version: 2025-11-25] [Mcp-Session-Id: session-1] {"id":1,"jsonrpc":"2.0","method":"tools/call","params":{"_meta":{"io.durin/control":{"idempotencyKey":"op-1"}},"arguments":{"q":1},"name":"tool_1"}}
+(notification) POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-seeded] [Content-Type: application/json] [Mcp-Protocol-Version: 2025-11-25] [Mcp-Session-Id: session-1] {"jsonrpc":"2.0","method":"notifications/initialized"}
+## durin tools list --profile <PROFILE:user_01> --config-dir <TMP>/config
+exit: 1
+--- stdout
+--- stderr
+Durin could not complete this request. Run durin in a terminal to verify your profile and authorization; retain the same idempotency key when retrying a tool call.
+## durin tools list --profile <PROFILE:user_01> --config-dir <TMP>/config
+exit: 1
+--- stdout
+--- stderr
+Durin could not complete this request. Run durin in a terminal to verify your profile and authorization; retain the same idempotency key when retrying a tool call.
+## durin tools list --profile <PROFILE:user_01> --config-dir <TMP>/config
+exit: 1
+--- stdout
+--- stderr
+Durin could not complete this request. Run durin in a terminal to verify your profile and authorization; retain the same idempotency key when retrying a tool call.

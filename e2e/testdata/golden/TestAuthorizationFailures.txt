@@ -1,0 +1,91 @@
+## durin tools list --config-dir <TMP>/config
+exit: 1
+--- stdout
+--- stderr
+No valid organization profile. Run durin in a terminal to complete setup.
+## durin verify --config-dir <TMP>/config
+exit: 1
+--- stdout
+--- stderr
+No valid organization profile. Run durin in a terminal to complete setup.
+## durin mcp serve --config-dir <TMP>/config
+exit: 1
+--- stdout
+--- stderr
+No valid organization profile. Run durin in a terminal to complete setup.
+## durin tools list --config-dir <TMP>/config
+exit: 1
+--- stdout
+--- stderr
+This durin profile isn’t signed in to its organization’s MCP server: it never signed in, or its sign-in ended or was revoked. Run durin in a terminal to sign in again.
+## requests
+POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Content-Type: application/json] {"id":0,"jsonrpc":"2.0","method":"initialize","params":{"capabilities":{},"clientInfo":{"name":"Durin CLI","version":"1.0.0"},"protocolVersion":"2025-11-25"}}
+GET /.well-known/oauth-protected-resource/mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Mcp-Protocol-Version: 2025-11-25]
+GET /.well-known/oauth-authorization-server [Mcp-Protocol-Version: 2025-11-25]
+## durin tools list --config-dir <TMP>/config
+exit: 0
+--- stdout
+{
+  "tools": [
+    {
+      "name": "a",
+      "inputSchema": {
+        "type": "object"
+      }
+    }
+  ]
+}
+--- stderr
+## requests
+POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-expired] [Content-Type: application/json] {"id":0,"jsonrpc":"2.0","method":"initialize","params":{"capabilities":{},"clientInfo":{"name":"Durin CLI","version":"1.0.0"},"protocolVersion":"2025-11-25"}}
+GET /.well-known/oauth-protected-resource/mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Mcp-Protocol-Version: 2025-11-25]
+GET /.well-known/oauth-authorization-server [Mcp-Protocol-Version: 2025-11-25]
+POST /token [Content-Type: application/x-www-form-urlencoded] client_id=client-seeded&grant_type=refresh_token&refresh_token=refresh-seeded&resource=<ORIGIN>/mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-1] [Content-Type: application/json] {"id":0,"jsonrpc":"2.0","method":"initialize","params":{"capabilities":{},"clientInfo":{"name":"Durin CLI","version":"1.0.0"},"protocolVersion":"2025-11-25"}}
+POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-1] [Content-Type: application/json] [Mcp-Protocol-Version: 2025-11-25] [Mcp-Session-Id: session-1] {"id":1,"jsonrpc":"2.0","method":"tools/list"}
+(notification) POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-1] [Content-Type: application/json] [Mcp-Protocol-Version: 2025-11-25] [Mcp-Session-Id: session-1] {"jsonrpc":"2.0","method":"notifications/initialized"}
+## stored tokens after refresh
+{"access_token":"access-1","token_type":"Bearer","expires_in":3600,"refresh_token":"refresh-1","issuer":"<ORIGIN>"}
+⏎ (no trailing newline)
+## durin tools list --config-dir <TMP>/config
+exit: 1
+--- stdout
+--- stderr
+[mcp-sdk] OAuth "invalid_grant" — invalidating the stored tokens and retrying authorization. Cause: "refresh token revoked"
+This durin profile isn’t signed in to its organization’s MCP server: it never signed in, or its sign-in ended or was revoked. Run durin in a terminal to sign in again.
+## requests
+POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-expired] [Content-Type: application/json] {"id":0,"jsonrpc":"2.0","method":"initialize","params":{"capabilities":{},"clientInfo":{"name":"Durin CLI","version":"1.0.0"},"protocolVersion":"2025-11-25"}}
+GET /.well-known/oauth-protected-resource/mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Mcp-Protocol-Version: 2025-11-25]
+GET /.well-known/oauth-authorization-server [Mcp-Protocol-Version: 2025-11-25]
+POST /token [Content-Type: application/x-www-form-urlencoded] client_id=client-seeded&grant_type=refresh_token&refresh_token=refresh-revoked&resource=<ORIGIN>/mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+## credentials after refused refresh
+mcp:<PROFILE:user_01>:client (label keyring:mcp:<PROFILE:user_01>:client@com.getdurin.cli)
+## durin verify --config-dir <TMP>/config
+exit: 1
+--- stdout
+--- stderr
+This durin profile isn’t signed in to its organization’s MCP server: it never signed in, or its sign-in ended or was revoked. Run durin in a terminal to sign in again.
+## requests
+POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-expired] [Content-Type: application/json] {"id":0,"jsonrpc":"2.0","method":"initialize","params":{"capabilities":{},"clientInfo":{"name":"Durin CLI","version":"1.0.0"},"protocolVersion":"2025-11-25"}}
+GET /.well-known/oauth-protected-resource/mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Mcp-Protocol-Version: 2025-11-25]
+GET /.well-known/oauth-authorization-server [Mcp-Protocol-Version: 2025-11-25]
+## durin verify --config-dir <TMP>/config
+exit: 1
+--- stdout
+--- stderr
+Saved MCP credentials are invalid. Run durin to authorize this organization again.
+## durin verify --config-dir <TMP>/config
+exit: 1
+--- stdout
+--- stderr
+Saved MCP credentials are invalid. Run durin to authorize this organization again.
+## requests
+## durin tools call a --input - --idempotency-key k --config-dir <TMP>/config
+exit: 1
+--- stdout
+--- stderr
+Durin could not complete this request. Run durin in a terminal to verify your profile and authorization; retain the same idempotency key when retrying a tool call.
+## requests
+POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-seeded] [Content-Type: application/json] {"id":0,"jsonrpc":"2.0","method":"initialize","params":{"capabilities":{},"clientInfo":{"name":"Durin CLI","version":"1.0.0"},"protocolVersion":"2025-11-25"}}
+POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-seeded] [Content-Type: application/json] [Mcp-Protocol-Version: 2025-11-25] [Mcp-Session-Id: session-1] {"id":1,"jsonrpc":"2.0","method":"tools/call","params":{"_meta":{"io.durin/control":{"idempotencyKey":"k"}},"arguments":{},"name":"a"}}
+(notification) POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-seeded] [Content-Type: application/json] [Mcp-Protocol-Version: 2025-11-25] [Mcp-Session-Id: session-1] {"jsonrpc":"2.0","method":"notifications/initialized"}

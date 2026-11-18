@@ -1,0 +1,13 @@
+## durin verify --config-dir <TMP>/config
+exit: 1
+--- stdout
+--- stderr
+A previous Durin process was interrupted. With Durin and its bridges stopped, remove the abandoned lock <TMP>/config/locks/<PROFILE:user_01>.lock, then retry with the same idempotency key.
+## durin logout --config-dir <TMP>/config
+exit: 1
+--- stdout
+--- stderr
+A previous Durin process was interrupted. With Durin and its bridges stopped, remove the abandoned lock <TMP>/config/locks/<PROFILE:user_01>.lock, then retry with the same idempotency key.
+## requests
+## locks
+<PROFILE:user_01>.lock file 0600

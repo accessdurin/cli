@@ -1,0 +1,30 @@
+## durin login (conflict, interactive)
+exit: 1
+--- stdout
+--- stderr
+## reported conflict
+yes
+## ~/.claude.json
+{
+  // keep me
+  "mcpServers": {
+    "durin-<PROFILE12>": { "type": "stdio", "command": "/somewhere/else", "args": [] }
+  }
+}
+## config directory (without runtime)
+profiles dir 0700
+profiles/<PROFILE>.json file 0600
+## requests
+GET /auth/cli/config
+POST /user_management/authorize/device [Content-Type: application/x-www-form-urlencoded] client_id=client_account
+POST /user_management/authenticate [Content-Type: application/x-www-form-urlencoded] client_id=client_account&device_code=device-1&grant_type=urn:ietf:params:oauth:grant-type:device_code
+GET /api/v1/session [Authorization: Bearer account-access] [Content-Type: application/json] [Origin: <ORIGIN>] [X-Requested-With: durin]
+POST /user_management/authenticate [Content-Type: application/x-www-form-urlencoded] client_id=client_account&grant_type=refresh_token&organization_id=org_wos_1&refresh_token=account-refresh
+GET /api/v1/session [Authorization: Bearer account-access] [Content-Type: application/json] [Origin: <ORIGIN>] [X-Requested-With: durin]
+GET /api/v1/onboarding [Authorization: Bearer account-access] [Content-Type: application/json] [Origin: <ORIGIN>] [X-Requested-With: durin]
+GET /api/v1/me/bootstrap [Authorization: Bearer account-access] [Content-Type: application/json] [Origin: <ORIGIN>] [X-Requested-With: durin]
+GET /.well-known/oauth-protected-resource/mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Mcp-Protocol-Version: 2025-11-25]
+## durin login (agent missing, interactive)
+exit: 1
+--- stdout
+--- stderr
