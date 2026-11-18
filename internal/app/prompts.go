@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
-	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/huh/v2"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/colorprofile"
 
 	"github.com/accessdurin/cli/internal/clierror"
 )
@@ -26,32 +28,34 @@ type promptOption struct {
 	Value, Label, Hint string
 }
 
-// prompter is the interactive terminal: questions read from in and draw on out, messages are
-// written to out.
+// prompter is the interactive terminal: questions read from in and draw on out; messages
+// are written to out too, with colours reduced to what it supports (none when it is not a
+// terminal).
 type prompter struct {
-	in    io.Reader
-	out   io.Writer
-	style promptStyles
+	in       io.Reader
+	out      io.Writer
+	messages io.Writer
+	style    promptStyles
 }
 
 type promptStyles struct {
 	bar, step, info, active, cancel, dim lipgloss.Style
 }
 
+// newPrompter uses huh v2 (Bubble Tea v2). Version 1 queried the terminal's background
+// colour when the package was initialized, in every durin command: in a terminal that does
+// not answer, that stalled startup for seconds and swallowed the keys typed meanwhile.
+// Colours here are ANSI palette indices, so they suit light and dark terminals alike.
 func newPrompter(in io.Reader, out io.Writer) *prompter {
-	// An explicit background keeps lipgloss from querying the terminal for its colour, which
-	// would read (and swallow) the user's first keystrokes and stall for seconds in terminals
-	// that never answer.
-	lipgloss.SetHasDarkBackground(true)
-	renderer := lipgloss.NewRenderer(out)
-	renderer.SetHasDarkBackground(true)
-	color := func(c string) lipgloss.Style { return renderer.NewStyle().Foreground(lipgloss.Color(c)) }
-	return &prompter{in: in, out: out, style: promptStyles{
+	color := func(c string) lipgloss.Style { return lipgloss.NewStyle().Foreground(lipgloss.Color(c)) }
+	return &prompter{in: in, out: out, messages: colorprofile.NewWriter(out, os.Environ()), style: promptStyles{
 		bar: color("8"), step: color("2"), info: color("4"), active: color("6"), cancel: color("1"), dim: color("8"),
 	}}
 }
 
-func (p *prompter) printf(format string, args ...any) { _, _ = fmt.Fprintf(p.out, format, args...) }
+func (p *prompter) printf(format string, args ...any) {
+	_, _ = fmt.Fprintf(p.messages, format, args...)
+}
 
 // block prints a gutter line, then symbol and the first line of message, then the rest of
 // its lines in the gutter.
@@ -120,10 +124,12 @@ func (p *prompter) answered(question, answer string) {
 	p.symbolLines(p.style.step.Render("◇"), question+"\n"+p.style.dim.Render(answer))
 }
 
-func (p *prompter) theme() *huh.Theme {
-	theme := huh.ThemeBase16()
-	theme.Focused.Title = theme.Focused.Title.Bold(true)
-	return theme
+func (p *prompter) theme() huh.Theme {
+	return huh.ThemeFunc(func(isDark bool) *huh.Styles {
+		styles := huh.ThemeBase16(isDark)
+		styles.Focused.Title = styles.Focused.Title.Bold(true)
+		return styles
+	})
 }
 
 func (p *prompter) run(ctx context.Context, field huh.Field) error {
