@@ -31,10 +31,10 @@ The canonical skills live at [accessdurin/skills](https://github.com/accessdurin
 | `durin-hooks`    | Configure or diagnose a local checker and its hooks         |
 
 The CLI embeds a snapshot with its source commit and SHA-256 digests in
-`src/skill-bundle.ts`. Setup does not fetch instructions from GitHub. The same
-snapshot stays available in the stable runtime copied out of an `npx` cache.
+`internal/app/skill_bundle.go`. Setup does not fetch instructions from GitHub. The
+same snapshot stays available in the stable runtime copied out of an `npx` cache.
 Maintainers update it from a reviewed, committed checkout with
-`pnpm skills:sync /path/to/skills`, then format, review, and verify the generated
+`go run ./tools/syncskills /path/to/skills`, then review and verify the generated
 file. Publish that source commit before releasing a CLI that references it.
 
 Setup installs skills only for the selected harness. Each installed skill has a
@@ -186,7 +186,8 @@ is `jsonc` or `toml`; `serverKey` names the MCP server collection. `bridge` is
 `{"type":"stdio"}`. Credentials are never written into these entries.
 
 For `hookConfig.format: "custom"`, the generated file contains
-`{"durin":{"command":["/absolute/node","/absolute/durin/runtime/cli.mjs","hooks","run",...]}}`.
+`{"durin":{"command":["/absolute/durin/runtime/durin","hooks","run",...]}}`
+(`durin.exe` on Windows).
 Wire that argv directly into your harness's synchronous pre-tool callback, send
 the normalized JSON on stdin, and honor exit 2 before executing the tool. Custom
 hooks do not become active simply because this descriptor exists. A compatible

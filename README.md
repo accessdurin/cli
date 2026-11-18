@@ -5,8 +5,9 @@ agent, and authorize that organization's Durin MCP. Setup verifies the saved MCP
 bridge, installs Durin skills, and offers local hook configuration before recommending that you reopen the selected harness. It never starts an
 agent conversation. Agent selection is interactive; `--agent` and `-a` are rejected.
 
-Requires Node 24.22.1 or later in the Node 24 release line and an unlocked OS
-credential store. This repository contains the standalone CLI and the client contracts it consumes.
+Requires an unlocked OS credential store. The CLI is a single native executable
+written in Go. This repository contains the standalone CLI and the client
+contracts it consumes.
 
 ## Product boundaries
 
@@ -35,24 +36,34 @@ authenticated MCP catalog, not Endpoint enrollment, hook execution or device hea
 The CLI's `durin mcp endpoint` command prints an MCP resource URL; it does not start
 or configure the native Endpoint Client.
 
+## Install
+
+Run `npx @accessdurin/cli`, or install the executable with
+`npm install --global @accessdurin/cli`. The npm package is a small launcher that
+runs the native executable from a per-platform package; Node 18 or later is needed
+only to start it. Homebrew, Debian/Ubuntu packages, a Windows per-user installer,
+and portable archives are covered in the [distribution documentation](docs/distribution.md).
+Each channel offers only the releases published to it.
+
 ## Run from this repository
 
+Use Go 1.27 or later, as declared in `go.mod`:
+
 ```sh
-npm install --global pnpm@11.21.0
 git clone https://github.com/accessdurin/cli.git
 cd cli
-pnpm install --frozen-lockfile
-pnpm build
-node dist/cli.js --help
-node dist/cli.js
+go build -o durin ./cmd/durin
+./durin --help
+./durin
 ```
 
-The examples below use `durin` for this executable. To install a local build, run
-`pnpm pack --pack-destination /tmp/durin-cli-release`, then install the resulting
-archive with `npm install --global /tmp/durin-cli-release/accessdurin-cli-1.1.0.tgz`.
-After the first npm release, run `pnpx @accessdurin/cli` or install the executable
-with `npm install --global @accessdurin/cli`. Publishing this Git repository alone
-does not make the package available on npm.
+macOS builds need cgo for the Keychain; Go enables it by default when Xcode's
+Command Line Tools are installed. Linux and
+Windows builds are pure Go and also work with `CGO_ENABLED=0`. The examples below
+use `durin` for this executable. To install a local build, copy it to a directory
+on your PATH. Setup copies the executable into the profile directory, so agents do
+not depend on the checkout. Publishing this Git repository alone does not make the
+package available on npm.
 The default app origin is `https://app.getdurin.com`. That deployment must have
 AuthKit CLI authentication and MCP authorization configured before onboarding works.
 Setup accepts each host it is given only if the selected app uses it. Hosts match
@@ -224,18 +235,22 @@ Claude honors `CLAUDE_CONFIG_DIR`; Codex honors `CODEX_HOME`; OpenCode honors
 Malformed, disabled, conflicting, or concurrently modified configurations are refused.
 Project or managed harness settings may override these user-level files.
 
-The CLI copies its executable and native credential-store dependency to a stable
-location under the profile directory. Agent configs contain absolute Node/runtime
-paths and profile references, never tokens. Keep the referenced Node installation
-available. Because agents execute that runtime, on macOS and Linux the CLI requires
+The CLI copies its executable to a stable location under the profile directory,
+`<config-dir>/runtime/durin` (`durin.exe` on Windows). Agent configs contain that
+absolute runtime path and profile references, never tokens, so upgrading or
+removing the installed CLI does not break them. Rerunning `durin` migrates bridge
+entries and hooks written by the earlier TypeScript CLI to the new runtime, keeping
+comments and unrelated settings; until then they keep using its Node runtime.
+Because agents execute that runtime, on macOS and Linux the CLI requires
 the profile directory and its `runtime` directory to be owned by you with no group or
 other permissions (for example 0700). It refuses a configured or resolved path that
 passes through a symlink another user owns or a world-writable directory without the
 sticky bit; intermediate links of a multi-hop symlink chain are not checked. An
 installed runtime is reused only while its files match and no other user can modify
-them. These checks do not run on Windows. `NODE_EXTRA_CA_CERTS` is passed to the
-verification child when present; custom enterprise certificate settings must also be
-available to your harness.
+them. These checks do not run on Windows. The CLI does not read
+`NODE_EXTRA_CA_CERTS`; on Linux, `SSL_CERT_FILE` and `SSL_CERT_DIR` select its
+trusted certificates. All three are passed to the verification child when present;
+custom enterprise certificate settings must also be available to your harness.
 
 ## Direct MCP and credentials
 
@@ -326,24 +341,38 @@ when your client cannot supply this metadata.
 ## Development and verification
 
 ```sh
-pnpm install --frozen-lockfile
-pnpm verify
-# Optional actual OS credential-store round trip with synthetic values and cleanup:
-DURIN_TEST_KEYRING=1 pnpm exec vitest run src/credentials.native.test.ts
-pnpm pack --pack-destination /tmp/durin-cli-release
+gofmt -l .   # must print nothing
+go vet ./...
+go test ./internal/... ./cmd/... ./tools/...
+e2e/run.sh
+go run ./tools/checksecrets
+# Optional actual OS credential-store round trip with synthetic values and cleanup,
+# in a session with an unlocked credential store:
+DURIN_TEST_KEYRING=1 go test ./internal/credentials/
+# Release packages for this OS/architecture in ignored release/ (needs npm,
+# and dpkg-deb on Linux):
+go run ./tools/release package
 ```
 
-`pnpm verify` checks formatting, lint, strict types, CLI unit/integration tests,
-the Node build, and repository credential patterns. Tests use isolated local
-files and synthetic credentials. The actual OS credential-store test is opt-in.
+These check formatting, vet, CLI unit/integration tests, the black-box parity
+harness, and repository credential patterns. CI also cross-compiles for Windows,
+macOS, and Linux ARM64. `e2e/run.sh` runs a fresh build against local fake servers
+with a private D-Bus session and unlocked keyring, and compares each scenario with
+goldens recorded from the TypeScript CLI. It needs `dbus-daemon`,
+`gnome-keyring-daemon`, and `secret-tool` (Debian/Ubuntu packages `dbus`,
+`gnome-keyring`, and `libsecret-tools`). Tests use isolated local files and
+synthetic credentials. The actual OS credential-store test is opt-in.
 No Durin server, website, infrastructure, provider credentials, or account sessions
 are stored in this repository. Local tests do not prove hosted provider readiness
 or acceptance by every installed agent harness.
 
-`src/contracts` contains only the wire schemas this client consumes. `src/ports`
-defines the CLI's narrow interfaces; adapters remain in `src`. The CLI builds
+`internal/contracts` contains only the wire schemas this client consumes.
+`internal/ports` defines the CLI's narrow interfaces as Go interfaces; adapters
+remain in `internal/app`, and `cmd/durin` is the entry point. The CLI builds
 independently, with no private repository or workspace dependency. Update client
 contracts with compatibility tests for the server responses the CLI consumes.
+[The Go port](docs/go-port.md) records what the rewrite from TypeScript kept and
+changed, and how parity is checked.
 
 Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for local setup,
 verification, and pull requests, and [SECURITY.md](SECURITY.md) for confidential
@@ -353,18 +382,14 @@ the repository review.
 
 ## Credentials and publication
 
-The CLI reports unexpected command failures, uncaught exceptions, and unhandled
-promise rejections to Durin's Sentry CLI project using a public DSN embedded
+The CLI reports unexpected command failures and panics to Durin's Sentry CLI project using a public DSN embedded
 in the executable. Reports include the CLI version, platform, error type, and
 stack locations. Error messages are replaced with a fixed description; absolute
 paths, credentials, command arguments, tool payloads, user details, and console
 output are excluded. Expected usage and authorization errors are not reported.
-Command execution is traced at 100%, with trace-driven CPU profiling sampled at
-100% per CLI session. Profiles include function names and relative frame locations;
-absolute paths are removed. The native profiler and its dependencies are copied
-into installed runtimes alongside the credential store. Reporting is best effort,
-with a two-second flush timeout after commands finish.
-To disable reporting, traces, and profiling, set `DO_NOT_TRACK=1` (or `true`) in
+Command execution is traced at 100%. Reporting is best effort, with a two-second
+flush timeout after commands finish.
+To disable reporting and traces, set `DO_NOT_TRACK=1` (or `true`) in
 the environment that starts the CLI and your agent. For a single invocation:
 
 ```sh
@@ -383,43 +408,47 @@ on a clean source checkout and review all findings before publishing.
 
 ## Publish to npm
 
-Publish from this standalone repository using Node 24.22.1 or later in the Node 24
-release line and pnpm 11.21.0. Publishing requires maintainer access to npm;
-building, testing, and contributing do not.
-You need access to the `@accessdurin` npm scope, either as its account owner or
-through the `accessdurin` npm organization. Browser login does not authenticate
-your terminal; `npm whoami` checks the terminal's session.
+npm publishing is manual. Publishing requires maintainer access to npm; building,
+testing, and contributing do not. You need access to the `@accessdurin` npm scope,
+either as its account owner or through the `accessdurin` npm organization. Browser
+login does not authenticate your terminal; `npm whoami` checks the terminal's session.
+
+Publish the npm packages from the GitHub release's assets, which the
+[release workflow](docs/distribution.md#build-and-release) builds and starts on
+each target OS. `@accessdurin/cli` is the launcher; its optional dependencies
+name the five platform packages at the same version, so publish those first:
 
 ```sh
-git clone https://github.com/accessdurin/cli.git
-cd cli
-pnpm install --frozen-lockfile
-pnpm verify
+# In a directory holding the release's assets and SHA256SUMS:
+sha256sum --ignore-missing --check SHA256SUMS
 npm whoami --registry=https://registry.npmjs.org/
 # If whoami fails, sign in and complete the browser prompt:
 npm login --registry=https://registry.npmjs.org/
-npm publish --dry-run --access public --ignore-scripts=false
-npm publish --access public --ignore-scripts=false
+for platform in linux-x64 linux-arm64 darwin-x64 darwin-arm64 win32-x64; do
+  npm publish --access public ./accessdurin-cli-$platform-1.1.0.tgz
+done
+npm publish --dry-run --access public ./accessdurin-cli-1.1.0.tgz
+npm publish --access public ./accessdurin-cli-1.1.0.tgz
 ```
 
-Complete npm's authentication/2FA prompt when requested. The package's
+Complete npm's authentication/2FA prompt when requested. Each package's
 `publishConfig` selects the public npm registry and public access; this does not
-change the GitHub repository's visibility. `prepublishOnly` runs `pnpm verify`,
-and `prepack` builds the executable. The commands explicitly enable those hooks
-even when npm's `ignore-scripts` setting is enabled. The package contains `dist/cli.js`,
-generated `dist/THIRD_PARTY_LICENSES.md`, `package.json`, this README, and the MIT
-`LICENSE`.
+change the GitHub repository's visibility. A platform package
+(`@accessdurin/cli-<os>-<arch>`) contains the executable, the MIT `LICENSE`, and
+generated `THIRD_PARTY_LICENSES.md`. The launcher contains `bin/durin.js`,
+`package.json`, this README, and the MIT `LICENSE`; it requires Node 18 or later
+only to start the executable.
 
 After publishing, check the registry and run the released executable:
 
 ```sh
 npm view @accessdurin/cli version --registry=https://registry.npmjs.org/
-pnpx @accessdurin/cli --help
+npx @accessdurin/cli --help
 ```
 
-For subsequent releases, update the version with `npm version patch` (or `minor`
-or `major`), push the version commit/tag, and publish again. npm will not accept
-another release of the same name and version.
+For subsequent releases, update `Version` in `internal/version/version.go`,
+release through the workflow, and publish again. npm will not accept another
+release of the same name and version.
 
 See npm's [scoped publishing guide](https://docs.npmjs.com/creating-and-publishing-scoped-public-packages/)
 and [`npm publish` reference](https://docs.npmjs.com/cli/v11/commands/npm-publish/).
@@ -428,5 +457,5 @@ and [`npm publish` reference](https://docs.npmjs.com/cli/v11/commands/npm-publis
 
 Durin's code and documentation are MIT licensed. See [LICENSE](LICENSE). The
 Claude plugin includes its own [copy](plugins/durin/LICENSE). Dependencies and
-the Node runtime retain their upstream licenses; see [license provenance and
+ported code retain their upstream licenses; see [license provenance and
 distribution](licenses/README.md).

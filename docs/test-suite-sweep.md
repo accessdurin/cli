@@ -1,5 +1,11 @@
 # CLI test-suite sweep
 
+> **Historical record.** This sweep describes the TypeScript CLI before it was rewritten
+> in Go. The TypeScript sources, pnpm scripts, and Vitest suite it names were
+> removed; commit `3ab3415` is the last that contains them. See
+> [the Go port](go-port.md) for what changed and [CONTRIBUTING.md](../CONTRIBUTING.md)
+> for the current checks.
+
 Baseline: `b8f777e`, measured on 1 November 2026.
 
 The sweep reduces the suite from 879 tests in 38 files to 779 tests in 36 files.
@@ -130,15 +136,16 @@ locations and zero newly excluded files.
 | Functions  |     394 / 466 (84.54%) |     394 / 466 (84.54%) |
 | Branches   |     511 / 693 (73.73%) |     511 / 693 (73.73%) |
 
-To reproduce functional verification, use the repository's pinned Node/pnpm
-versions and run:
+To reproduce functional verification, check out the TypeScript sources (the
+baseline `b8f777e`, or `3ab3415`), use their pinned Node/pnpm versions and run:
 
 ```sh
 pnpm install --frozen-lockfile
 pnpm verify
 ```
 
-To collect comparable coverage in disposable copies of baseline and candidate:
+To collect comparable coverage in disposable copies of baseline and candidate
+TypeScript checkouts:
 
 ```sh
 pnpm add -D @vitest/coverage-v8@4.1.12

@@ -1,9 +1,9 @@
 // Package e2e is a black-box parity harness for the durin CLI. It runs whichever build
-// DURIN_BIN names (for example "node dist/cli.js" or "./durin") against fake durin, WorkOS,
+// DURIN_BIN names (by default a fresh `go build` of ./cmd/durin) against fake durin, WorkOS,
 // OAuth and MCP servers on loopback, with a real OS credential store, and compares each
 // scenario's normalized transcript with a golden file. The goldens were recorded from the
-// TypeScript CLI, so any build that passes behaves like it: same output, exit codes, files
-// and HTTP requests.
+// TypeScript CLI this Go CLI replaced (see docs/go-port.md), so a build that passes behaves
+// like it: same output, exit codes, files and HTTP requests.
 //
 // Run with e2e/run.sh, which starts a private D-Bus session with an unlocked keyring.
 // Set DURIN_UPDATE_GOLDEN=1 to re-record goldens.

@@ -27,8 +27,7 @@ plugin. The plugin is designed for Claude Code's local terminal and MCP support.
 
 ## Connect your organization
 
-Run `/durin:setup`. You need Claude Code, Node 24.22.1 or later in the Node 24
-release line, and an unlocked OS credential store. Install the CLI from this
+Run `/durin:setup`. You need Claude Code and an unlocked OS credential store. Install the CLI from this
 public repository using the [installation instructions](references/cli-installation.md).
 CLI 1.1.0 adds portable skill and hook setup. Use the source installation until that version is published.
 
@@ -64,7 +63,7 @@ The installed plugin contains Markdown instructions, JSON metadata, and a listin
 hooks, background processes, bundled executable, telemetry, or automatic package
 installer. Claude can run CLI commands when needed for your request, subject to
 Claude Code's normal permissions. Installation from source fetches code and
-locked build dependencies from GitHub and the package registry.
+pinned Go module dependencies from GitHub and the Go module proxy.
 
 The separately installed CLI contacts your selected Durin deployment (by default
 `https://app.getdurin.com`), its discovered identity and MCP authorization services,
