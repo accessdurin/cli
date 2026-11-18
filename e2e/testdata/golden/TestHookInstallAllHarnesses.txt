@@ -1,0 +1,422 @@
+## durin login (claude, interactive)
+exit: 0
+--- stdout
+--- stderr
+## claude hooks .claude/settings.json
+ConfigChange {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'ConfigChange'","timeout":10,"type":"command"}
+CwdChanged {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'CwdChanged'","timeout":10,"type":"command"}
+DirectoryAdded {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'DirectoryAdded'","timeout":10,"type":"command"}
+Elicitation {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'Elicitation'","timeout":10,"type":"command"}
+ElicitationResult {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'ElicitationResult'","timeout":10,"type":"command"}
+FileChanged {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'FileChanged'","timeout":10,"type":"command"}
+InstructionsLoaded {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'InstructionsLoaded'","timeout":10,"type":"command"}
+Notification {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'Notification'","timeout":10,"type":"command"}
+PermissionDenied matcher=.* {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'PermissionDenied'","timeout":10,"type":"command"}
+PermissionRequest matcher=.* {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'PermissionRequest'","timeout":10,"type":"command"}
+PostCompact {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'PostCompact'","timeout":10,"type":"command"}
+PostModelSwitch {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'PostModelSwitch'","timeout":10,"type":"command"}
+PostToolBatch {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'PostToolBatch'","timeout":10,"type":"command"}
+PostToolUse matcher=.* {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'PostToolUse'","timeout":10,"type":"command"}
+PostToolUseFailure matcher=.* {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'PostToolUseFailure'","timeout":10,"type":"command"}
+PreCompact {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'PreCompact'","timeout":10,"type":"command"}
+PreToolUse matcher=.* {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'PreToolUse'","timeout":10,"type":"command"}
+SessionEnd {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'SessionEnd'","timeout":10,"type":"command"}
+SessionStart {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'SessionStart'","timeout":10,"type":"command"}
+Setup {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'Setup'","timeout":10,"type":"command"}
+Stop {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'Stop'","timeout":10,"type":"command"}
+StopFailure {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'StopFailure'","timeout":10,"type":"command"}
+SubagentStart {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'SubagentStart'","timeout":10,"type":"command"}
+SubagentStop {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'SubagentStop'","timeout":10,"type":"command"}
+TaskCompleted {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'TaskCompleted'","timeout":10,"type":"command"}
+TaskCreated {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'TaskCreated'","timeout":10,"type":"command"}
+TeammateIdle {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'TeammateIdle'","timeout":10,"type":"command"}
+UserPromptExpansion {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'UserPromptExpansion'","timeout":10,"type":"command"}
+UserPromptSubmit {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'UserPromptSubmit'","timeout":10,"type":"command"}
+## durin login (codex, interactive)
+exit: 0
+--- stdout
+--- stderr
+## codex hooks .codex/hooks.json
+Interrupt {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'codex' '--config-dir' '<TMP>/config' '--event' 'Interrupt'","timeout":3,"type":"command"}
+PermissionRequest matcher=.* {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'codex' '--config-dir' '<TMP>/config' '--event' 'PermissionRequest'","timeout":10,"type":"command"}
+PostCompact {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'codex' '--config-dir' '<TMP>/config' '--event' 'PostCompact'","timeout":10,"type":"command"}
+PostModelRequest {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'codex' '--config-dir' '<TMP>/config' '--event' 'PostModelRequest'","timeout":10,"type":"command"}
+PostToolUse matcher=.* {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'codex' '--config-dir' '<TMP>/config' '--event' 'PostToolUse'","timeout":10,"type":"command"}
+PreCompact {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'codex' '--config-dir' '<TMP>/config' '--event' 'PreCompact'","timeout":10,"type":"command"}
+PreModelRequest {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'codex' '--config-dir' '<TMP>/config' '--event' 'PreModelRequest'","timeout":10,"type":"command"}
+PreToolUse matcher=.* {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'codex' '--config-dir' '<TMP>/config' '--event' 'PreToolUse'","timeout":10,"type":"command"}
+SessionEnd {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'codex' '--config-dir' '<TMP>/config' '--event' 'SessionEnd'","timeout":3,"type":"command"}
+SessionStart {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'codex' '--config-dir' '<TMP>/config' '--event' 'SessionStart'","timeout":10,"type":"command"}
+Stop {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'codex' '--config-dir' '<TMP>/config' '--event' 'Stop'","timeout":10,"type":"command"}
+SubagentStart {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'codex' '--config-dir' '<TMP>/config' '--event' 'SubagentStart'","timeout":10,"type":"command"}
+SubagentStop {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'codex' '--config-dir' '<TMP>/config' '--event' 'SubagentStop'","timeout":10,"type":"command"}
+UserPromptSubmit {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'codex' '--config-dir' '<TMP>/config' '--event' 'UserPromptSubmit'","timeout":10,"type":"command"}
+## durin login (cursor, interactive)
+exit: 0
+--- stdout
+--- stderr
+## cursor hooks .cursor/hooks.json
+afterAgentResponse {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'cursor' '--config-dir' '<TMP>/config' '--event' 'afterAgentResponse'","timeout":10}
+afterAgentThought {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'cursor' '--config-dir' '<TMP>/config' '--event' 'afterAgentThought'","timeout":10}
+afterFileEdit {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'cursor' '--config-dir' '<TMP>/config' '--event' 'afterFileEdit'","timeout":10}
+afterMCPExecution {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'cursor' '--config-dir' '<TMP>/config' '--event' 'afterMCPExecution'","timeout":10}
+afterShellExecution {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'cursor' '--config-dir' '<TMP>/config' '--event' 'afterShellExecution'","timeout":10}
+afterTabFileEdit {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'cursor' '--config-dir' '<TMP>/config' '--event' 'afterTabFileEdit'","timeout":10}
+beforeSubmitPrompt {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'cursor' '--config-dir' '<TMP>/config' '--event' 'beforeSubmitPrompt'","timeout":10}
+postToolUse {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'cursor' '--config-dir' '<TMP>/config' '--event' 'postToolUse'","timeout":10}
+postToolUseFailure {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'cursor' '--config-dir' '<TMP>/config' '--event' 'postToolUseFailure'","timeout":10}
+preCompact {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'cursor' '--config-dir' '<TMP>/config' '--event' 'preCompact'","timeout":10}
+sessionEnd {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'cursor' '--config-dir' '<TMP>/config' '--event' 'sessionEnd'","timeout":10}
+sessionStart {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'cursor' '--config-dir' '<TMP>/config' '--event' 'sessionStart'","timeout":10}
+stop {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'cursor' '--config-dir' '<TMP>/config' '--event' 'stop'","timeout":10}
+subagentStop {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'cursor' '--config-dir' '<TMP>/config' '--event' 'subagentStop'","timeout":10}
+workspaceOpen {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'cursor' '--config-dir' '<TMP>/config' '--event' 'workspaceOpen'","timeout":10}
+## durin login (windsurf, interactive)
+exit: 0
+--- stdout
+--- stderr
+## windsurf hooks .codeium/windsurf/hooks.json
+post_cascade_response {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'windsurf' '--config-dir' '<TMP>/config' '--event' 'post_cascade_response'","show_output":false}
+post_cascade_response_with_transcript {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'windsurf' '--config-dir' '<TMP>/config' '--event' 'post_cascade_response_with_transcript'","show_output":false}
+post_mcp_tool_use {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'windsurf' '--config-dir' '<TMP>/config' '--event' 'post_mcp_tool_use'","show_output":false}
+post_read_code {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'windsurf' '--config-dir' '<TMP>/config' '--event' 'post_read_code'","show_output":false}
+post_run_command {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'windsurf' '--config-dir' '<TMP>/config' '--event' 'post_run_command'","show_output":false}
+post_write_code {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'windsurf' '--config-dir' '<TMP>/config' '--event' 'post_write_code'","show_output":false}
+pre_mcp_tool_use {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'windsurf' '--config-dir' '<TMP>/config' '--event' 'pre_mcp_tool_use'","show_output":false}
+pre_read_code {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'windsurf' '--config-dir' '<TMP>/config' '--event' 'pre_read_code'","show_output":false}
+pre_run_command {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'windsurf' '--config-dir' '<TMP>/config' '--event' 'pre_run_command'","show_output":false}
+pre_user_prompt {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'windsurf' '--config-dir' '<TMP>/config' '--event' 'pre_user_prompt'","show_output":false}
+pre_write_code {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'windsurf' '--config-dir' '<TMP>/config' '--event' 'pre_write_code'","show_output":false}
+## durin login (gemini, interactive)
+exit: 0
+--- stdout
+--- stderr
+## gemini hooks .gemini/settings.json
+AfterAgent {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'gemini' '--config-dir' '<TMP>/config' '--event' 'AfterAgent'","name":"durin-capture","timeout":10000,"type":"command"}
+AfterTool matcher=.* {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'gemini' '--config-dir' '<TMP>/config' '--event' 'AfterTool'","name":"durin-capture","timeout":10000,"type":"command"}
+BeforeAgent {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'gemini' '--config-dir' '<TMP>/config' '--event' 'BeforeAgent'","name":"durin-capture","timeout":10000,"type":"command"}
+BeforeModel {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'gemini' '--config-dir' '<TMP>/config' '--event' 'BeforeModel'","name":"durin-capture","timeout":10000,"type":"command"}
+BeforeTool matcher=.* {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'gemini' '--config-dir' '<TMP>/config' '--event' 'BeforeTool'","name":"durin-capture","timeout":10000,"type":"command"}
+BeforeToolSelection {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'gemini' '--config-dir' '<TMP>/config' '--event' 'BeforeToolSelection'","name":"durin-capture","timeout":10000,"type":"command"}
+Notification {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'gemini' '--config-dir' '<TMP>/config' '--event' 'Notification'","name":"durin-capture","timeout":10000,"type":"command"}
+PreCompress {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'gemini' '--config-dir' '<TMP>/config' '--event' 'PreCompress'","name":"durin-capture","timeout":10000,"type":"command"}
+SessionEnd {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'gemini' '--config-dir' '<TMP>/config' '--event' 'SessionEnd'","name":"durin-capture","timeout":10000,"type":"command"}
+SessionStart {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'gemini' '--config-dir' '<TMP>/config' '--event' 'SessionStart'","name":"durin-capture","timeout":10000,"type":"command"}
+## durin login (copilot, interactive)
+exit: 0
+--- stdout
+--- stderr
+## copilot hooks .copilot/hooks/durin.json
+agentStop {"args":["hooks","run","--harness","copilot","--config-dir","<TMP>/config","--event","agentStop"],"exec":"<LAUNCHER>","timeoutSec":10,"type":"command"}
+errorOccurred {"args":["hooks","run","--harness","copilot","--config-dir","<TMP>/config","--event","errorOccurred"],"exec":"<LAUNCHER>","timeoutSec":10,"type":"command"}
+notification {"args":["hooks","run","--harness","copilot","--config-dir","<TMP>/config","--event","notification"],"exec":"<LAUNCHER>","timeoutSec":10,"type":"command"}
+permissionRequest {"args":["hooks","run","--harness","copilot","--config-dir","<TMP>/config","--event","permissionRequest"],"exec":"<LAUNCHER>","timeoutSec":10,"type":"command"}
+postToolUse {"args":["hooks","run","--harness","copilot","--config-dir","<TMP>/config","--event","postToolUse"],"exec":"<LAUNCHER>","timeoutSec":10,"type":"command"}
+postToolUseFailure {"args":["hooks","run","--harness","copilot","--config-dir","<TMP>/config","--event","postToolUseFailure"],"exec":"<LAUNCHER>","timeoutSec":10,"type":"command"}
+preCompact {"args":["hooks","run","--harness","copilot","--config-dir","<TMP>/config","--event","preCompact"],"exec":"<LAUNCHER>","timeoutSec":10,"type":"command"}
+preToolUse {"args":["hooks","run","--harness","copilot","--config-dir","<TMP>/config","--event","preToolUse"],"exec":"<LAUNCHER>","timeoutSec":10,"type":"command"}
+sessionEnd {"args":["hooks","run","--harness","copilot","--config-dir","<TMP>/config","--event","sessionEnd"],"exec":"<LAUNCHER>","timeoutSec":10,"type":"command"}
+sessionStart {"args":["hooks","run","--harness","copilot","--config-dir","<TMP>/config","--event","sessionStart"],"exec":"<LAUNCHER>","timeoutSec":10,"type":"command"}
+subagentStart {"args":["hooks","run","--harness","copilot","--config-dir","<TMP>/config","--event","subagentStart"],"exec":"<LAUNCHER>","timeoutSec":10,"type":"command"}
+subagentStop {"args":["hooks","run","--harness","copilot","--config-dir","<TMP>/config","--event","subagentStop"],"exec":"<LAUNCHER>","timeoutSec":10,"type":"command"}
+userPromptSubmitted {"args":["hooks","run","--harness","copilot","--config-dir","<TMP>/config","--event","userPromptSubmitted"],"exec":"<LAUNCHER>","timeoutSec":10,"type":"command"}
+userPromptTransformed {"args":["hooks","run","--harness","copilot","--config-dir","<TMP>/config","--event","userPromptTransformed"],"exec":"<LAUNCHER>","timeoutSec":10,"type":"command"}
+## durin login (opencode, interactive)
+exit: 0
+--- stdout
+--- stderr
+## opencode hooks .config/opencode/plugins/durin.js
+// Managed by Durin CLI. Compatible with OpenCode V2 and V1 >= 1.18.29.
+import { execFile } from 'node:child_process';
+const durin = "<LAUNCHER>";
+const base = ["hooks","run","--harness","opencode","--config-dir","<TMP>/config"];
+const checked = false;
+const run = (name, event, timeout) => new Promise((resolve, reject) => {
+  let body;
+  try { body = JSON.stringify(event); } catch { body = '{}'; }
+  const child = execFile(durin, [...base, '--event', name], { timeout, maxBuffer: 65536, windowsHide: true }, (error) => error ? reject(new Error('Durin local check denied or failed.')) : resolve());
+  child.stdin.on('error', () => {});
+  child.stdin.end(body);
+});
+const capture = (name, event) => { if (/^[A-Za-z][A-Za-z0-9_.:-]{0,63}$/.test(name)) run(name, event, 10000).catch(() => {}); };
+const check = (event) => checked ? run('PreToolUse', event, 3000) : capture('PreToolUse', event);
+const streamed = new Set(['message.part.updated']);
+export default {
+  id: 'io.durin.local-checks',
+  async setup(ctx) {
+    await ctx.tool.hook('execute.before', (event) => check({ hook_event_name: 'PreToolUse', session_id: event.sessionID, tool_use_id: event.id, tool_name: event.tool, tool_input: event.input }));
+    await ctx.tool.hook('execute.after', (event) => { capture('tool.execute.after', { session_id: event.sessionID, tool_use_id: event.id, tool_name: event.tool, tool_input: event.input, output: event.output }); });
+    (async () => {
+      try { for await (const e of ctx.event.subscribe({ signal: new AbortController().signal })) if (e && !streamed.has(e.type)) capture(e.type, e); } catch {}
+    })();
+  },
+  async server({ directory }) {
+    return {
+      'tool.execute.before': (input, output) => check({ hook_event_name: 'PreToolUse', session_id: input.sessionID, tool_use_id: input.callID, tool_name: input.tool, tool_input: output.args, cwd: directory }),
+      'tool.execute.after': (input, output) => { capture('tool.execute.after', { session_id: input.sessionID, tool_use_id: input.callID, tool_name: input.tool, output, cwd: directory }); },
+      'chat.message': (input, output) => { capture('chat.message', { input, output, cwd: directory }); },
+      event: ({ event }) => { if (event && !streamed.has(event.type)) capture(event.type, event); },
+    };
+  }
+};
+## durin login (pi, interactive)
+exit: 0
+--- stdout
+--- stderr
+## pi hooks .pi/agent/extensions/durin.ts
+// Managed by Durin CLI.
+import { spawn } from 'node:child_process';
+const durin = "<LAUNCHER>";
+const base = ["hooks","run","--harness","pi","--config-dir","<TMP>/config"];
+const checked = false;
+const events = ["resources_discover","mcp_servers_change","session_start","session_info_changed","session_before_switch","session_before_fork","session_before_compact","session_compact","session_compact_failed","session_before_tree","session_tree","session_shutdown","before_agent_start","agent_start","agent_end","agent_before_settle","agent_settled","ui_prompt_start","ui_prompt_end","turn_start","turn_end","message_start","message_end","context","context_with_system","before_provider_headers","before_provider_request","after_provider_response","cache_warming_decision","tool_execution_start","tool_execution_end","tool_result","model_select","thinking_level_select","input","user_bash"];
+function run(name: string, payload: unknown, timeoutMs: number): Promise<number> {
+  return new Promise((resolve) => {
+    let body: string;
+    try { body = JSON.stringify(payload); } catch { body = '{}'; }
+    let child: any;
+    try { child = spawn(durin, [...base, '--event', name], { stdio: ['pipe', 'ignore', 'ignore'], windowsHide: true }); } catch { resolve(-1); return; }
+    const timer = setTimeout(() => { child.kill(); resolve(-1); }, timeoutMs);
+    child.on('error', () => { clearTimeout(timer); resolve(-1); });
+    child.on('close', (code: number | null) => { clearTimeout(timer); resolve(code ?? -1); });
+    child.stdin.on('error', () => {});
+    child.stdin.end(body);
+  });
+}
+function sessionId(ctx: any): string | null {
+  try { return ctx?.sessionManager?.getSessionId?.() ?? null; } catch { return null; }
+}
+export default function (pi: any) {
+  pi.on('tool_call', async (event: any, ctx: any) => {
+    const payload = { hook_event_name: 'PreToolUse', session_id: sessionId(ctx) ?? 'pi', tool_use_id: event.toolCallId, tool_name: event.toolName, tool_input: event.input, cwd: process.cwd() };
+    if (!checked) { void run('tool_call', payload, 10000); return; }
+    if ((await run('tool_call', payload, 3000)) !== 0) return { block: true, reason: 'Durin local check denied or failed.' };
+  });
+  for (const name of events) {
+    pi.on(name, (event: any, ctx: any) => { void run(name, { hook_event_name: name, session_id: sessionId(ctx), event }, 10000); });
+  }
+}
+## durin login (kiro, interactive)
+exit: 0
+--- stdout
+--- stderr
+## kiro hooks .kiro/hooks/durin.json
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "durin-PreToolUse",
+      "description": "Managed by Durin CLI",
+      "trigger": "PreToolUse",
+      "action": {
+        "type": "command",
+        "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'kiro' '--config-dir' '<TMP>/config' '--event' 'PreToolUse'"
+      },
+      "timeout": 10
+    },
+    {
+      "name": "durin-PostToolUse",
+      "description": "Managed by Durin CLI",
+      "trigger": "PostToolUse",
+      "action": {
+        "type": "command",
+        "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'kiro' '--config-dir' '<TMP>/config' '--event' 'PostToolUse'"
+      },
+      "timeout": 10
+    },
+    {
+      "name": "durin-SessionStart",
+      "description": "Managed by Durin CLI",
+      "trigger": "SessionStart",
+      "action": {
+        "type": "command",
+        "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'kiro' '--config-dir' '<TMP>/config' '--event' 'SessionStart'"
+      },
+      "timeout": 10
+    },
+    {
+      "name": "durin-Stop",
+      "description": "Managed by Durin CLI",
+      "trigger": "Stop",
+      "action": {
+        "type": "command",
+        "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'kiro' '--config-dir' '<TMP>/config' '--event' 'Stop'"
+      },
+      "timeout": 10
+    },
+    {
+      "name": "durin-UserPromptSubmit",
+      "description": "Managed by Durin CLI",
+      "trigger": "UserPromptSubmit",
+      "action": {
+        "type": "command",
+        "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'kiro' '--config-dir' '<TMP>/config' '--event' 'UserPromptSubmit'"
+      },
+      "timeout": 10
+    },
+    {
+      "name": "durin-PreTaskExec",
+      "description": "Managed by Durin CLI",
+      "trigger": "PreTaskExec",
+      "action": {
+        "type": "command",
+        "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'kiro' '--config-dir' '<TMP>/config' '--event' 'PreTaskExec'"
+      },
+      "timeout": 10
+    },
+    {
+      "name": "durin-PostTaskExec",
+      "description": "Managed by Durin CLI",
+      "trigger": "PostTaskExec",
+      "action": {
+        "type": "command",
+        "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'kiro' '--config-dir' '<TMP>/config' '--event' 'PostTaskExec'"
+      },
+      "timeout": 10
+    },
+    {
+      "name": "durin-PostFileCreate",
+      "description": "Managed by Durin CLI",
+      "trigger": "PostFileCreate",
+      "action": {
+        "type": "command",
+        "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'kiro' '--config-dir' '<TMP>/config' '--event' 'PostFileCreate'"
+      },
+      "timeout": 10
+    },
+    {
+      "name": "durin-PostFileSave",
+      "description": "Managed by Durin CLI",
+      "trigger": "PostFileSave",
+      "action": {
+        "type": "command",
+        "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'kiro' '--config-dir' '<TMP>/config' '--event' 'PostFileSave'"
+      },
+      "timeout": 10
+    },
+    {
+      "name": "durin-PostFileDelete",
+      "description": "Managed by Durin CLI",
+      "trigger": "PostFileDelete",
+      "action": {
+        "type": "command",
+        "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'kiro' '--config-dir' '<TMP>/config' '--event' 'PostFileDelete'"
+      },
+      "timeout": 10
+    }
+  ]
+}
+## durin hooks status --config-dir <TMP>/config
+exit: 0
+--- stdout
+(sorted by harness for comparison; keys sorted)
+[
+  {
+    "checker": "none",
+    "configuration": "installed",
+    "execution": "not-verified",
+    "harness": "claude",
+    "target": "<TMP>/home/.claude/settings.json"
+  },
+  {
+    "checker": "none",
+    "configuration": "installed",
+    "execution": "not-verified",
+    "harness": "codex",
+    "target": "<TMP>/home/.codex/hooks.json"
+  },
+  {
+    "checker": "none",
+    "configuration": "installed",
+    "execution": "not-verified",
+    "harness": "copilot",
+    "target": "<TMP>/home/.copilot/hooks/durin.json"
+  },
+  {
+    "checker": "none",
+    "configuration": "installed",
+    "execution": "not-verified",
+    "harness": "cursor",
+    "target": "<TMP>/home/.cursor/hooks.json"
+  },
+  {
+    "checker": "none",
+    "configuration": "installed",
+    "execution": "not-verified",
+    "harness": "gemini",
+    "target": "<TMP>/home/.gemini/settings.json"
+  },
+  {
+    "checker": "none",
+    "configuration": "installed",
+    "execution": "not-verified",
+    "harness": "kiro",
+    "target": "<TMP>/home/.kiro/hooks/durin.json"
+  },
+  {
+    "checker": "none",
+    "configuration": "installed",
+    "execution": "not-verified",
+    "harness": "opencode",
+    "target": "<TMP>/home/.config/opencode/plugins/durin.js"
+  },
+  {
+    "checker": "none",
+    "configuration": "installed",
+    "execution": "not-verified",
+    "harness": "pi",
+    "target": "<TMP>/home/.pi/agent/extensions/durin.ts"
+  },
+  {
+    "checker": "none",
+    "configuration": "installed",
+    "execution": "not-verified",
+    "harness": "windsurf",
+    "target": "<TMP>/home/.codeium/windsurf/hooks.json"
+  }
+]
+--- stderr
+## systemctl calls
+--user daemon-reload
+--user enable durin-observer.service
+--user restart durin-observer.service
+--user daemon-reload
+--user enable durin-observer.service
+--user restart durin-observer.service
+--user daemon-reload
+--user enable durin-observer.service
+--user restart durin-observer.service
+--user daemon-reload
+--user enable durin-observer.service
+--user restart durin-observer.service
+--user daemon-reload
+--user enable durin-observer.service
+--user restart durin-observer.service
+--user daemon-reload
+--user enable durin-observer.service
+--user restart durin-observer.service
+--user daemon-reload
+--user enable durin-observer.service
+--user restart durin-observer.service
+--user daemon-reload
+--user enable durin-observer.service
+--user restart durin-observer.service
+--user daemon-reload
+--user enable durin-observer.service
+--user restart durin-observer.service
+## observer unit
+# Managed by Durin CLI. Remove with: durin observer remove
+[Unit]
+Description=Durin observer (local hook capture and AI-provider detection)
+
+[Service]
+Type=simple
+ExecStart="<TMP>/config/runtime/durin" "observe" "--config-dir" "<TMP>/config"
+Restart=always
+RestartSec=2
+Nice=10
+IOSchedulingClass=idle
+MemoryMax=256M
+
+[Install]
+WantedBy=default.target

@@ -263,12 +263,20 @@ func (c *setupContext) setupIntegrations(ctx context.Context, agent contracts.Ag
 			return err
 		}
 	}
-	if checker != nil {
-		if err := InstallHooks(agent, bridge, *checker); err != nil {
+	custom := strings.HasPrefix(agent.ID, "custom")
+	// Built-in harnesses get capture hooks for every event even without a checker; a custom
+	// descriptor only describes the pre-tool check.
+	hooks := agent.HookConfig != nil && (checker != nil || !custom)
+	if hooks {
+		if err := InstallHooks(agent, bridge, checker); err != nil {
 			return err
 		}
 	}
-	c.UI.Agent.Integrations(ports.IntegrationsResult{Skills: skills, Hooks: checker != nil, Custom: strings.HasPrefix(agent.ID, "custom")})
+	observer := ""
+	if hooks {
+		observer = InstallObserverService(ctx, c.Directory, bridge.ExecutablePath)
+	}
+	c.UI.Agent.Integrations(ports.IntegrationsResult{Skills: skills, Hooks: hooks, Checker: checker != nil, Custom: custom, Observer: observer})
 	return nil
 }
 

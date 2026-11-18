@@ -17,21 +17,27 @@ var (
 )
 
 var argumentRules = map[string]argumentRule{
-	"":              {0, onboardingFlags},
-	"login":         {1, onboardingFlags},
-	"signup":        {1, onboardingFlags},
-	"install":       {1, onboardingFlags},
-	"verify":        {1, profileFlags},
-	"logout":        {1, append(append([]string(nil), profileFlags...), "force")},
-	"tools list":    {2, profileFlags},
-	"tools inspect": {3, profileFlags},
-	"tools call":    {3, append(append([]string(nil), profileFlags...), "input", "idempotency-key", "approval-id")},
-	"mcp serve":     {2, profileFlags},
-	"mcp endpoint":  {2, profileFlags},
-	"profiles list": {2, []string{"config-dir"}},
-	"profiles use":  {3, []string{"config-dir"}},
-	"hooks status":  {2, []string{"config-dir"}},
-	"hooks run":     {2, []string{"config-dir", "harness"}},
+	"":                 {0, onboardingFlags},
+	"login":            {1, onboardingFlags},
+	"signup":           {1, onboardingFlags},
+	"install":          {1, onboardingFlags},
+	"verify":           {1, profileFlags},
+	"logout":           {1, append(append([]string(nil), profileFlags...), "force")},
+	"tools list":       {2, profileFlags},
+	"tools inspect":    {3, profileFlags},
+	"tools call":       {3, append(append([]string(nil), profileFlags...), "input", "idempotency-key", "approval-id")},
+	"mcp serve":        {2, profileFlags},
+	"mcp endpoint":     {2, profileFlags},
+	"profiles list":    {2, []string{"config-dir"}},
+	"profiles use":     {3, []string{"config-dir"}},
+	"hooks status":     {2, []string{"config-dir"}},
+	"hooks run":        {2, []string{"config-dir", "harness", "event"}},
+	"observe":          {1, []string{"config-dir", "supervise"}},
+	"observer status":  {2, []string{"config-dir"}},
+	"observer install": {2, []string{"config-dir"}},
+	"observer remove":  {2, []string{"config-dir"}},
+	"observer purge":   {2, []string{"config-dir"}},
+	"observer export":  {2, []string{"config-dir"}},
 }
 
 func commandKey(positions []string) string {
@@ -40,7 +46,7 @@ func commandKey(positions []string) string {
 		first = positions[0]
 	}
 	switch first {
-	case "tools", "mcp", "profiles", "hooks":
+	case "tools", "mcp", "profiles", "hooks", "observer":
 		return strings.Join(positions[:min(2, len(positions))], " ")
 	}
 	return first

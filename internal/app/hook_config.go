@@ -33,20 +33,50 @@ func legacyHookArguments(node string, bridge BridgeConfiguration, harness string
 	return append([]string{node, legacyRuntime(bridge.ConfigDirectory)}, HookArguments(bridge, harness)[1:]...)
 }
 
-// HookConfiguration is what a harness's hook entry is generated from. Windows nil means this
-// platform. PreviousHandler is the handler durin recorded at its last installation, which is
+// HookEventArguments is the command a harness runs for one hook event:
+// <executable> hooks run --harness <harness> --config-dir <directory> --event <event>.
+func HookEventArguments(bridge BridgeConfiguration, harness, event string) []string {
+	return append(HookArguments(bridge, harness), "--event", event)
+}
+
+// HookConfiguration is what a harness's hook entries are generated from. Windows nil means
+// this platform. Checker reports whether a local checker is configured; TimeoutMs is its
+// timeout. PreviousHandler is the single pre-tool handler earlier versions recorded and
+// PreviousHandlers the per-event handlers recorded at the last installation; both are
 // replaced in place.
 type HookConfiguration struct {
-	Format          string
-	Bridge          BridgeConfiguration
-	Harness         string
-	TimeoutMs       int
-	Windows         *bool
-	PreviousHandler *jsjson.Object
+	Format           string
+	Bridge           BridgeConfiguration
+	Harness          string
+	TimeoutMs        int
+	Checker          bool
+	Windows          *bool
+	PreviousHandler  *jsjson.Object
+	PreviousHandlers map[string]*jsjson.Object
+	// Event is the event a handler is generated for; nil generates the legacy pre-tool
+	// handler without --event.
+	Event *HookEvent
+}
+
+// checking reports whether the handler runs the local checker.
+func (input HookConfiguration) checking() bool {
+	return input.Event == nil || (input.Event.Check && input.Checker)
+}
+
+func (input HookConfiguration) arguments() []string {
+	if input.Event == nil {
+		return HookArguments(input.Bridge, input.Harness)
+	}
+	return HookEventArguments(input.Bridge, input.Harness, input.Event.Name)
+}
+
+func (input HookConfiguration) forEvent(event HookEvent) HookConfiguration {
+	input.Event = &event
+	return input
 }
 
 func commandLine(input HookConfiguration) string {
-	args := HookArguments(input.Bridge, input.Harness)
+	args := input.arguments()
 	windows := runtime.GOOS == "windows"
 	if input.Windows != nil {
 		windows = *input.Windows
@@ -79,8 +109,8 @@ func utf16le(s string) []byte {
 	return out
 }
 
-// UpdatedHookConfig adds or updates durin's pre-tool hook in a harness's JSONC hook
-// configuration, keeping every other hook, setting and comment.
+// UpdatedHookConfig adds or updates durin's hook for every registered event in a harness's
+// JSONC hook configuration, keeping every other hook, setting and comment.
 func UpdatedHookConfig(raw string, input HookConfiguration) (string, error) {
 	config, err := ParseConfig(raw, "jsonc")
 	if err != nil {
@@ -89,11 +119,8 @@ func UpdatedHookConfig(raw string, input HookConfiguration) (string, error) {
 	if err := assertHooksEnabled(config); err != nil {
 		return "", err
 	}
-	switch input.Format {
-	case "custom":
+	if input.Format == "custom" {
 		return customConfig(raw, config, input)
-	case "copilot":
-		return copilotConfig(raw, config, input)
 	}
 	return updateEvents(raw, config, input)
 }
@@ -140,21 +167,35 @@ func updateEvents(raw string, config *jsjson.Object, input HookConfiguration) (s
 		return "", err
 	}
 	current := raw
-	if input.Format == "cursor" {
+	if input.Format == "cursor" || input.Format == "copilot" {
 		if current, err = versioned(raw, config); err != nil {
 			return "", err
 		}
 	}
-	for _, event := range hookEvents(input.Format) {
-		groups, err := parseRecords(orDefault(get(hooks, event), jsjson.Array{}))
+	for _, event := range registeredEvents(input.Format, input.Checker) {
+		groups, err := parseRecords(orDefault(get(hooks, event.Name), jsjson.Array{}))
 		if err != nil {
 			return "", err
 		}
-		if current, err = upsertHandler(current, event, groups, input); err != nil {
+		if current, err = upsertHandler(current, event.Name, groups, input.forEvent(event)); err != nil {
 			return "", err
 		}
 	}
 	return current, nil
+}
+
+// previousHandlers are the handlers an earlier installation recorded for this event.
+func (input HookConfiguration) previousHandlers() []*jsjson.Object {
+	var out []*jsjson.Object
+	if input.Event != nil {
+		if h := input.PreviousHandlers[input.Event.Name]; h != nil {
+			out = append(out, h)
+		}
+	}
+	if input.PreviousHandler != nil && (input.Event == nil || input.Event.Check) {
+		out = append(out, input.PreviousHandler)
+	}
+	return out
 }
 
 func upsertHandler(raw, event string, groups []*jsjson.Object, input HookConfiguration) (string, error) {
@@ -168,7 +209,11 @@ func upsertHandler(raw, event string, groups []*jsjson.Object, input HookConfigu
 	}
 	var entry jsjson.Value = handler
 	if grouped(input.Format) {
-		entry = jsjson.Obj(jsjson.KV("matcher", jsjson.String(".*")), jsjson.KV("hooks", jsjson.Arr(handler)))
+		if input.Event == nil || input.Event.Tool {
+			entry = jsjson.Obj(jsjson.KV("matcher", jsjson.String(".*")), jsjson.KV("hooks", jsjson.Arr(handler)))
+		} else {
+			entry = jsjson.Obj(jsjson.KV("hooks", jsjson.Arr(handler)))
+		}
 	}
 	// Appending to the syntax tree keeps comments inside every existing handler.
 	return jsoncEdit(raw, []any{"hooks", event, len(groups)}, entry)
@@ -177,7 +222,7 @@ func upsertHandler(raw, event string, groups []*jsjson.Object, input HookConfigu
 func handlerLocation(groups []*jsjson.Object, input HookConfiguration, handler *jsjson.Object) ([]any, error) {
 	for i, group := range groups {
 		if !grouped(input.Format) {
-			if sameHandler(group, handler, input.PreviousHandler) {
+			if sameHandler(group, handler, input.previousHandlers()) {
 				return []any{i}, nil
 			}
 			continue
@@ -187,7 +232,7 @@ func handlerLocation(groups []*jsjson.Object, input HookConfiguration, handler *
 			return nil, err
 		}
 		for j, h := range handlers {
-			if sameHandler(h, handler, input.PreviousHandler) {
+			if sameHandler(h, handler, input.previousHandlers()) {
 				return []any{i, "hooks", j}, nil
 			}
 		}
@@ -195,11 +240,16 @@ func handlerLocation(groups []*jsjson.Object, input HookConfiguration, handler *
 	return nil, nil
 }
 
-func sameHandler(value, expected, previous *jsjson.Object) bool {
-	if previous == nil {
-		previous = jsjson.NewObject()
+func sameHandler(value, expected *jsjson.Object, previous []*jsjson.Object) bool {
+	if sameInvocation(value, expected) {
+		return true
 	}
-	return sameInvocation(value, expected) || sameInvocation(value, previous)
+	for _, p := range previous {
+		if sameInvocation(value, p) {
+			return true
+		}
+	}
+	return false
 }
 
 // strictEquals is === on JSON values: objects and arrays are never equal across parses.
@@ -220,11 +270,20 @@ func sameInvocation(value, expected *jsjson.Object) bool {
 		jsjson.Stringify(get(value, "args")) == jsjson.Stringify(get(expected, "args"))
 }
 
-// GeneratedHookHandler is the hook entry durin writes for a harness.
+// GeneratedHookHandler is the hook entry durin writes for a harness event. Check handlers
+// keep the shape and timeout of the pre-tool check; capture handlers have a short timeout,
+// never fail closed and show no output.
 func GeneratedHookHandler(input HookConfiguration) *jsjson.Object {
+	checking := input.checking()
 	timeout := int64(math.Ceil(float64(input.TimeoutMs)/1000)) + 3
+	if !checking {
+		timeout = captureTimeoutSec
+		if input.Event.TimeoutSec > 0 {
+			timeout = int64(input.Event.TimeoutSec)
+		}
+	}
 	if input.Format == "copilot" {
-		args := HookArguments(input.Bridge, input.Harness)
+		args := input.arguments()
 		return jsjson.Obj(
 			jsjson.KV("type", jsjson.String("command")),
 			jsjson.KV("exec", jsjson.String(args[0])),
@@ -235,13 +294,20 @@ func GeneratedHookHandler(input HookConfiguration) *jsjson.Object {
 	command := jsjson.String(commandLine(input))
 	switch input.Format {
 	case "windsurf":
-		return jsjson.Obj(jsjson.KV("command", command), jsjson.KV("show_output", jsjson.Bool(true)))
+		return jsjson.Obj(jsjson.KV("command", command), jsjson.KV("show_output", jsjson.Bool(checking)))
 	case "cursor":
+		if !checking {
+			return jsjson.Obj(jsjson.KV("command", command), jsjson.KV("timeout", jsjson.Int(timeout)))
+		}
 		return jsjson.Obj(jsjson.KV("command", command), jsjson.KV("timeout", jsjson.Int(timeout)), jsjson.KV("failClosed", jsjson.Bool(true)))
 	case "gemini":
+		name := "durin-local-check"
+		if !checking {
+			name = "durin-capture"
+		}
 		return jsjson.Obj(
 			jsjson.KV("type", jsjson.String("command")),
-			jsjson.KV("name", jsjson.String("durin-local-check")),
+			jsjson.KV("name", jsjson.String(name)),
 			jsjson.KV("command", command),
 			jsjson.KV("timeout", jsjson.Int(timeout*1000)),
 		)
@@ -253,16 +319,13 @@ func GeneratedHookHandler(input HookConfiguration) *jsjson.Object {
 	return handler
 }
 
-func hookEvents(format string) []string {
-	switch format {
-	case "windsurf":
-		return []string{"pre_mcp_tool_use", "pre_run_command", "pre_read_code", "pre_write_code"}
-	case "cursor":
-		return []string{"preToolUse"}
-	case "gemini":
-		return []string{"BeforeTool"}
+// GeneratedHookHandlers are the handlers for every registered event, by event name.
+func GeneratedHookHandlers(input HookConfiguration) *jsjson.Object {
+	out := jsjson.NewObject()
+	for _, event := range registeredEvents(input.Format, input.Checker) {
+		out.Set(event.Name, GeneratedHookHandler(input.forEvent(event)))
 	}
-	return []string{"PreToolUse"}
+	return out
 }
 
 func commandDescriptor(args []string) *jsjson.Object {
@@ -293,22 +356,6 @@ func customConfig(raw string, config *jsjson.Object, input HookConfiguration) (s
 		return "", clierror.New("Conflicting custom Durin hook configuration. Preserve it and review the descriptor.")
 	}
 	return jsoncEdit(raw, []any{"durin"}, descriptor)
-}
-
-func copilotConfig(raw string, config *jsjson.Object, input HookConfiguration) (string, error) {
-	hooks, err := parseRecord(orDefault(get(config, "hooks"), jsjson.NewObject()))
-	if err != nil {
-		return "", err
-	}
-	existing, err := parseRecords(orDefault(get(hooks, "preToolUse"), jsjson.Array{}))
-	if err != nil {
-		return "", err
-	}
-	current, err := versioned(raw, config)
-	if err != nil {
-		return "", err
-	}
-	return upsertHandler(current, "preToolUse", existing, input)
 }
 
 func versioned(raw string, config *jsjson.Object) (string, error) {
