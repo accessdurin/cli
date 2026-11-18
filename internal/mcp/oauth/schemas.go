@@ -1,7 +1,7 @@
 package oauth
 
 import (
-	"github.com/accessdurin/cli/internal/mcp/jsonv"
+	"github.com/accessdurin/cli/internal/jsjson"
 	s "github.com/accessdurin/cli/internal/mcp/schema"
 )
 
@@ -152,8 +152,8 @@ var ClientInformationSchema = s.Object(
 var ClientInformationFullSchema = ClientMetadataSchema.Extend(ClientInformationSchema.Fields()...)
 
 // withoutIssuer returns an authorization-server body without `issuer` (SEP-2352).
-func withoutIssuer(body any) any {
-	o, ok := body.(*jsonv.Object)
+func withoutIssuer(body jsjson.Value) jsjson.Value {
+	o, ok := body.(*jsjson.Object)
 	if !ok || o == nil {
 		return body
 	}

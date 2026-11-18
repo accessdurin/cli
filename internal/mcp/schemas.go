@@ -1,7 +1,7 @@
 package mcp
 
 import (
-	"github.com/accessdurin/cli/internal/mcp/jsonv"
+	"github.com/accessdurin/cli/internal/jsjson"
 	s "github.com/accessdurin/cli/internal/mcp/schema"
 )
 
@@ -91,9 +91,9 @@ var formElicitationCapabilitySchema = s.Intersection(s.Object(s.F("applyDefaults
 
 func jsonObjectSchemaRef() s.Schema { return s.Lazy(func() s.Schema { return jsonObjectSchema }) }
 
-var elicitationCapabilitySchema = s.Preprocess(func(v any) any {
-	if o, ok := v.(*jsonv.Object); ok && o != nil && o.Len() == 0 {
-		return jsonv.NewObject("form", jsonv.NewObject())
+var elicitationCapabilitySchema = s.Preprocess(func(v jsjson.Value) jsjson.Value {
+	if o, ok := v.(*jsjson.Object); ok && o != nil && o.Len() == 0 {
+		return jsjson.Obj(jsjson.KV("form", jsjson.NewObject()))
 	}
 	return v
 }, s.Intersection(s.Object(
@@ -261,8 +261,8 @@ var toolResultForeignFamilyKeys = []string{"task", "inputRequests", "requestStat
 // gains `content: []` (appended last) unless it carries task/inputRequests/requestState, then
 // it is parsed with CallToolResultSchema.
 var CallToolResultWireSchema = s.Pipe(
-	s.Transform(s.SuperRefine(s.Unknown(), func(v any) []s.Issue {
-		o, ok := v.(*jsonv.Object)
+	s.Transform(s.SuperRefine(s.Unknown(), func(v jsjson.Value) []s.Issue {
+		o, ok := v.(*jsjson.Object)
 		if !ok || o == nil || o.Has("content") {
 			return nil
 		}
@@ -272,13 +272,13 @@ var CallToolResultWireSchema = s.Pipe(
 			}
 		}
 		return nil
-	}), func(v any) (any, error) {
-		o, ok := v.(*jsonv.Object)
+	}), func(v jsjson.Value) (jsjson.Value, error) {
+		o, ok := v.(*jsjson.Object)
 		if !ok || o == nil || o.Has("content") {
 			return v, nil
 		}
 		c := o.Clone()
-		c.Set("content", []any{})
+		c.Set("content", jsjson.Array{})
 		return c, nil
 	}),
 	callToolResultSchema2025,

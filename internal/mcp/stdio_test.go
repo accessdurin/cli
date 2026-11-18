@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/accessdurin/cli/internal/mcp/jsonv"
+	"github.com/accessdurin/cli/internal/jsjson"
 	"github.com/accessdurin/cli/internal/mcp/schema"
 )
 
@@ -37,7 +37,7 @@ type stdioFixture struct {
 
 func errorName(err error) string {
 	var se *schema.Error
-	var syn *jsonv.SyntaxError
+	var syn *jsjson.SyntaxError
 	switch {
 	case errors.As(err, &se):
 		return "ZodError"
@@ -87,7 +87,7 @@ func feedStdio(t *testing.T, chunks [][]byte, maxBuffer int) []stdioEvent {
 	var events []stdioEvent
 	tr.SetHandlers(Handlers{
 		OnMessage: func(m Message) {
-			s := jsonv.MustStringify(m)
+			s := jsjson.Stringify(m)
 			mu.Lock()
 			events = append(events, stdioEvent{Message: &s})
 			mu.Unlock()
@@ -168,7 +168,7 @@ func TestPredicatesMatchSDK(t *testing.T) {
 		t.Fatalf("only %d predicate cases", len(fx.Predicates))
 	}
 	for _, p := range fx.Predicates {
-		v, err := jsonv.ParseString(p.Value)
+		v, err := jsjson.ParseString(p.Value)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -43,3 +43,28 @@ func ExampleSearchParams_Object() {
 	// 2 map[code:b state:x y]
 	// provider=authkit&q=a+b%26c
 }
+
+// The SDK's unfollowed-redirect message clears credentials and upgrades http to https through
+// the protocol, username and password setters; the outputs are Node's.
+func ExampleURL_SetProtocol() {
+	for _, c := range [][2]string{
+		{"http://u:p@x:443/a?q#h", "https:"}, {"http://x:80/", "https:"}, {"http://x/", "mailto:"},
+		{"foo://x/", "http"}, {"http://u@x/", "file"}, {"https://x/", "HTTP:junk"},
+		{"http://x/", "1ab:"}, {"file:///p", "http:"},
+	} {
+		u, _ := weburl.Parse(c[0])
+		u.SetProtocol(c[1])
+		u.SetUsername("a b")
+		u.SetPassword("")
+		fmt.Println(u.Href())
+	}
+	// Output:
+	// https://a%20b@x/a?q#h
+	// https://a%20b@x/
+	// http://a%20b@x/
+	// foo://a%20b@x/
+	// http://a%20b@x/
+	// http://a%20b@x/
+	// http://a%20b@x/
+	// file:///p
+}

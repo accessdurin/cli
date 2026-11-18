@@ -10,10 +10,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/accessdurin/cli/internal/jsjson"
 	"github.com/accessdurin/cli/internal/mcp/httpx"
-	"github.com/accessdurin/cli/internal/mcp/jsonv"
-	"github.com/accessdurin/cli/internal/mcp/jsurl"
 	"github.com/accessdurin/cli/internal/mcp/oauth"
+	"github.com/accessdurin/cli/internal/weburl"
 )
 
 // AuthProvider is the minimal AuthProvider: a bearer token for every request.
@@ -75,7 +75,7 @@ type StreamableHTTPOptions struct {
 type StreamableHTTPClientTransport struct {
 	handlers handlerBox
 
-	url                 *jsurl.URL
+	url                 *weburl.URL
 	requestInit         *httpx.RequestInit
 	authProvider        AuthProvider
 	oauthProvider       oauth.ClientProvider
@@ -94,7 +94,7 @@ type StreamableHTTPClientTransport struct {
 	abort               context.CancelFunc
 	sessionID           string
 	protocolVersion     string
-	resourceMetadataURL *jsurl.URL
+	resourceMetadataURL *weburl.URL
 	scope               string
 	serverRetry         *time.Duration
 	cancelReconnect     func()
@@ -120,7 +120,7 @@ func (a oauthAdapter) OnUnauthorized(ctx context.Context, uc oauth.UnauthorizedC
 
 // NewStreamableHTTPClientTransport creates the transport. It fails when Fetch is nil: the port
 // never falls back to a default HTTP client.
-func NewStreamableHTTPClientTransport(url *jsurl.URL, opts StreamableHTTPOptions) (*StreamableHTTPClientTransport, error) {
+func NewStreamableHTTPClientTransport(url *weburl.URL, opts StreamableHTTPOptions) (*StreamableHTTPClientTransport, error) {
 	if opts.Fetch == nil {
 		return nil, errors.New("mcp: StreamableHTTPOptions.Fetch is required")
 	}
@@ -320,12 +320,12 @@ func envelopeVersion(m Message) (string, bool) {
 	if !IsJSONRPCRequest(m) {
 		return "", false
 	}
-	v, ok := jsonv.Path(m, "params", "_meta", protocolVersionMetaKey)
+	v, ok := path(m, "params", "_meta", protocolVersionMetaKey)
 	if !ok {
 		return "", false
 	}
-	str, ok := v.(string)
-	return str, ok
+	str, ok := v.(jsjson.String)
+	return string(str), ok
 }
 
 // applyBodyDerivedHeaders: a request whose _meta carries a protocol-version claim sends
@@ -339,9 +339,9 @@ func applyBodyDerivedHeaders(h http.Header, m Message) {
 	h.Set("mcp-protocol-version", version)
 	h.Set("mcp-method", method)
 	if field, ok := mcpNameHeaderSource[method]; ok {
-		if v, ok := jsonv.Path(m, "params", field); ok {
-			if str, ok := v.(string); ok {
-				h.Set("mcp-name", EncodeMcpParamValue(str))
+		if v, ok := path(m, "params", field); ok {
+			if str, ok := v.(jsjson.String); ok {
+				h.Set("mcp-name", EncodeMcpParamValue(string(str)))
 			}
 		}
 	}
@@ -369,7 +369,7 @@ func (t *StreamableHTTPClientTransport) send(ctx context.Context, message Messag
 		opts = &SendOptions{}
 	}
 	if opts.ResumptionToken != "" {
-		var replay any
+		var replay jsjson.Value
 		if IsJSONRPCRequest(message) {
 			replay, _ = MessageID(message)
 		}
@@ -450,7 +450,7 @@ func (t *StreamableHTTPClientTransport) send(ctx context.Context, message Messag
 				if parsed, err := ParseMessageJSON([]byte(*text)); err == nil && IsJSONRPCErrorResponse(parsed) {
 					pid, _ := MessageID(parsed)
 					mid, _ := MessageID(message)
-					if jsonv.Equal(pid, mid) {
+					if jsjson.Equal(pid, mid) {
 						t.handlers.message(parsed)
 						return nil
 					}
@@ -498,7 +498,7 @@ func (t *StreamableHTTPClientTransport) send(ctx context.Context, message Messag
 			return err
 		}
 		var msgs []Message
-		if arr, ok := data.([]any); ok {
+		if arr, ok := data.(jsjson.Array); ok {
 			for _, item := range arr {
 				m, err := ParseMessage(item)
 				if err != nil {
@@ -589,7 +589,7 @@ func (t *StreamableHTTPClientTransport) stepUpAuthorize(ctx context.Context, par
 type sseOptions struct {
 	resumptionToken    string
 	onResumptionToken  func(string)
-	replayMessageID    any
+	replayMessageID    jsjson.Value
 	hasReplay          bool
 	onRequestStreamEnd func()
 }
@@ -731,7 +731,7 @@ func (t *StreamableHTTPClientTransport) handleSSEStream(resp *http.Response, o s
 			if ev.Event != "" && ev.Event != "message" {
 				return
 			}
-			v, err := jsonv.ParseString(ev.Data)
+			v, err := jsjson.ParseString(ev.Data)
 			if err != nil {
 				t.handlers.err(err)
 				return

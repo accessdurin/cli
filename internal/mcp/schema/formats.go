@@ -4,7 +4,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/accessdurin/cli/internal/mcp/jsurl"
+	"github.com/accessdurin/cli/internal/jsjson"
+	"github.com/accessdurin/cli/internal/weburl"
 )
 
 // URL is z.url() / z.string().url(): the trimmed input must satisfy URL.canParse, and the output
@@ -12,7 +13,7 @@ import (
 func URL() *stringSchema {
 	return String().with(func(v string) (string, []Issue) {
 		trimmed := strings.TrimFunc(v, isJSWhitespace)
-		if !jsurl.CanParse(trimmed) {
+		if !weburl.CanParse(trimmed) {
 			return v, issue("invalid_format", "Invalid URL")
 		}
 		return strings.NewReplacer("\t", "", "\n", "", "\r", "").Replace(trimmed), nil
@@ -22,7 +23,7 @@ func URL() *stringSchema {
 // SafeURL is the SDK's SafeUrlSchema: a URL that is not javascript:, data: or vbscript:.
 func SafeURL() *stringSchema {
 	return URL().with(func(v string) (string, []Issue) {
-		u, err := jsurl.Parse(v, nil)
+		u, err := weburl.Parse(v)
 		if err != nil {
 			return v, issue("custom", "URL must be parseable")
 		}
@@ -36,7 +37,7 @@ func SafeURL() *stringSchema {
 
 // OptionalSafeURL is the SDK's OptionalSafeUrlSchema: SafeURL, absent, or "" (read as absent).
 func OptionalSafeURL() Schema {
-	return Union(Optional(SafeURL()), Transform(Literal(""), func(any) (any, error) { return Undefined, nil }))
+	return Union(Optional(SafeURL()), Transform(Literal(""), func(jsjson.Value) (jsjson.Value, error) { return Undefined, nil }))
 }
 
 const dateSource = `(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))`

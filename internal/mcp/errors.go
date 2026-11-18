@@ -1,7 +1,7 @@
 package mcp
 
 import (
-	"github.com/accessdurin/cli/internal/mcp/jsonv"
+	"github.com/accessdurin/cli/internal/jsjson"
 )
 
 // SdkErrorCode is SdkErrorCode: local errors that never cross the wire.
@@ -70,7 +70,7 @@ const (
 type ProtocolError struct {
 	Code    int
 	Message string
-	Data    any // jsonv value; nil when absent
+	Data    jsjson.Value // nil when absent
 	HasData bool
 }
 
@@ -89,8 +89,8 @@ func jsErrorString(err error) string {
 		return "SdkError: " + e.Message
 	case *ProtocolError:
 		return "ProtocolError: " + e.Message
-	case *jsonv.SyntaxError:
-		return "SyntaxError: " + e.Msg
+	case *jsjson.SyntaxError:
+		return "SyntaxError: " + e.Error()
 	}
 	return "Error: " + err.Error()
 }

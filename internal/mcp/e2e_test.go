@@ -14,10 +14,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/accessdurin/cli/internal/jsjson"
 	"github.com/accessdurin/cli/internal/mcp/httpx"
-	"github.com/accessdurin/cli/internal/mcp/jsonv"
-	"github.com/accessdurin/cli/internal/mcp/jsurl"
 	"github.com/accessdurin/cli/internal/mcp/oauth"
+	"github.com/accessdurin/cli/internal/weburl"
 )
 
 // memoryProvider is a CLI-like OAuthClientProvider kept in memory.
@@ -28,18 +28,19 @@ type memoryProvider struct {
 	client      *oauth.ClientInformation
 	discovery   *oauth.DiscoveryState
 	verifier    string
-	redirected  *jsurl.URL
+	redirected  *weburl.URL
 	invalidated []oauth.InvalidationScope
 }
 
 func (p *memoryProvider) RedirectURL() string { return p.redirect }
-func (p *memoryProvider) ClientMetadata() *jsonv.Object {
-	return jsonv.NewObject("client_name", "Durin CLI", "application_type", "native",
-		"redirect_uris", []any{p.redirect}, "grant_types", []any{"authorization_code", "refresh_token"},
-		"response_types", []any{"code"}, "token_endpoint_auth_method", "none")
+func (p *memoryProvider) ClientMetadata() *jsjson.Object {
+	return jsjson.Obj(
+		jsjson.KV("client_name", jsjson.String("Durin CLI")), jsjson.KV("application_type", jsjson.String("native")),
+		jsjson.KV("redirect_uris", jsjson.Strings(p.redirect)), jsjson.KV("grant_types", jsjson.Strings("authorization_code", "refresh_token")),
+		jsjson.KV("response_types", jsjson.Strings("code")), jsjson.KV("token_endpoint_auth_method", jsjson.String("none")))
 }
 func (p *memoryProvider) State(context.Context) (string, error) { return "the-state", nil }
-func (p *memoryProvider) RedirectToAuthorization(_ context.Context, u *jsurl.URL) error {
+func (p *memoryProvider) RedirectToAuthorization(_ context.Context, u *weburl.URL) error {
 	p.mu.Lock()
 	p.redirected = u
 	p.mu.Unlock()
@@ -72,7 +73,7 @@ func (p *memoryProvider) SaveTokens(_ context.Context, t oauth.Tokens, _ *oauth.
 	p.mu.Unlock()
 	return nil
 }
-func (p *memoryProvider) ValidateResourceURL(_ context.Context, u *jsurl.URL, _ *string) (*jsurl.URL, error) {
+func (p *memoryProvider) ValidateResourceURL(_ context.Context, u *weburl.URL, _ *string) (*weburl.URL, error) {
 	return u, nil
 }
 func (p *memoryProvider) SaveDiscoveryState(_ context.Context, s oauth.DiscoveryState) error {
@@ -165,11 +166,11 @@ func newMCPServer(t *testing.T) *mcpServer {
 			fmt.Fprint(w, ": comment\ndata: {\"jsonrpc\":\"2.0\",\"method\":\"notifications/tools/list_changed\"}\n\n")
 			return
 		}
-		v, _ := jsonv.Parse(b)
-		msg := v.(*jsonv.Object)
+		v, _ := jsjson.Parse(b)
+		msg := v.(*jsjson.Object)
 		method, _ := MessageMethod(msg)
 		id, hasID := MessageID(msg)
-		idJSON := jsonv.MustStringify(id)
+		idJSON := jsjson.Stringify(id)
 		if !hasID {
 			if method == "notifications/cancelled" {
 				s.mu.Lock()
@@ -188,8 +189,8 @@ func newMCPServer(t *testing.T) *mcpServer {
 			w.Header().Set("Content-Type", "text/event-stream")
 			fmt.Fprintf(w, "id: 1\ndata: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{\"tools\":[{\"name\":\"t\",\"inputSchema\":{\"type\":\"object\"}}]}}\n\n", idJSON)
 		case "tools/call":
-			name, _ := jsonv.Path(msg, "params", "name")
-			switch name {
+			name, _ := path(msg, "params", "name")
+			switch name.(jsjson.String) {
 			case "slow":
 				time.Sleep(s.callDelay)
 				w.Header().Set("Content-Type", "application/json")
@@ -250,7 +251,7 @@ func TestEndToEndOAuthAndSession(t *testing.T) {
 		t.Fatalf("stored tokens %+v client %+v", p.tokens, p.client)
 	}
 
-	tr, err := NewStreamableHTTPClientTransport(jsurl.MustParse(s.srv.URL+"/mcp"), StreamableHTTPOptions{
+	tr, err := NewStreamableHTTPClientTransport(mustParseURL(s.srv.URL+"/mcp"), StreamableHTTPOptions{
 		OAuthProvider: p, Fetch: fetch, RequestInit: &httpx.RequestInit{Redirect: httpx.RedirectError}, OnInsufficientScope: "throw",
 	})
 	if err != nil {
@@ -273,7 +274,7 @@ func TestEndToEndOAuthAndSession(t *testing.T) {
 	select {
 	case m := <-notes:
 		if method, _ := MessageMethod(m); method != "notifications/tools/list_changed" {
-			t.Fatalf("standalone stream delivered %s", jsonv.MustStringify(m))
+			t.Fatalf("standalone stream delivered %s", jsjson.Stringify(m))
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("standalone GET stream delivered nothing")
@@ -282,14 +283,14 @@ func TestEndToEndOAuthAndSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := jsonv.MustStringify(tools); got != `{"tools":[{"name":"t","inputSchema":{"type":"object"}}]}` {
+	if got := jsjson.Stringify(tools); got != `{"tools":[{"name":"t","inputSchema":{"type":"object"}}]}` {
 		t.Fatalf("tools = %s", got)
 	}
-	result, err := client.CallTool(ctx, CallToolParams{Name: "echo", Arguments: jsonv.NewObject()}, RequestOptions{})
+	result, err := client.CallTool(ctx, CallToolParams{Name: "echo", Arguments: jsjson.NewObject()}, RequestOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := jsonv.MustStringify(result); got != `{"content":[{"type":"text","text":"ok"}]}` {
+	if got := jsjson.Stringify(result); got != `{"content":[{"type":"text","text":"ok"}]}` {
 		t.Fatalf("result = %s", got)
 	}
 	posts := s.entries("POST /mcp")
@@ -307,7 +308,7 @@ func TestEndToEndOAuthAndSession(t *testing.T) {
 func connectedClient(t *testing.T, s *mcpServer) (*Client, *StreamableHTTPClientTransport) {
 	t.Helper()
 	p := &memoryProvider{redirect: "http://127.0.0.1:9/cb", tokens: &oauth.Tokens{AccessToken: "fresh-token", TokenType: "Bearer"}}
-	tr, err := NewStreamableHTTPClientTransport(jsurl.MustParse(s.srv.URL+"/mcp"), StreamableHTTPOptions{OAuthProvider: p, Fetch: httpx.NewHTTPFetch(s.srv.Client())})
+	tr, err := NewStreamableHTTPClientTransport(mustParseURL(s.srv.URL+"/mcp"), StreamableHTTPOptions{OAuthProvider: p, Fetch: httpx.NewHTTPFetch(s.srv.Client())})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -347,7 +348,7 @@ func TestSSEResumption(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := jsonv.MustStringify(result); got != `{"content":[{"type":"text","text":"resumed"}]}` {
+	if got := jsjson.Stringify(result); got != `{"content":[{"type":"text","text":"resumed"}]}` {
 		t.Fatalf("result %s", got)
 	}
 }
@@ -363,7 +364,7 @@ func TestRedirectsAreErrors(t *testing.T) {
 		http.Redirect(w, r, target.URL+"/mcp", http.StatusTemporaryRedirect)
 	}))
 	defer srv.Close()
-	tr, _ := NewStreamableHTTPClientTransport(jsurl.MustParse(srv.URL+"/mcp"), StreamableHTTPOptions{
+	tr, _ := NewStreamableHTTPClientTransport(mustParseURL(srv.URL+"/mcp"), StreamableHTTPOptions{
 		AuthProvider: staticToken("x"), Fetch: httpx.NewHTTPFetch(srv.Client()), RequestInit: &httpx.RequestInit{Redirect: httpx.RedirectError},
 	})
 	c := NewClient(Implementation{Name: "x", Version: "1"}, ClientOptions{})
@@ -378,7 +379,7 @@ type staticToken string
 func (s staticToken) Token(context.Context) (string, error) { return string(s), nil }
 
 func TestNewTransportRequiresFetch(t *testing.T) {
-	if _, err := NewStreamableHTTPClientTransport(jsurl.MustParse("https://x/mcp"), StreamableHTTPOptions{}); err == nil {
+	if _, err := NewStreamableHTTPClientTransport(mustParseURL("https://x/mcp"), StreamableHTTPOptions{}); err == nil {
 		t.Fatal("a transport without Fetch was created")
 	}
 }
@@ -403,7 +404,7 @@ func TestStdioClientTransport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := jsonv.MustStringify(tools)
+	got := jsjson.Stringify(tools)
 	if strings.Contains(got, "MCP_PORT_SECRET") || !strings.Contains(got, `"name":"GO_MCP_HELPER"`) || !strings.Contains(got, `"name":"PATH"`) {
 		t.Fatalf("child environment: %s", got)
 	}
@@ -433,24 +434,35 @@ func TestHelperStdioServer(t *testing.T) {
 			if !ok {
 				return
 			}
-			var result *jsonv.Object
+			var result *jsjson.Object
 			switch method {
 			case "initialize":
-				result = jsonv.NewObject("protocolVersion", "2025-11-25", "capabilities", jsonv.NewObject("tools", jsonv.NewObject()), "serverInfo", jsonv.NewObject("name", "helper", "version", "1"))
+				result = jsjson.Obj(
+					jsjson.KV("protocolVersion", jsjson.String("2025-11-25")),
+					jsjson.KV("capabilities", jsjson.Obj(jsjson.KV("tools", jsjson.NewObject()))),
+					jsjson.KV("serverInfo", jsjson.Obj(jsjson.KV("name", jsjson.String("helper")), jsjson.KV("version", jsjson.String("1")))))
 			case "tools/list":
-				var tools []any
+				tools := jsjson.Array{}
 				for _, kv := range os.Environ() {
 					k, _, _ := strings.Cut(kv, "=")
-					tools = append(tools, jsonv.NewObject("name", k, "inputSchema", jsonv.NewObject("type", "object")))
+					tools = append(tools, jsjson.Obj(jsjson.KV("name", jsjson.String(k)), jsjson.KV("inputSchema", jsjson.Obj(jsjson.KV("type", jsjson.String("object"))))))
 				}
-				result = jsonv.NewObject("tools", tools)
+				result = jsjson.Obj(jsjson.KV("tools", tools))
 			default:
 				return
 			}
-			_ = tr.Send(context.Background(), jsonv.NewObject("jsonrpc", "2.0", "id", id, "result", result), nil)
+			_ = tr.Send(context.Background(), jsjson.Obj(jsjson.KV("jsonrpc", jsjson.String("2.0")), jsjson.KV("id", id), jsjson.KV("result", result)), nil)
 		},
 	})
 	_ = tr.Start(context.Background())
 	<-done
 	os.Exit(0)
+}
+
+func mustParseURL(s string) *weburl.URL {
+	u, err := weburl.Parse(s)
+	if err != nil {
+		panic(err)
+	}
+	return u
 }

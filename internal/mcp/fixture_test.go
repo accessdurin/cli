@@ -16,10 +16,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/accessdurin/cli/internal/jsjson"
 	"github.com/accessdurin/cli/internal/mcp/httpx"
-	"github.com/accessdurin/cli/internal/mcp/jsonv"
-	"github.com/accessdurin/cli/internal/mcp/jsurl"
 	"github.com/accessdurin/cli/internal/mcp/oauth"
+	"github.com/accessdurin/cli/internal/weburl"
 )
 
 // The scenarios in testdata/scenarios were run against the real TypeScript SDK by
@@ -102,22 +102,22 @@ func normalize(s string) string {
 }
 
 // canonical sorts object keys recursively, like the recorder's canonical().
-func canonical(v any) any {
+func canonical(v jsjson.Value) jsjson.Value {
 	switch t := v.(type) {
-	case *jsonv.Object:
+	case *jsjson.Object:
 		keys := t.Keys()
 		sort.Strings(keys)
-		out := jsonv.NewObject()
+		out := jsjson.NewObject()
 		for _, k := range keys {
 			x, _ := t.Get(k)
-			if jsonv.IsUndefined(x) {
+			if x == nil {
 				continue
 			}
 			out.Set(k, canonical(x))
 		}
 		return out
-	case []any:
-		out := make([]any, len(t))
+	case jsjson.Array:
+		out := make(jsjson.Array, len(t))
 		for i, x := range t {
 			out[i] = canonical(x)
 		}
@@ -126,16 +126,36 @@ func canonical(v any) any {
 	return v
 }
 
-func toJSValue(t *testing.T, v any) any {
+// jv converts a Go value (a jsjson.Value, nil for null, a string, ...) to a jsjson.Value.
+func jv(x any) jsjson.Value {
+	if v, ok := x.(jsjson.Value); ok {
+		return v
+	}
+	v, err := jsjson.FromGo(x)
+	if err != nil {
+		panic(err)
+	}
+	return v
+}
+
+// stringifyNull is JSON.stringify, writing null for undefined.
+func stringifyNull(v jsjson.Value) string {
+	if v == nil {
+		return "null"
+	}
+	return jsjson.Stringify(v)
+}
+
+func toJSValue(t *testing.T, v any) jsjson.Value {
 	t.Helper()
 	if v == nil {
-		return nil
+		return jsjson.Null{}
 	}
 	b, err := json.Marshal(v)
 	if err != nil {
 		t.Fatal(err)
 	}
-	out, err := jsonv.Parse(b)
+	out, err := jsjson.Parse(b)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,7 +179,7 @@ func (h *harness) warn(msg string) {
 }
 
 func (h *harness) fetch(ctx context.Context, url string, init *httpx.RequestInit) (*http.Response, error) {
-	u, err := jsurl.Parse(url, nil)
+	u, err := weburl.Parse(url)
 	if err != nil {
 		return nil, &httpx.TypeError{Err: err}
 	}
@@ -181,13 +201,11 @@ func (h *harness) fetch(ctx context.Context, url string, init *httpx.RequestInit
 		rec.Redirect = &r
 	}
 	var rpcMethod string
-	var rpcID any
+	var rpcID jsjson.Value
 	if init.Body != nil {
-		if v, err := jsonv.Parse(init.Body); err == nil {
-			if o, ok := v.(*jsonv.Object); ok {
-				if m, ok := o.Get("method"); ok {
-					rpcMethod, _ = m.(string)
-				}
+		if v, err := jsjson.Parse(init.Body); err == nil {
+			if o, ok := v.(*jsjson.Object); ok {
+				rpcMethod, _ = o.GetString("method")
 				rpcID, _ = o.Get("id")
 			}
 		}
@@ -210,7 +228,7 @@ func (h *harness) fetch(ctx context.Context, url string, init *httpx.RequestInit
 	h.counters[idx] = n + 1
 	h.mu.Unlock()
 	spec := route.Responses[min(n, len(route.Responses)-1)]
-	idJSON := jsonv.MustStringify(rpcID)
+	idJSON := stringifyNull(rpcID)
 	sub := func(s string) string {
 		return strings.ReplaceAll(strings.ReplaceAll(s, `"$id"`, idJSON), "$id", idJSON)
 	}
@@ -221,11 +239,11 @@ func (h *harness) fetch(ctx context.Context, url string, init *httpx.RequestInit
 	var body string
 	switch {
 	case spec.JSON != nil:
-		v, err := jsonv.Parse(spec.JSON)
+		v, err := jsjson.Parse(spec.JSON)
 		if err != nil {
 			h.t.Fatal(err)
 		}
-		body = sub(jsonv.MustStringify(v))
+		body = sub(jsjson.Stringify(v))
 		if hdr.Get("content-type") == "" {
 			hdr.Set("content-type", "application/json")
 		}
@@ -251,7 +269,7 @@ type scriptedProvider struct {
 	redirectURL string
 	state       string
 	stateThrows string
-	metadata    *jsonv.Object
+	metadata    *jsjson.Object
 	tokens      *oauth.Tokens
 	client      *oauth.ClientInformation
 	discovery   *oauth.DiscoveryState
@@ -260,12 +278,12 @@ type scriptedProvider struct {
 
 func (p *scriptedProvider) log(name string, args ...any) {
 	t := p.h.t
-	parts := []any{name}
+	parts := jsjson.Array{jsjson.String(name)}
 	for _, a := range args {
-		parts = append(parts, canonical(a))
+		parts = append(parts, canonical(jv(a)))
 	}
 	p.h.mu.Lock()
-	p.h.calls = append(p.h.calls, jsonv.MustStringify(parts))
+	p.h.calls = append(p.h.calls, jsjson.Stringify(parts))
 	p.h.mu.Unlock()
 	_ = t
 }
@@ -274,11 +292,11 @@ func ctxValue(info *oauth.ClientInformationContext) any {
 	if info == nil {
 		return nil
 	}
-	return jsonv.NewObject("issuer", info.Issuer)
+	return jsjson.Obj(jsjson.KV("issuer", jsjson.String(info.Issuer)))
 }
 
-func (p *scriptedProvider) RedirectURL() string           { return p.redirectURL }
-func (p *scriptedProvider) ClientMetadata() *jsonv.Object { return p.metadata }
+func (p *scriptedProvider) RedirectURL() string            { return p.redirectURL }
+func (p *scriptedProvider) ClientMetadata() *jsjson.Object { return p.metadata }
 func (p *scriptedProvider) State(context.Context) (string, error) {
 	p.log("state")
 	if p.stateThrows != "" {
@@ -286,7 +304,7 @@ func (p *scriptedProvider) State(context.Context) (string, error) {
 	}
 	return p.state, nil
 }
-func (p *scriptedProvider) RedirectToAuthorization(_ context.Context, u *jsurl.URL) error {
+func (p *scriptedProvider) RedirectToAuthorization(_ context.Context, u *weburl.URL) error {
 	p.log("redirectToAuthorization", normalize(u.Href()))
 	sp := u.SearchParams()
 	challenge, _ := sp.Get("code_challenge")
@@ -325,18 +343,18 @@ func (p *scriptedProvider) SaveTokens(_ context.Context, tok oauth.Tokens, info 
 	p.tokens = &tok
 	return nil
 }
-func (p *scriptedProvider) ValidateResourceURL(_ context.Context, serverURL *jsurl.URL, resource *string) (*jsurl.URL, error) {
+func (p *scriptedProvider) ValidateResourceURL(_ context.Context, serverURL *weburl.URL, resource *string) (*weburl.URL, error) {
 	var r any
 	if resource != nil {
 		r = *resource
 	}
 	p.log("validateResourceURL", serverURL.Href(), r)
-	return jsurl.Parse(serverURL.Href(), nil)
+	return weburl.Parse(serverURL.Href())
 }
 func discoveryValue(s oauth.DiscoveryState) any {
-	o := jsonv.NewObject("authorizationServerUrl", s.AuthorizationServerURL)
+	o := jsjson.Obj(jsjson.KV("authorizationServerUrl", jsjson.String(s.AuthorizationServerURL)))
 	if s.ResourceMetadataURL != nil {
-		o.Set("resourceMetadataUrl", *s.ResourceMetadataURL)
+		o.Set("resourceMetadataUrl", jsjson.String(*s.ResourceMetadataURL))
 	}
 	if s.ResourceMetadata != nil {
 		o.Set("resourceMetadata", s.ResourceMetadata.Raw)
@@ -386,11 +404,11 @@ func newScriptedProvider(t *testing.T, h *harness, raw map[string]json.RawMessag
 	}
 	p.redirectURL, p.state, p.stateThrows = str("redirectUrl"), str("state"), str("stateThrows")
 	if v, ok := raw["clientMetadata"]; ok {
-		o, err := jsonv.Parse(v)
+		o, err := jsjson.Parse(v)
 		if err != nil {
 			t.Fatal(err)
 		}
-		p.metadata = o.(*jsonv.Object)
+		p.metadata = o.(*jsjson.Object)
 	}
 	if v, ok := raw["tokens"]; ok {
 		tok, err := oauth.ParseTokensJSON(v)
@@ -400,7 +418,7 @@ func newScriptedProvider(t *testing.T, h *harness, raw map[string]json.RawMessag
 		p.tokens = tok
 	}
 	if v, ok := raw["clientInformation"]; ok {
-		o, _ := jsonv.Parse(v)
+		o, _ := jsjson.Parse(v)
 		c, err := oauth.ParseClientInformation(o)
 		if err != nil {
 			t.Fatal(err)
@@ -505,12 +523,14 @@ func runScenario(t *testing.T, sc *scenario, fx *fixture) {
 		if transport != nil {
 			return transport
 		}
-		u := jsurl.MustParse(sc.Transport.URL)
+		u, err := weburl.Parse(sc.Transport.URL)
+		if err != nil {
+			t.Fatal(err)
+		}
 		opts := StreamableHTTPOptions{OAuthProvider: provider, Fetch: h.fetch, OnInsufficientScope: sc.Transport.OnInsufficientScope, Warn: h.warn}
 		if sc.Transport.RequestInit != nil {
 			opts.RequestInit = &httpx.RequestInit{Redirect: httpx.RedirectMode(sc.Transport.RequestInit.Redirect)}
 		}
-		var err error
 		transport, err = NewStreamableHTTPClientTransport(u, opts)
 		if err != nil {
 			t.Fatal(err)
@@ -536,13 +556,13 @@ func runScenario(t *testing.T, sc *scenario, fx *fixture) {
 			var meta *oauth.AuthorizationServerMetadata
 			meta, stepErr = oauth.DiscoverAuthorizationServerMetadata(ctx, step.URL, oauth.AuthorizationServerDiscoveryOptions{Fetch: h.fetch})
 			if meta != nil {
-				result = jsonv.MustStringify(meta.Raw)
+				result = jsjson.Stringify(meta.Raw)
 			}
 		case "discoverPRM":
 			var meta *oauth.ProtectedResourceMetadata
 			meta, stepErr = oauth.DiscoverOAuthProtectedResourceMetadata(ctx, step.URL, nil, h.fetch)
 			if meta != nil {
-				result = jsonv.MustStringify(meta.Raw)
+				result = jsjson.Stringify(meta.Raw)
 			}
 		case "connect":
 			opts := ClientOptions{}
@@ -561,20 +581,20 @@ func runScenario(t *testing.T, sc *scenario, fx *fixture) {
 			}
 			result = map[string]any{"protocolVersion": pv, "sessionId": sid}
 		case "listTools":
-			var out *jsonv.Object
+			var out *jsjson.Object
 			out, stepErr = client.ListTools(ctx, nil, RequestOptions{Timeout: 15 * time.Second})
 			if out != nil {
-				result = jsonv.MustStringify(out)
+				result = jsjson.Stringify(out)
 			}
 		case "callTool":
-			v, err := jsonv.Parse(step.Params)
+			v, err := jsjson.Parse(step.Params)
 			if err != nil {
 				t.Fatal(err)
 			}
-			var out *jsonv.Object
-			out, stepErr = client.CallTool(ctx, CallToolParams{Extra: v.(*jsonv.Object)}, RequestOptions{Timeout: 60 * time.Second})
+			var out *jsjson.Object
+			out, stepErr = client.CallTool(ctx, CallToolParams{Extra: v.(*jsjson.Object)}, RequestOptions{Timeout: 60 * time.Second})
 			if out != nil {
-				result = jsonv.MustStringify(out)
+				result = jsjson.Stringify(out)
 			}
 		case "send":
 			tr := ensureTransport()
@@ -588,7 +608,7 @@ func runScenario(t *testing.T, sc *scenario, fx *fixture) {
 				},
 				OnMessage: func(m Message) {
 					recvMu.Lock()
-					received = append(received, jsonv.MustStringify(m))
+					received = append(received, jsjson.Stringify(m))
 					recvMu.Unlock()
 				},
 			})
@@ -666,12 +686,12 @@ func joinRaw(list []json.RawMessage) string {
 }
 
 func jsonEqual(a, b []byte) bool {
-	va, err1 := jsonv.Parse(a)
-	vb, err2 := jsonv.Parse(b)
+	va, err1 := jsjson.Parse(a)
+	vb, err2 := jsjson.Parse(b)
 	if err1 != nil || err2 != nil {
 		return bytes.Equal(a, b)
 	}
-	return jsonv.Equal(canonical(va), canonical(vb))
+	return jsjson.Equal(canonical(va), canonical(vb))
 }
 
 func compareRequests(t *testing.T, where string, got, want []recordedRequest) {

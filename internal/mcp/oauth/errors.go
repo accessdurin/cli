@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/accessdurin/cli/internal/mcp/jsonv"
+	"github.com/accessdurin/cli/internal/jsjson"
 )
 
 // Error codes (OAuthErrorCode).
@@ -78,7 +78,7 @@ func (e *IssuerMismatchError) Error() string {
 type RegistrationRejectedError struct {
 	Status            int
 	Body              string
-	SubmittedMetadata *jsonv.Object
+	SubmittedMetadata *jsjson.Object
 }
 
 func (e *RegistrationRejectedError) Error() string {
@@ -119,17 +119,17 @@ func (e *InsufficientScopeError) Error() string {
 }
 
 // jsonString is JSON.stringify for a string.
-func jsonString(v string) string { return jsonv.MustStringify(v) }
+func jsonString(v string) string { return jsjson.Quote(v) }
 
 // parseErrorResponse is the SDK's parseErrorResponse: a standard OAuth error body becomes an
 // OAuthError with its code; anything else becomes a server_error carrying the status and body.
 func parseErrorResponse(status int, body string) *OAuthError {
-	v, err := jsonv.ParseString(body)
+	v, err := jsjson.ParseString(body)
 	if err == nil {
-		var parsed any
+		var parsed jsjson.Value
 		parsed, err = parseWith(ErrorResponseSchema, v)
 		if err == nil {
-			o := parsed.(*jsonv.Object)
+			o := parsed.(*jsjson.Object)
 			desc := optStr(o, "error_description")
 			code := str(o, "error")
 			msg := code
@@ -156,7 +156,7 @@ func jsError(err error) string {
 		return "Error"
 	}
 	switch err.(type) {
-	case *jsonv.SyntaxError:
+	case *jsjson.SyntaxError:
 		return "SyntaxError: " + err.Error()
 	}
 	msg := err.Error()

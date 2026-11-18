@@ -12,9 +12,9 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/accessdurin/cli/internal/jsjson"
 	"github.com/accessdurin/cli/internal/mcp/httpx"
-	"github.com/accessdurin/cli/internal/mcp/jsonv"
-	"github.com/accessdurin/cli/internal/mcp/jsurl"
+	"github.com/accessdurin/cli/internal/weburl"
 )
 
 // Result is AuthResult.
@@ -32,7 +32,7 @@ type Options struct {
 	AuthorizationCode            *string
 	Iss                          *string
 	Scope                        string // "" means none
-	ResourceMetadataURL          *jsurl.URL
+	ResourceMetadataURL          *weburl.URL
 	Fetch                        httpx.Fetch
 	SkipIssuerMetadataValidation bool
 	ForceReauthorization         bool
@@ -93,40 +93,46 @@ func issuersMatch(a, b string) bool {
 
 // resolveClientMetadata fills grant_types (interactive providers) and application_type
 // without overwriting fields the provider set.
-func resolveClientMetadata(provider ClientProvider) *jsonv.Object {
+func resolveClientMetadata(provider ClientProvider) *jsjson.Object {
 	cm := provider.ClientMetadata()
-	var out *jsonv.Object
+	var out *jsjson.Object
 	if cm == nil {
-		out = jsonv.NewObject()
+		out = jsjson.NewObject()
 	} else {
 		out = cm.Clone()
 	}
-	if v, ok := out.Get("grant_types"); !ok || v == nil || jsonv.IsUndefined(v) {
+	if v, ok := out.Get("grant_types"); !ok || isNullish(v) {
 		if provider.RedirectURL() == "" {
-			out.Set("grant_types", jsonv.Undefined)
+			out.Set("grant_types", nil)
 		} else {
-			out.Set("grant_types", []any{"authorization_code", "refresh_token"})
+			out.Set("grant_types", jsjson.Strings("authorization_code", "refresh_token"))
 		}
 	}
-	if v, ok := out.Get("application_type"); !ok || v == nil || jsonv.IsUndefined(v) {
+	if v, ok := out.Get("application_type"); !ok || isNullish(v) {
 		uris, _ := out.Get("redirect_uris")
-		out.Set("application_type", deriveApplicationType(uris))
+		out.Set("application_type", jsjson.String(deriveApplicationType(uris)))
 	}
 	return out
+}
+
+// isNullish is `v == null` (null or undefined).
+func isNullish(v jsjson.Value) bool {
+	_, null := v.(jsjson.Null)
+	return v == nil || null
 }
 
 func isLoopbackHost(hostname string) bool {
 	return hostname == "localhost" || strings.HasSuffix(hostname, ".localhost") || hostname == "127.0.0.1" || hostname == "[::1]" || hostname == "::1"
 }
 
-func deriveApplicationType(uris any) string {
-	list, _ := uris.([]any)
+func deriveApplicationType(uris jsjson.Value) string {
+	list, _ := uris.(jsjson.Array)
 	for _, raw := range list {
-		rs, ok := raw.(string)
+		rs, ok := raw.(jsjson.String)
 		if !ok {
-			rs = describe(raw)
+			rs = jsjson.String(describe(raw))
 		}
-		u, err := jsurl.Parse(rs, nil)
+		u, err := weburl.Parse(string(rs))
 		if err != nil {
 			continue
 		}
@@ -140,24 +146,22 @@ func deriveApplicationType(uris any) string {
 	return "web"
 }
 
-func determineScope(requested string, rm *ProtectedResourceMetadata, asm *AuthorizationServerMetadata, clientMetadata *jsonv.Object) *string {
+func determineScope(requested string, rm *ProtectedResourceMetadata, asm *AuthorizationServerMetadata, clientMetadata *jsjson.Object) *string {
 	eff := requested
 	if eff == "" && rm != nil && len(rm.ScopesSupported) > 0 {
 		eff = strings.Join(rm.ScopesSupported, " ")
 	}
 	if eff == "" && clientMetadata != nil {
-		if v, ok := clientMetadata.Get("scope"); ok {
-			eff, _ = v.(string)
-		}
+		eff, _ = clientMetadata.GetString("scope")
 	}
 	if eff == "" {
 		return nil
 	}
 	if asm != nil && contains(asm.ScopesSupported, "offline_access") && !contains(strings.Split(eff, " "), "offline_access") {
 		if gt, ok := clientMetadata.Get("grant_types"); ok {
-			if list, ok := gt.([]any); ok {
+			if list, ok := gt.(jsjson.Array); ok {
 				for _, g := range list {
-					if g == "refresh_token" {
+					if g == jsjson.String("refresh_token") {
 						eff += " offline_access"
 						break
 					}
@@ -221,7 +225,7 @@ func authInternal(ctx context.Context, provider ClientProvider, o *Options) (Res
 	)
 	effRMURL := o.ResourceMetadataURL
 	if effRMURL == nil && cachedState != nil && cachedState.ResourceMetadataURL != nil && *cachedState.ResourceMetadataURL != "" {
-		if effRMURL, err = jsurl.Parse(*cachedState.ResourceMetadataURL, nil); err != nil {
+		if effRMURL, err = weburl.Parse(*cachedState.ResourceMetadataURL); err != nil {
 			return "", err
 		}
 	}
@@ -286,7 +290,7 @@ func authInternal(ctx context.Context, provider ClientProvider, o *Options) (Res
 			return "", err
 		}
 	}
-	serverURL, err := jsurl.Parse(o.ServerURL, nil)
+	serverURL, err := weburl.Parse(o.ServerURL)
 	if err != nil {
 		return "", err
 	}
@@ -450,11 +454,11 @@ func PKCEChallenge(verifier string) string {
 	return base64.RawURLEncoding.EncodeToString(sum[:])
 }
 
-func startAuthorization(asURL string, metadata *AuthorizationServerMetadata, client *ClientInformation, redirectURL string, scope *string, state string, resource *jsurl.URL) (*jsurl.URL, string, error) {
-	var authURL *jsurl.URL
+func startAuthorization(asURL string, metadata *AuthorizationServerMetadata, client *ClientInformation, redirectURL string, scope *string, state string, resource *weburl.URL) (*weburl.URL, string, error) {
+	var authURL *weburl.URL
 	var err error
 	if metadata != nil {
-		if authURL, err = jsurl.Parse(metadata.AuthorizationEndpoint, nil); err != nil {
+		if authURL, err = weburl.Parse(metadata.AuthorizationEndpoint); err != nil {
 			return nil, "", err
 		}
 		if !contains(metadata.ResponseTypesSupported, "code") {
@@ -463,7 +467,7 @@ func startAuthorization(asURL string, metadata *AuthorizationServerMetadata, cli
 		if metadata.CodeChallengeMethodsSupported != nil && !contains(metadata.CodeChallengeMethodsSupported, "S256") {
 			return nil, "", errors.New("Incompatible auth server: does not support code challenge method S256")
 		}
-	} else if authURL, err = jsurl.ParseRef("/authorize", asURL); err != nil {
+	} else if authURL, err = weburl.ParseRef("/authorize", asURL); err != nil {
 		return nil, "", err
 	}
 	verifier, challenge, err := GeneratePKCE()
@@ -488,6 +492,7 @@ func startAuthorization(asURL string, metadata *AuthorizationServerMetadata, cli
 	if resource != nil {
 		sp.Set("resource", resource.Href())
 	}
+	authURL.SetSearch(sp.String()) // url.searchParams writes through to the URL
 	return authURL, verifier, nil
 }
 
@@ -574,8 +579,8 @@ func applyClientAuthentication(method string, client *ClientInformation, h http.
 }
 
 // AssertSecureTokenEndpoint refuses a token endpoint that is neither https nor loopback.
-func AssertSecureTokenEndpoint(endpoint string) (*jsurl.URL, error) {
-	u, err := jsurl.Parse(endpoint, nil)
+func AssertSecureTokenEndpoint(endpoint string) (*weburl.URL, error) {
+	u, err := weburl.Parse(endpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -585,12 +590,12 @@ func AssertSecureTokenEndpoint(endpoint string) (*jsurl.URL, error) {
 	return u, nil
 }
 
-func executeTokenRequest(ctx context.Context, asURL string, metadata *AuthorizationServerMetadata, params *form, client *ClientInformation, resource *jsurl.URL, fetch httpx.Fetch) (*Tokens, error) {
+func executeTokenRequest(ctx context.Context, asURL string, metadata *AuthorizationServerMetadata, params *form, client *ClientInformation, resource *weburl.URL, fetch httpx.Fetch) (*Tokens, error) {
 	endpoint := ""
 	if metadata != nil {
 		endpoint = metadata.TokenEndpoint
 	} else {
-		u, err := jsurl.ParseRef("/token", asURL)
+		u, err := weburl.ParseRef("/token", asURL)
 		if err != nil {
 			return nil, err
 		}
@@ -615,7 +620,7 @@ func executeTokenRequest(ctx context.Context, asURL string, metadata *Authorizat
 			return nil, err
 		}
 	}
-	body := []byte(jsurl.SerializeQuery(params.list))
+	body := []byte(weburl.NewSearchParams(params.list...).String())
 	resp, err := httpx.WithinOrigin(fetch)(ctx, tokenURL.Href(), &httpx.RequestInit{Method: "POST", Header: h, Body: body})
 	if err != nil {
 		return nil, err
@@ -633,15 +638,15 @@ func executeTokenRequest(ctx context.Context, asURL string, metadata *Authorizat
 	}
 	tokens, parseErr := ParseTokens(withoutIssuer(data))
 	if parseErr != nil {
-		if o, ok := data.(*jsonv.Object); ok && o.Has("error") {
-			return nil, parseErrorResponse(0, jsonv.MustStringify(data))
+		if o, ok := data.(*jsjson.Object); ok && o.Has("error") {
+			return nil, parseErrorResponse(0, jsjson.Stringify(data))
 		}
 		return nil, parseErr
 	}
 	return tokens, nil
 }
 
-func refreshAuthorization(ctx context.Context, asURL string, metadata *AuthorizationServerMetadata, client *ClientInformation, refreshToken string, resource *jsurl.URL, fetch httpx.Fetch) (*Tokens, error) {
+func refreshAuthorization(ctx context.Context, asURL string, metadata *AuthorizationServerMetadata, client *ClientInformation, refreshToken string, resource *weburl.URL, fetch httpx.Fetch) (*Tokens, error) {
 	params := &form{list: [][2]string{{"grant_type", "refresh_token"}, {"refresh_token", refreshToken}}}
 	tokens, err := executeTokenRequest(ctx, asURL, metadata, params, client, resource, fetch)
 	if err != nil {
@@ -654,7 +659,7 @@ func refreshAuthorization(ctx context.Context, asURL string, metadata *Authoriza
 	return tokens, nil
 }
 
-func fetchToken(ctx context.Context, provider ClientProvider, asURL string, metadata *AuthorizationServerMetadata, resource *jsurl.URL, code, iss *string, fetch httpx.Fetch) (*Tokens, error) {
+func fetchToken(ctx context.Context, provider ClientProvider, asURL string, metadata *AuthorizationServerMetadata, resource *weburl.URL, code, iss *string, fetch httpx.Fetch) (*Tokens, error) {
 	if code != nil {
 		if err := validateAuthorizationResponseIssuer(iss, metadata); err != nil {
 			return nil, err
@@ -703,19 +708,19 @@ func fetchToken(ctx context.Context, provider ClientProvider, asURL string, meta
 	return executeTokenRequest(ctx, asURL, metadata, params, client, resource, fetch)
 }
 
-func registerClient(ctx context.Context, asURL string, metadata *AuthorizationServerMetadata, clientMetadata *jsonv.Object, scope *string, fetch httpx.Fetch) (*ClientInformation, error) {
+func registerClient(ctx context.Context, asURL string, metadata *AuthorizationServerMetadata, clientMetadata *jsjson.Object, scope *string, fetch httpx.Fetch) (*ClientInformation, error) {
 	var registrationURL string
 	if metadata != nil {
 		if metadata.RegistrationEndpoint == nil {
 			return nil, errors.New("Incompatible auth server: does not support dynamic client registration")
 		}
-		u, err := jsurl.Parse(*metadata.RegistrationEndpoint, nil)
+		u, err := weburl.Parse(*metadata.RegistrationEndpoint)
 		if err != nil {
 			return nil, err
 		}
 		registrationURL = u.Href()
 	} else {
-		u, err := jsurl.ParseRef("/register", asURL)
+		u, err := weburl.ParseRef("/register", asURL)
 		if err != nil {
 			return nil, err
 		}
@@ -723,14 +728,11 @@ func registerClient(ctx context.Context, asURL string, metadata *AuthorizationSe
 	}
 	submitted := clientMetadata.Clone()
 	if scope != nil {
-		submitted.Set("scope", *scope)
+		submitted.Set("scope", jsjson.String(*scope))
 	}
 	h := http.Header{}
 	h.Set("Content-Type", "application/json")
-	body, err := jsonv.Stringify(submitted)
-	if err != nil {
-		return nil, err
-	}
+	body := []byte(jsjson.Stringify(submitted))
 	resp, err := httpx.WithinOrigin(fetch)(ctx, registrationURL, &httpx.RequestInit{Method: "POST", Header: h, Body: body})
 	if err != nil {
 		return nil, err
@@ -751,7 +753,7 @@ func registerClient(ctx context.Context, asURL string, metadata *AuthorizationSe
 
 // WWWAuthenticateParams are the parameters extractWWWAuthenticateParams reads.
 type WWWAuthenticateParams struct {
-	ResourceMetadataURL *jsurl.URL
+	ResourceMetadataURL *weburl.URL
 	Scope               string
 	Error               string
 	ErrorDescription    string
@@ -796,7 +798,7 @@ func ExtractWWWAuthenticateParams(h http.Header) WWWAuthenticateParams {
 	}
 	var out WWWAuthenticateParams
 	if rm := extractField(header, "resource_metadata"); rm != "" {
-		if u, err := jsurl.Parse(rm, nil); err == nil {
+		if u, err := weburl.Parse(rm); err == nil {
 			out.ResourceMetadataURL = u
 		}
 	}

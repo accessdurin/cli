@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
-	"github.com/accessdurin/cli/internal/mcp/jsonv"
-	"github.com/accessdurin/cli/internal/mcp/jsurl"
+	"github.com/accessdurin/cli/internal/jsjson"
 	s "github.com/accessdurin/cli/internal/mcp/schema"
+	"github.com/accessdurin/cli/internal/weburl"
 )
 
 // Tokens is OAuthTokens / StoredOAuthTokens. Field order is the schema's declaration order, which
@@ -25,28 +26,26 @@ type Tokens struct {
 
 // ParseTokens applies OAuthTokensSchema: unknown keys are stripped, expires_in is coerced with
 // Number(), and a non-string issuer is dropped. It accepts every stored entry the SDK accepts.
-func ParseTokens(v any) (*Tokens, error) {
+func ParseTokens(v jsjson.Value) (*Tokens, error) {
 	out, err := s.Parse(TokensSchema, v)
 	if err != nil {
 		return nil, err
 	}
-	o := out.(*jsonv.Object)
+	o := out.(*jsjson.Object)
 	t := &Tokens{AccessToken: str(o, "access_token"), TokenType: str(o, "token_type")}
 	t.IDToken = optStr(o, "id_token")
 	t.Scope = optStr(o, "scope")
 	t.RefreshToken = optStr(o, "refresh_token")
 	t.Issuer = optStr(o, "issuer")
-	if f, ok := o.Get("expires_in"); ok {
-		if n, ok := f.(float64); ok {
-			t.ExpiresIn = &n
-		}
+	if n, ok := o.GetNumber("expires_in"); ok {
+		t.ExpiresIn = &n
 	}
 	return t, nil
 }
 
 // ParseTokensJSON parses JSON text and applies ParseTokens.
 func ParseTokensJSON(data []byte) (*Tokens, error) {
-	v, err := jsonv.Parse(data)
+	v, err := jsjson.Parse(data)
 	if err != nil {
 		return nil, err
 	}
@@ -62,6 +61,28 @@ func (t *Tokens) UnmarshalJSON(data []byte) error {
 	*t = *parsed
 	return nil
 }
+
+// Object is JSON.stringify's view of the tokens: the keys present, in schema order.
+func (t Tokens) Object() *jsjson.Object {
+	o := jsjson.Obj(jsjson.KV("access_token", jsjson.String(t.AccessToken)))
+	opt := func(key string, v *string) {
+		if v != nil {
+			o.Set(key, jsjson.String(*v))
+		}
+	}
+	opt("id_token", t.IDToken)
+	o.Set("token_type", jsjson.String(t.TokenType))
+	if t.ExpiresIn != nil {
+		o.Set("expires_in", jsjson.Number(*t.ExpiresIn))
+	}
+	opt("scope", t.Scope)
+	opt("refresh_token", t.RefreshToken)
+	opt("issuer", t.Issuer)
+	return o
+}
+
+// MarshalJSON writes the tokens as JSON.stringify writes the parsed object.
+func (t Tokens) MarshalJSON() ([]byte, error) { return []byte(jsjson.Stringify(t.Object())), nil }
 
 // withIssuer returns a copy carrying the issuer stamp.
 func (t Tokens) withIssuer(issuer string) Tokens {
@@ -102,27 +123,30 @@ type ClientInformation struct {
 
 // MarshalJSON keeps present-but-empty arrays, which zod would keep.
 func (c ClientInformation) MarshalJSON() ([]byte, error) {
-	o := jsonv.NewObject()
+	o, err := c.Object()
+	if err != nil {
+		return nil, err
+	}
+	return []byte(jsjson.Stringify(o)), nil
+}
+
+// Object is JSON.stringify's view of the client information: the keys present, in schema
+// order (present-but-empty arrays kept, as zod keeps them).
+func (c ClientInformation) Object() (*jsjson.Object, error) {
+	o := jsjson.NewObject()
 	arr := func(key string, v []string) {
 		if v != nil || c.present[key] {
-			if v == nil {
-				v = []string{}
-			}
-			a := make([]any, len(v))
-			for i, x := range v {
-				a[i] = x
-			}
-			o.Set(key, a)
+			o.Set(key, jsjson.Strings(v...))
 		}
 	}
 	opt := func(key string, v *string) {
 		if v != nil {
-			o.Set(key, *v)
+			o.Set(key, jsjson.String(*v))
 		}
 	}
 	num := func(key string, v *float64) {
 		if v != nil {
-			o.Set(key, *v)
+			o.Set(key, jsjson.Number(*v))
 		}
 	}
 	arr("redirect_uris", c.RedirectURIs)
@@ -139,7 +163,7 @@ func (c ClientInformation) MarshalJSON() ([]byte, error) {
 	opt("policy_uri", c.PolicyURI)
 	opt("jwks_uri", c.JwksURI)
 	if c.Jwks != nil {
-		v, err := jsonv.Parse(c.Jwks)
+		v, err := jsjson.Parse(c.Jwks)
 		if err != nil {
 			return nil, err
 		}
@@ -148,37 +172,36 @@ func (c ClientInformation) MarshalJSON() ([]byte, error) {
 	opt("software_id", c.SoftwareID)
 	opt("software_version", c.SoftwareVersion)
 	opt("software_statement", c.SoftwareStatement)
-	o.Set("client_id", c.ClientID)
+	o.Set("client_id", jsjson.String(c.ClientID))
 	opt("client_secret", c.ClientSecret)
 	num("client_id_issued_at", c.ClientIDIssuedAt)
 	num("client_secret_expires_at", c.ClientSecretExpiresAt)
 	opt("issuer", c.Issuer)
-	return jsonv.Stringify(o)
+	return o, nil
 }
 
-func clientInfoFromObject(o *jsonv.Object) *ClientInformation {
+func clientInfoFromObject(o *jsjson.Object) *ClientInformation {
 	c := &ClientInformation{present: map[string]bool{}}
 	arr := func(key string) []string {
 		v, ok := o.Get(key)
 		if !ok {
 			return nil
 		}
-		a, ok := v.([]any)
+		a, ok := v.(jsjson.Array)
 		if !ok {
 			return nil
 		}
 		c.present[key] = true
 		out := make([]string, len(a))
 		for i, x := range a {
-			out[i], _ = x.(string)
+			sx, _ := x.(jsjson.String)
+			out[i] = string(sx)
 		}
 		return out
 	}
 	num := func(key string) *float64 {
-		if v, ok := o.Get(key); ok {
-			if f, ok := v.(float64); ok {
-				return &f
-			}
+		if f, ok := o.GetNumber(key); ok {
+			return &f
 		}
 		return nil
 	}
@@ -195,8 +218,8 @@ func clientInfoFromObject(o *jsonv.Object) *ClientInformation {
 	c.TosURI = optStr(o, "tos_uri")
 	c.PolicyURI = optStr(o, "policy_uri")
 	c.JwksURI = optStr(o, "jwks_uri")
-	if v, ok := o.Get("jwks"); ok && !jsonv.IsUndefined(v) {
-		c.Jwks = json.RawMessage(jsonv.MustStringify(v))
+	if v, ok := o.Get("jwks"); ok && v != nil {
+		c.Jwks = json.RawMessage(jsjson.Stringify(v))
 	}
 	c.SoftwareID = optStr(o, "software_id")
 	c.SoftwareVersion = optStr(o, "software_version")
@@ -211,30 +234,30 @@ func clientInfoFromObject(o *jsonv.Object) *ClientInformation {
 
 // ParseClientInformation applies OAuthClientInformationSchema (client_id, client_secret,
 // client_id_issued_at, client_secret_expires_at, issuer; everything else stripped).
-func ParseClientInformation(v any) (*ClientInformation, error) {
+func ParseClientInformation(v jsjson.Value) (*ClientInformation, error) {
 	out, err := s.Parse(ClientInformationSchema, v)
 	if err != nil {
 		return nil, err
 	}
-	return clientInfoFromObject(out.(*jsonv.Object)), nil
+	return clientInfoFromObject(out.(*jsjson.Object)), nil
 }
 
 // ParseClientInformationFull applies OAuthClientInformationFullSchema (registration responses).
-func ParseClientInformationFull(v any) (*ClientInformation, error) {
+func ParseClientInformationFull(v jsjson.Value) (*ClientInformation, error) {
 	out, err := s.Parse(ClientInformationFullSchema, v)
 	if err != nil {
 		return nil, err
 	}
-	return clientInfoFromObject(out.(*jsonv.Object)), nil
+	return clientInfoFromObject(out.(*jsjson.Object)), nil
 }
 
 // ParseClientMetadata applies OAuthClientMetadataSchema and returns the parsed object.
-func ParseClientMetadata(v any) (*jsonv.Object, error) {
+func ParseClientMetadata(v jsjson.Value) (*jsjson.Object, error) {
 	out, err := s.Parse(ClientMetadataSchema, v)
 	if err != nil {
 		return nil, err
 	}
-	return out.(*jsonv.Object), nil
+	return out.(*jsjson.Object), nil
 }
 
 func (c ClientInformation) withIssuer(issuer string) ClientInformation {
@@ -242,49 +265,36 @@ func (c ClientInformation) withIssuer(issuer string) ClientInformation {
 	return c
 }
 
-func str(o *jsonv.Object, key string) string {
-	v, _ := o.Get(key)
-	sv, _ := v.(string)
+func str(o *jsjson.Object, key string) string {
+	sv, _ := o.GetString(key)
 	return sv
 }
 
-func optStr(o *jsonv.Object, key string) *string {
-	v, ok := o.Get(key)
-	if !ok {
-		return nil
-	}
-	sv, ok := v.(string)
+func optStr(o *jsjson.Object, key string) *string {
+	sv, ok := o.GetString(key)
 	if !ok {
 		return nil
 	}
 	return &sv
 }
 
-func optBool(o *jsonv.Object, key string) *bool {
-	v, ok := o.Get(key)
-	if !ok {
-		return nil
-	}
-	b, ok := v.(bool)
+func optBool(o *jsjson.Object, key string) *bool {
+	b, ok := o.GetBool(key)
 	if !ok {
 		return nil
 	}
 	return &b
 }
 
-func strs(o *jsonv.Object, key string) []string {
-	v, ok := o.Get(key)
-	if !ok {
-		return nil
-	}
-	a, ok := v.([]any)
+func strs(o *jsjson.Object, key string) []string {
+	a, ok := o.GetArray(key)
 	if !ok {
 		return nil
 	}
 	out := make([]string, 0, len(a))
 	for _, x := range a {
-		if sv, ok := x.(string); ok {
-			out = append(out, sv)
+		if sv, ok := x.(jsjson.String); ok {
+			out = append(out, string(sv))
 		}
 	}
 	return out
@@ -293,20 +303,20 @@ func strs(o *jsonv.Object, key string) []string {
 // ProtectedResourceMetadata is parsed RFC 9728 metadata. Raw is the zod-parsed object (loose:
 // undeclared keys kept); the typed fields are views of it.
 type ProtectedResourceMetadata struct {
-	Raw                  *jsonv.Object
+	Raw                  *jsjson.Object
 	Resource             string
 	AuthorizationServers []string // nil when absent
 	ScopesSupported      []string // nil when absent
 }
 
-func newProtectedResourceMetadata(o *jsonv.Object) *ProtectedResourceMetadata {
+func newProtectedResourceMetadata(o *jsjson.Object) *ProtectedResourceMetadata {
 	return &ProtectedResourceMetadata{Raw: o, Resource: str(o, "resource"), AuthorizationServers: strs(o, "authorization_servers"), ScopesSupported: strs(o, "scopes_supported")}
 }
 
 // AuthorizationServerMetadata is parsed RFC 8414 or OpenID Connect discovery metadata. Raw is the
 // zod-parsed object; the typed fields are views of it.
 type AuthorizationServerMetadata struct {
-	Raw                                        *jsonv.Object
+	Raw                                        *jsjson.Object
 	Issuer                                     string
 	AuthorizationEndpoint                      string
 	TokenEndpoint                              string
@@ -320,7 +330,7 @@ type AuthorizationServerMetadata struct {
 	AuthorizationResponseIssParameterSupported *bool
 }
 
-func newAuthorizationServerMetadata(o *jsonv.Object) *AuthorizationServerMetadata {
+func newAuthorizationServerMetadata(o *jsjson.Object) *AuthorizationServerMetadata {
 	return &AuthorizationServerMetadata{
 		Raw: o, Issuer: str(o, "issuer"), AuthorizationEndpoint: str(o, "authorization_endpoint"),
 		TokenEndpoint: str(o, "token_endpoint"), RegistrationEndpoint: optStr(o, "registration_endpoint"),
@@ -377,9 +387,9 @@ type ClientProvider interface {
 	RedirectURL() string
 	// ClientMetadata returns the RFC 7591 metadata to register, as an ordered object (its key
 	// order is the registration request body's key order).
-	ClientMetadata() *jsonv.Object
+	ClientMetadata() *jsjson.Object
 	State(ctx context.Context) (string, error)
-	RedirectToAuthorization(ctx context.Context, authorizationURL *jsurl.URL) error
+	RedirectToAuthorization(ctx context.Context, authorizationURL *weburl.URL) error
 	SaveCodeVerifier(ctx context.Context, verifier string) error
 	CodeVerifier(ctx context.Context) (string, error)
 	ClientInformation(ctx context.Context, info *ClientInformationContext) (*ClientInformation, error)
@@ -389,10 +399,33 @@ type ClientProvider interface {
 	// ValidateResourceURL receives the server URL (fragment removed) and the metadata's
 	// resource (nil when there is no protected-resource metadata) and returns the RFC 8707
 	// resource indicator to use, or nil for none.
-	ValidateResourceURL(ctx context.Context, serverURL *jsurl.URL, resource *string) (*jsurl.URL, error)
+	ValidateResourceURL(ctx context.Context, serverURL *weburl.URL, resource *string) (*weburl.URL, error)
 	SaveDiscoveryState(ctx context.Context, state DiscoveryState) error
 	DiscoveryState(ctx context.Context) (*DiscoveryState, error)
 	InvalidateCredentials(ctx context.Context, scope InvalidationScope) error
 }
 
-func describe(v any) string { return fmt.Sprint(v) }
+// describe is String(v) for a JSON value.
+func describe(v jsjson.Value) string {
+	switch t := v.(type) {
+	case nil:
+		return "undefined"
+	case jsjson.Null:
+		return "null"
+	case jsjson.Bool:
+		return fmt.Sprint(bool(t))
+	case jsjson.Number:
+		return jsjson.FormatNumber(float64(t))
+	case jsjson.String:
+		return string(t)
+	case jsjson.Array:
+		parts := make([]string, len(t))
+		for i, x := range t {
+			if _, null := x.(jsjson.Null); x != nil && !null {
+				parts[i] = describe(x)
+			}
+		}
+		return strings.Join(parts, ",")
+	}
+	return "[object Object]"
+}

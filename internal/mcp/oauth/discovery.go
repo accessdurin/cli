@@ -7,21 +7,21 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/accessdurin/cli/internal/jsjson"
 	"github.com/accessdurin/cli/internal/mcp/httpx"
-	"github.com/accessdurin/cli/internal/mcp/jsonv"
-	"github.com/accessdurin/cli/internal/mcp/jsurl"
 	s "github.com/accessdurin/cli/internal/mcp/schema"
+	"github.com/accessdurin/cli/internal/weburl"
 )
 
 // LatestProtocolVersion is LATEST_PROTOCOL_VERSION, sent as MCP-Protocol-Version on discovery.
 const LatestProtocolVersion = "2025-11-25"
 
-func parseWith(schema s.Schema, v any) (any, error) { return s.Parse(schema, v) }
+func parseWith(schema s.Schema, v jsjson.Value) (jsjson.Value, error) { return s.Parse(schema, v) }
 
 // ProtectedResourceDiscoveryOptions are the options of discoverOAuthProtectedResourceMetadata.
 type ProtectedResourceDiscoveryOptions struct {
-	ProtocolVersion     string     // default LatestProtocolVersion
-	ResourceMetadataURL *jsurl.URL // explicit metadata URL (no fallback)
+	ProtocolVersion     string      // default LatestProtocolVersion
+	ResourceMetadataURL *weburl.URL // explicit metadata URL (no fallback)
 }
 
 func buildWellKnownPath(prefix, pathname string) string {
@@ -46,19 +46,19 @@ func tryMetadataDiscovery(ctx context.Context, url, protocolVersion string, fetc
 	return httpx.WithinOrigin(fetch)(ctx, url, &httpx.RequestInit{Header: h})
 }
 
-func discoverMetadataWithFallback(ctx context.Context, serverURL, wellKnownType string, fetch httpx.Fetch, protocolVersion string, metadataURL *jsurl.URL) (*http.Response, error) {
-	issuer, err := jsurl.Parse(serverURL, nil)
+func discoverMetadataWithFallback(ctx context.Context, serverURL, wellKnownType string, fetch httpx.Fetch, protocolVersion string, metadataURL *weburl.URL) (*http.Response, error) {
+	issuer, err := weburl.Parse(serverURL)
 	if err != nil {
 		return nil, err
 	}
 	if protocolVersion == "" {
 		protocolVersion = LatestProtocolVersion
 	}
-	var url *jsurl.URL
+	var url *weburl.URL
 	if metadataURL != nil {
 		url = metadataURL.Clone()
 	} else {
-		url, err = jsurl.Parse(buildWellKnownPath(wellKnownType, issuer.Pathname()), issuer)
+		url, err = weburl.ParseRef(buildWellKnownPath(wellKnownType, issuer.Pathname()), issuer.Href())
 		if err != nil {
 			return nil, err
 		}
@@ -69,7 +69,7 @@ func discoverMetadataWithFallback(ctx context.Context, serverURL, wellKnownType 
 		return nil, err
 	}
 	if metadataURL == nil && shouldAttemptFallback(resp, issuer.Pathname()) {
-		root, err := jsurl.Parse("/.well-known/"+wellKnownType, issuer)
+		root, err := weburl.ParseRef("/.well-known/"+wellKnownType, issuer.Href())
 		if err != nil {
 			return nil, err
 		}
@@ -108,11 +108,11 @@ func DiscoverOAuthProtectedResourceMetadata(ctx context.Context, serverURL strin
 	if err != nil {
 		return nil, err
 	}
-	return newProtectedResourceMetadata(parsed.(*jsonv.Object)), nil
+	return newProtectedResourceMetadata(parsed.(*jsjson.Object)), nil
 }
 
 type discoveryURL struct {
-	url  *jsurl.URL
+	url  *weburl.URL
 	oidc bool
 }
 
@@ -132,16 +132,16 @@ func BuildDiscoveryURLs(authorizationServerURL string) ([]string, error) {
 }
 
 func buildDiscoveryURLs(authorizationServerURL string) ([]discoveryURL, error) {
-	u, err := jsurl.Parse(authorizationServerURL, nil)
+	u, err := weburl.Parse(authorizationServerURL)
 	if err != nil {
 		return nil, err
 	}
-	origin, err := jsurl.Parse(u.Origin(), nil)
-	if err != nil {
+	origin := u.Origin()
+	if _, err := weburl.Parse(origin); err != nil {
 		return nil, err
 	}
 	mk := func(path string, oidc bool) discoveryURL {
-		x, err2 := jsurl.Parse(path, origin)
+		x, err2 := weburl.ParseRef(path, origin)
 		if err2 != nil {
 			err = err2
 		}
@@ -216,7 +216,7 @@ func DiscoverAuthorizationServerMetadata(ctx context.Context, authorizationServe
 		if err != nil {
 			return nil, err
 		}
-		meta := newAuthorizationServerMetadata(parsed.(*jsonv.Object))
+		meta := newAuthorizationServerMetadata(parsed.(*jsjson.Object))
 		if !opts.SkipIssuerValidation {
 			expected := authorizationServerURL
 			if !(meta.Issuer == expected || (strings.HasSuffix(expected, "/") && meta.Issuer == expected[:len(expected)-1])) {
@@ -238,7 +238,7 @@ type ServerInfo struct {
 
 // ServerInfoOptions are the options of discoverOAuthServerInfo.
 type ServerInfoOptions struct {
-	ResourceMetadataURL          *jsurl.URL
+	ResourceMetadataURL          *weburl.URL
 	Fetch                        httpx.Fetch
 	SkipIssuerMetadataValidation bool
 }
@@ -260,7 +260,7 @@ func DiscoverOAuthServerInfo(ctx context.Context, serverURL string, opts ServerI
 		}
 	}
 	if info.AuthorizationServerURL == "" {
-		root, err := jsurl.ParseRef("/", serverURL)
+		root, err := weburl.ParseRef("/", serverURL)
 		if err != nil {
 			return nil, err
 		}

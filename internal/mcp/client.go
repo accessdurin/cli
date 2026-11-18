@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/accessdurin/cli/internal/mcp/jsonv"
+	"github.com/accessdurin/cli/internal/jsjson"
 	s "github.com/accessdurin/cli/internal/mcp/schema"
 )
 
@@ -33,16 +33,16 @@ type Implementation struct {
 	Description string
 }
 
-func (i Implementation) object() *jsonv.Object {
-	o := jsonv.NewObject("name", i.Name, "version", i.Version)
+func (i Implementation) object() *jsjson.Object {
+	o := jsjson.Obj(jsjson.KV("name", jsjson.String(i.Name)), jsjson.KV("version", jsjson.String(i.Version)))
 	if i.Title != "" {
-		o.Set("title", i.Title)
+		o.Set("title", jsjson.String(i.Title))
 	}
 	if i.WebsiteURL != "" {
-		o.Set("websiteUrl", i.WebsiteURL)
+		o.Set("websiteUrl", jsjson.String(i.WebsiteURL))
 	}
 	if i.Description != "" {
-		o.Set("description", i.Description)
+		o.Set("description", jsjson.String(i.Description))
 	}
 	return o
 }
@@ -50,7 +50,7 @@ func (i Implementation) object() *jsonv.Object {
 // ClientOptions are the ClientOptions the port supports.
 type ClientOptions struct {
 	// Capabilities are the client capabilities sent in initialize (default {}).
-	Capabilities *jsonv.Object
+	Capabilities *jsjson.Object
 	// ListMaxPages caps the auto-aggregating listTools walk: 0 means the default (64); a
 	// negative value disables the cap (TypeScript listMaxPages: 0).
 	ListMaxPages int
@@ -70,7 +70,7 @@ type RequestOptions struct {
 	// Timeout defaults to DefaultRequestTimeout.
 	Timeout time.Duration
 	// OnProgress subscribes to progress notifications (adds _meta.progressToken).
-	OnProgress func(params *jsonv.Object)
+	OnProgress func(params *jsjson.Object)
 	// ResetTimeoutOnProgress restarts the timeout on each progress notification.
 	ResetTimeoutOnProgress bool
 	// MaxTotalTimeout bounds the total time when the timeout is reset by progress.
@@ -92,7 +92,7 @@ type pendingTimeout struct {
 // the SDK default and what the CLI uses; server/discover negotiation is not ported).
 type Client struct {
 	info      Implementation
-	caps      *jsonv.Object
+	caps      *jsjson.Object
 	opts      ClientOptions
 	validator JSONSchemaValidator
 
@@ -100,10 +100,10 @@ type Client struct {
 	transport          Transport
 	nextID             int64
 	responseHandlers   map[float64]responseHandler
-	progressHandlers   map[float64]func(*jsonv.Object)
+	progressHandlers   map[float64]func(*jsjson.Object)
 	timeouts           map[float64]*pendingTimeout
-	serverCapabilities *jsonv.Object
-	serverVersion      *jsonv.Object
+	serverCapabilities *jsjson.Object
+	serverVersion      *jsjson.Object
 	instructions       *string
 	negotiated         string
 	cache              toolsCache
@@ -115,7 +115,7 @@ type Client struct {
 
 // NewClient creates a client.
 func NewClient(info Implementation, opts ClientOptions) *Client {
-	caps := jsonv.NewObject()
+	caps := jsjson.NewObject()
 	if opts.Capabilities != nil {
 		caps = opts.Capabilities.Clone()
 	}
@@ -129,7 +129,7 @@ func NewClient(info Implementation, opts ClientOptions) *Client {
 	return &Client{
 		info: info, caps: caps, opts: opts, validator: v,
 		responseHandlers: map[float64]responseHandler{},
-		progressHandlers: map[float64]func(*jsonv.Object){},
+		progressHandlers: map[float64]func(*jsjson.Object){},
 		timeouts:         map[float64]*pendingTimeout{},
 	}
 }
@@ -144,14 +144,14 @@ func (c *Client) onerror(err error) {
 }
 
 // ServerCapabilities returns the server's capabilities after initialization.
-func (c *Client) ServerCapabilities() *jsonv.Object {
+func (c *Client) ServerCapabilities() *jsjson.Object {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.serverCapabilities
 }
 
 // ServerVersion returns the server's serverInfo after initialization.
-func (c *Client) ServerVersion() *jsonv.Object {
+func (c *Client) ServerVersion() *jsjson.Object {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.serverVersion
@@ -255,14 +255,17 @@ func (c *Client) legacyHandshake(ctx context.Context, transport Transport, opts 
 	if len(versions) == 0 {
 		return &SdkError{Code: ErrEraNegotiationFailed, Message: "Cannot run the initialize handshake: supportedProtocolVersions contains no pre-2026-07-28 protocol version"}
 	}
-	params := jsonv.NewObject("protocolVersion", versions[0], "capabilities", c.caps, "clientInfo", c.info.object())
+	params := jsjson.Obj(
+		jsjson.KV("protocolVersion", jsjson.String(versions[0])),
+		jsjson.KV("capabilities", c.caps),
+		jsjson.KV("clientInfo", c.info.object()),
+	)
 	out, err := c.request(ctx, "initialize", params, InitializeResultWireSchema, opts)
 	if err != nil {
 		return err
 	}
-	result := out.(*jsonv.Object)
-	pv, _ := result.Get("protocolVersion")
-	pvs, _ := pv.(string)
+	result := out.(*jsjson.Object)
+	pvs, _ := result.GetString("protocolVersion")
 	supported := false
 	for _, v := range versions {
 		if v == pvs {
@@ -275,12 +278,10 @@ func (c *Client) legacyHandshake(ctx context.Context, transport Transport, opts 
 	caps, _ := result.Get("capabilities")
 	info, _ := result.Get("serverInfo")
 	c.mu.Lock()
-	c.serverCapabilities, _ = caps.(*jsonv.Object)
-	c.serverVersion, _ = info.(*jsonv.Object)
-	if instr, ok := result.Get("instructions"); ok {
-		if str, ok := instr.(string); ok {
-			c.instructions = &str
-		}
+	c.serverCapabilities, _ = caps.(*jsjson.Object)
+	c.serverVersion, _ = info.(*jsjson.Object)
+	if str, ok := result.GetString("instructions"); ok {
+		c.instructions = &str
 	}
 	c.mu.Unlock()
 	if setter, ok := transport.(ProtocolVersionSetter); ok {
@@ -313,7 +314,7 @@ func (c *Client) onclose() {
 	c.mu.Lock()
 	handlers := c.responseHandlers
 	c.responseHandlers = map[float64]responseHandler{}
-	c.progressHandlers = map[float64]func(*jsonv.Object){}
+	c.progressHandlers = map[float64]func(*jsjson.Object){}
 	for _, t := range c.timeouts {
 		t.timer.Stop()
 	}
@@ -341,7 +342,7 @@ func (c *Client) dispatch(m Message) {
 	case IsJSONRPCNotification(m):
 		c.onnotification(m)
 	default:
-		c.onerror(fmt.Errorf("Unknown message type: %s", jsonv.MustStringify(m)))
+		c.onerror(fmt.Errorf("Unknown message type: %s", jsjson.Stringify(m)))
 	}
 }
 
@@ -352,7 +353,7 @@ func (c *Client) onresponse(m Message) {
 	h := c.responseHandlers[key]
 	if !ok || h == nil {
 		c.mu.Unlock()
-		c.onerror(fmt.Errorf("Received a response for an unknown message ID: %s", jsonv.MustStringify(m)))
+		c.onerror(fmt.Errorf("Received a response for an unknown message ID: %s", jsjson.Stringify(m)))
 		return
 	}
 	delete(c.responseHandlers, key)
@@ -367,12 +368,12 @@ func (c *Client) onresponse(m Message) {
 		return
 	}
 	errObj, _ := m.Get("error")
-	eo := errObj.(*jsonv.Object)
-	code, _ := eo.Get("code")
-	msg, _ := eo.Get("message")
+	eo := errObj.(*jsjson.Object)
+	code, _ := eo.GetNumber("code")
+	msg, _ := eo.GetString("message")
 	data, hasData := eo.Get("data")
-	pe := &ProtocolError{Code: int(code.(float64)), Message: msg.(string)}
-	if hasData && !jsonv.IsUndefined(data) {
+	pe := &ProtocolError{Code: int(code), Message: msg}
+	if hasData && data != nil {
 		pe.Data, pe.HasData = data, true
 	}
 	h(nil, pe)
@@ -384,8 +385,12 @@ var modernOnlyRequestMethods = map[string]bool{"server/discover": true, "subscri
 
 var modernOnlyNotificationMethods = map[string]bool{"notifications/subscriptions/acknowledged": true}
 
-func (c *Client) sendErrorResponse(t Transport, id any, code int, message string) {
-	resp := jsonv.NewObject("jsonrpc", "2.0", "id", id, "error", jsonv.NewObject("code", float64(code), "message", message))
+func (c *Client) sendErrorResponse(t Transport, id jsjson.Value, code int, message string) {
+	resp := jsjson.Obj(
+		jsjson.KV("jsonrpc", jsjson.String("2.0")),
+		jsjson.KV("id", id),
+		jsjson.KV("error", jsjson.Obj(jsjson.KV("code", jsjson.Int(int64(code))), jsjson.KV("message", jsjson.String(message)))),
+	)
 	go func() {
 		if err := t.Send(context.Background(), resp, nil); err != nil {
 			c.onerror(fmt.Errorf("Failed to send an error response: %s", jsErrorString(err)))
@@ -412,7 +417,7 @@ func (c *Client) onrequest(m Message) {
 		c.sendErrorResponse(t, id, CodeInternalError, err.Error())
 		return
 	}
-	resp := jsonv.NewObject("result", jsonv.NewObject(), "jsonrpc", "2.0", "id", id)
+	resp := jsjson.Obj(jsjson.KV("result", jsjson.NewObject()), jsjson.KV("jsonrpc", jsjson.String("2.0")), jsjson.KV("id", id))
 	go func() {
 		if err := t.Send(context.Background(), resp, nil); err != nil {
 			c.onerror(fmt.Errorf("Failed to send response: %s", jsErrorString(err)))
@@ -451,13 +456,13 @@ func (c *Client) onnotification(m Message) {
 			c.onerror(fmt.Errorf("Uncaught error in notification handler: Error: %s", err.Error()))
 			return
 		}
-		c.onprogress(parsed.(*jsonv.Object))
+		c.onprogress(parsed.(*jsjson.Object))
 	}
 }
 
-func (c *Client) onprogress(n *jsonv.Object) {
+func (c *Client) onprogress(n *jsjson.Object) {
 	p, _ := n.Get("params")
-	params := p.(*jsonv.Object).Clone()
+	params := p.(*jsjson.Object).Clone()
 	token, _ := params.Get("progressToken")
 	params.Delete("progressToken")
 	key, _ := idNumber(token)
@@ -465,7 +470,7 @@ func (c *Client) onprogress(n *jsonv.Object) {
 	h := c.progressHandlers[key]
 	if h == nil {
 		c.mu.Unlock()
-		c.onerror(fmt.Errorf("Received a progress notification for an unknown token: %s", jsonv.MustStringify(n)))
+		c.onerror(fmt.Errorf("Received a progress notification for an unknown token: %s", jsjson.Stringify(n)))
 		return
 	}
 	rh := c.responseHandlers[key]
@@ -513,23 +518,23 @@ func (c *Client) assertCapabilityForMethod(method string) error {
 	return nil
 }
 
-func truthy(v any) bool {
+func truthy(v jsjson.Value) bool {
 	switch t := v.(type) {
-	case nil:
+	case nil, jsjson.Null:
 		return false
-	case bool:
-		return t
-	case float64:
+	case jsjson.Bool:
+		return bool(t)
+	case jsjson.Number:
 		return t != 0 && t == t
-	case string:
+	case jsjson.String:
 		return t != ""
 	}
-	return !jsonv.IsUndefined(v)
+	return true
 }
 
 // Request sends a request and validates its result with schema (nil: the 2025 registry schema
 // for initialize, ping, tools/list and tools/call). params nil means no params key.
-func (c *Client) Request(ctx context.Context, method string, params *jsonv.Object, schema s.Schema, opts RequestOptions) (any, error) {
+func (c *Client) Request(ctx context.Context, method string, params *jsjson.Object, schema s.Schema, opts RequestOptions) (jsjson.Value, error) {
 	if schema == nil {
 		switch method {
 		case "initialize":
@@ -548,11 +553,11 @@ func (c *Client) Request(ctx context.Context, method string, params *jsonv.Objec
 }
 
 type outcome struct {
-	value any
+	value jsjson.Value
 	err   error
 }
 
-func (c *Client) request(ctx context.Context, method string, params *jsonv.Object, schema s.Schema, opts RequestOptions) (any, error) {
+func (c *Client) request(ctx context.Context, method string, params *jsjson.Object, schema s.Schema, opts RequestOptions) (jsjson.Value, error) {
 	if modernOnlyRequestMethods[method] {
 		return nil, &SdkError{Code: ErrMethodNotSupportedByProtocol, Message: fmt.Sprintf("Method '%s' is not supported by the negotiated protocol version (wire era 2025-11-25)", method), Data: map[string]any{"method": method, "era": "2025-11-25"}}
 	}
@@ -575,25 +580,25 @@ func (c *Client) request(ctx context.Context, method string, params *jsonv.Objec
 	id := c.nextID
 	c.nextID++
 	key := float64(id)
-	msg := jsonv.NewObject("method", method)
+	msg := jsjson.Obj(jsjson.KV("method", jsjson.String(method)))
 	if params != nil {
 		msg.Set("params", params)
 	}
-	msg.Set("jsonrpc", "2.0")
-	msg.Set("id", key)
+	msg.Set("jsonrpc", jsjson.String("2.0"))
+	msg.Set("id", jsjson.Number(key))
 	if opts.OnProgress != nil {
 		c.progressHandlers[key] = opts.OnProgress
-		p := jsonv.NewObject()
+		p := jsjson.NewObject()
 		if params != nil {
 			p = params.Clone()
 		}
-		meta := jsonv.NewObject()
+		meta := jsjson.NewObject()
 		if existing, ok := p.Get("_meta"); ok {
-			if eo, ok := existing.(*jsonv.Object); ok {
+			if eo, ok := existing.(*jsjson.Object); ok {
 				meta = eo.Clone()
 			}
 		}
-		meta.Set("progressToken", key)
+		meta.Set("progressToken", jsjson.Number(key))
 		p.Set("_meta", meta)
 		msg.Set("params", p)
 	}
@@ -624,8 +629,11 @@ func (c *Client) request(ctx context.Context, method string, params *jsonv.Objec
 		delete(c.progressHandlers, key)
 		c.mu.Unlock()
 		if method != "initialize" {
-			note := jsonv.NewObject("jsonrpc", "2.0", "method", "notifications/cancelled", "params",
-				jsonv.NewObject("requestId", key, "reason", jsErrorString(reason)))
+			note := jsjson.Obj(
+				jsjson.KV("jsonrpc", jsjson.String("2.0")),
+				jsjson.KV("method", jsjson.String("notifications/cancelled")),
+				jsjson.KV("params", jsjson.Obj(jsjson.KV("requestId", jsjson.Number(key)), jsjson.KV("reason", jsjson.String(jsErrorString(reason))))),
+			)
 			go func() {
 				if err := t.Send(context.Background(), note, nil); err != nil {
 					c.onerror(fmt.Errorf("Failed to send cancellation: %s", jsErrorString(err)))
@@ -698,8 +706,8 @@ func (c *Client) request(ctx context.Context, method string, params *jsonv.Objec
 }
 
 // decodeResult2025 is the 2025 codec's decodeResult: a top-level resultType key is removed.
-func decodeResult2025(raw any) any {
-	o, ok := raw.(*jsonv.Object)
+func decodeResult2025(raw jsjson.Value) jsjson.Value {
+	o, ok := raw.(*jsjson.Object)
 	if ok && o != nil && o.Has("resultType") {
 		c := o.Clone()
 		c.Delete("resultType")
@@ -709,7 +717,7 @@ func decodeResult2025(raw any) any {
 }
 
 // Notification sends a notification ({jsonrpc, method, params?}).
-func (c *Client) Notification(ctx context.Context, method string, params *jsonv.Object) error {
+func (c *Client) Notification(ctx context.Context, method string, params *jsjson.Object) error {
 	c.mu.Lock()
 	t := c.transport
 	c.mu.Unlock()
@@ -720,14 +728,13 @@ func (c *Client) Notification(ctx context.Context, method string, params *jsonv.
 		return &SdkError{Code: ErrMethodNotSupportedByProtocol, Message: fmt.Sprintf("Notification '%s' is not supported by the negotiated protocol version (wire era 2025-11-25)", method)}
 	}
 	if method == "notifications/roots/list_changed" {
-		roots, _ := c.caps.Get("roots")
-		ro, _ := roots.(*jsonv.Object)
+		ro, _ := c.caps.GetObject("roots")
 		lc, _ := ro.Get("listChanged")
 		if !truthy(lc) {
 			return &SdkError{Code: ErrCapabilityNotSupported, Message: fmt.Sprintf("Client does not support roots list changed notifications (required for %s)", method)}
 		}
 	}
-	msg := jsonv.NewObject("jsonrpc", "2.0", "method", method)
+	msg := jsjson.Obj(jsjson.KV("jsonrpc", jsjson.String("2.0")), jsjson.KV("method", jsjson.String(method)))
 	if params != nil {
 		msg.Set("params", params)
 	}
@@ -754,7 +761,7 @@ func (c *Client) hasServerCapability(name string) bool {
 // when set, is sent as _meta on every page.
 type ListToolsParams struct {
 	Cursor *string
-	Meta   *jsonv.Object
+	Meta   *jsjson.Object
 }
 
 // ListTools is Client.listTools.
@@ -767,25 +774,25 @@ type ListToolsParams struct {
 // were fetched and another cursor remains. If the server did not advertise the tools capability
 // it returns {"tools": []} without a request (unless EnforceStrictCapabilities is set, in which
 // case it fails with CapabilityNotSupported). With a cursor it returns that single page.
-func (c *Client) ListTools(ctx context.Context, params *ListToolsParams, opts RequestOptions) (*jsonv.Object, error) {
+func (c *Client) ListTools(ctx context.Context, params *ListToolsParams, opts RequestOptions) (*jsjson.Object, error) {
 	if !c.hasServerCapability("tools") && !c.opts.EnforceStrictCapabilities {
-		return jsonv.NewObject("tools", []any{}), nil
+		return jsjson.Obj(jsjson.KV("tools", jsjson.Array{})), nil
 	}
-	var base *jsonv.Object
+	var base *jsjson.Object
 	if params != nil && params.Meta != nil {
-		base = jsonv.NewObject("_meta", params.Meta)
+		base = jsjson.Obj(jsjson.KV("_meta", params.Meta))
 	}
 	if params != nil && params.Cursor != nil {
-		p := jsonv.NewObject()
+		p := jsjson.NewObject()
 		if base != nil {
 			p = base.Clone()
 		}
-		p.Set("cursor", *params.Cursor)
+		p.Set("cursor", jsjson.String(*params.Cursor))
 		out, err := c.request(ctx, "tools/list", p, ListToolsResultWireSchema, opts)
 		if err != nil {
 			return nil, err
 		}
-		return out.(*jsonv.Object), nil
+		return out.(*jsjson.Object), nil
 	}
 	c.mu.Lock()
 	hit := c.cache.read(time.Now())
@@ -796,26 +803,20 @@ func (c *Client) ListTools(ctx context.Context, params *ListToolsParams, opts Re
 	return c.listAllTools(ctx, base, opts)
 }
 
-func toolsOf(o *jsonv.Object) []any {
-	v, _ := o.Get("tools")
-	a, _ := v.([]any)
+func toolsOf(o *jsjson.Object) jsjson.Array {
+	a, _ := o.GetArray("tools")
 	return a
 }
 
-func cursorOf(o *jsonv.Object) (string, bool) {
-	v, ok := o.Get("nextCursor")
-	if !ok || jsonv.IsUndefined(v) {
-		return "", false
-	}
-	str, ok := v.(string)
-	return str, ok
+func cursorOf(o *jsjson.Object) (string, bool) {
+	return o.GetString("nextCursor")
 }
 
-func (c *Client) listAllTools(ctx context.Context, base *jsonv.Object, opts RequestOptions) (*jsonv.Object, error) {
+func (c *Client) listAllTools(ctx context.Context, base *jsjson.Object, opts RequestOptions) (*jsjson.Object, error) {
 	c.mu.Lock()
 	generation := c.cache.generation
 	c.mu.Unlock()
-	var first *jsonv.Object
+	var first *jsjson.Object
 	if base != nil {
 		first = base.Clone()
 	}
@@ -823,7 +824,7 @@ func (c *Client) listAllTools(ctx context.Context, base *jsonv.Object, opts Requ
 	if err != nil {
 		return nil, err
 	}
-	acc := out.(*jsonv.Object)
+	acc := out.(*jsjson.Object)
 	maxPages := c.opts.ListMaxPages
 	if maxPages == 0 {
 		maxPages = DefaultListMaxPages
@@ -835,21 +836,21 @@ func (c *Client) listAllTools(ctx context.Context, base *jsonv.Object, opts Requ
 		if maxPages > 0 && pages >= maxPages {
 			return nil, &SdkError{Code: ErrListPaginationExceeded, Message: fmt.Sprintf("tools/list: exceeded listMaxPages (%d); server pagination did not terminate", maxPages), Data: map[string]any{"method": "tools/list", "listMaxPages": maxPages}}
 		}
-		p := jsonv.NewObject()
+		p := jsjson.NewObject()
 		if base != nil {
 			p = base.Clone()
 		}
-		p.Set("cursor", cursor)
+		p.Set("cursor", jsjson.String(cursor))
 		pageOut, err := c.request(ctx, "tools/list", p, ListToolsResultWireSchema, opts)
 		if err != nil {
 			return nil, err
 		}
-		page := pageOut.(*jsonv.Object)
+		page := pageOut.(*jsjson.Object)
 		next, hasNext := cursorOf(page)
-		if hasNext && next == cursor && jsonv.MustStringify(toolsOf(page)) == jsonv.MustStringify(toolsOf(previous)) {
+		if hasNext && next == cursor && jsjson.Stringify(toolsOf(page)) == jsjson.Stringify(toolsOf(previous)) {
 			break
 		}
-		acc.Set("tools", append(toolsOf(acc), toolsOf(page)...))
+		acc.Set("tools", append(append(jsjson.Array{}, toolsOf(acc)...), toolsOf(page)...))
 		previous = page
 		cursor, hasCursor = next, hasNext
 		pages++
@@ -863,12 +864,10 @@ func (c *Client) listAllTools(ctx context.Context, base *jsonv.Object, opts Requ
 
 const maxCacheTTL = 24 * time.Hour
 
-func (c *Client) freshness(result *jsonv.Object) time.Time {
+func (c *Client) freshness(result *jsjson.Object) time.Time {
 	ttl := c.opts.DefaultCacheTTL
-	if v, ok := result.Get("ttlMs"); ok {
-		if f, ok := v.(float64); ok {
-			ttl = time.Duration(f * float64(time.Millisecond))
-		}
+	if f, ok := result.GetNumber("ttlMs"); ok {
+		ttl = time.Duration(f * float64(time.Millisecond))
 	}
 	if ttl < 0 {
 		ttl = 0
@@ -883,16 +882,16 @@ func (c *Client) freshness(result *jsonv.Object) time.Time {
 // literal order). Extra, when set, replaces the whole params object (for full control).
 type CallToolParams struct {
 	Name      string
-	Arguments *jsonv.Object
-	Meta      *jsonv.Object
-	Extra     *jsonv.Object
+	Arguments *jsjson.Object
+	Meta      *jsjson.Object
+	Extra     *jsjson.Object
 }
 
-func (p CallToolParams) object() *jsonv.Object {
+func (p CallToolParams) object() *jsjson.Object {
 	if p.Extra != nil {
 		return p.Extra
 	}
-	o := jsonv.NewObject("name", p.Name)
+	o := jsjson.Obj(jsjson.KV("name", jsjson.String(p.Name)))
 	if p.Arguments != nil {
 		o.Set("arguments", p.Arguments)
 	}
@@ -919,11 +918,11 @@ func (p CallToolParams) object() *jsonv.Object {
 //     the tool with an outputSchema: then a non-error result must carry structuredContent that
 //     validates (ProtocolError InvalidRequest / InvalidParams otherwise), and an uncompilable
 //     outputSchema fails before the request (ProtocolError InvalidParams).
-func (c *Client) CallTool(ctx context.Context, params CallToolParams, opts RequestOptions) (*jsonv.Object, error) {
+func (c *Client) CallTool(ctx context.Context, params CallToolParams, opts RequestOptions) (*jsjson.Object, error) {
 	name := params.Name
 	if params.Extra != nil {
-		if v, ok := params.Extra.Get("name"); ok {
-			name, _ = v.(string)
+		if _, ok := params.Extra.Get("name"); ok {
+			name, _ = params.Extra.GetString("name")
 		}
 	}
 	c.mu.Lock()
@@ -940,7 +939,7 @@ func (c *Client) CallTool(ctx context.Context, params CallToolParams, opts Reque
 	if err != nil {
 		return nil, err
 	}
-	result := out.(*jsonv.Object)
+	result := out.(*jsjson.Object)
 	if compiled != nil && compiled.validate != nil {
 		sc, hasSC := result.Get("structuredContent")
 		isErr, _ := result.Get("isError")
@@ -959,7 +958,7 @@ func (c *Client) CallTool(ctx context.Context, params CallToolParams, opts Reque
 // ---- response cache (tools/list only) ----
 
 type compiledValidator struct {
-	validate func(any) (bool, string)
+	validate func(jsjson.Value) (bool, string)
 	err      error
 }
 
@@ -982,24 +981,24 @@ func (tc *toolsCache) evict() {
 	tc.index = nil
 }
 
-func (tc *toolsCache) write(v *jsonv.Object, generation int, expiresAt time.Time) {
+func (tc *toolsCache) write(v *jsjson.Object, generation int, expiresAt time.Time) {
 	if generation != tc.generation {
 		return
 	}
-	tc.entry = jsonv.MustStringify(v)
+	tc.entry = jsjson.Stringify(v)
 	tc.expiresAt = expiresAt
 	tc.stamp++
 }
 
-func (tc *toolsCache) read(now time.Time) *jsonv.Object {
+func (tc *toolsCache) read(now time.Time) *jsjson.Object {
 	if tc.entry == "" || !tc.expiresAt.After(now) {
 		return nil
 	}
-	v, err := jsonv.ParseString(tc.entry)
+	v, err := jsjson.ParseString(tc.entry)
 	if err != nil {
 		return nil
 	}
-	o, _ := v.(*jsonv.Object)
+	o, _ := v.(*jsjson.Object)
 	return o
 }
 
@@ -1011,21 +1010,20 @@ func (tc *toolsCache) outputValidator(name string, compiler JSONSchemaValidator)
 	if tc.index == nil || tc.indexStamp != tc.stamp {
 		tc.index = map[string]*compiledValidator{}
 		tc.indexStamp = tc.stamp
-		v, err := jsonv.ParseString(tc.entry)
+		v, err := jsjson.ParseString(tc.entry)
 		if err == nil {
-			if o, ok := v.(*jsonv.Object); ok {
+			if o, ok := v.(*jsjson.Object); ok {
 				for _, t := range toolsOf(o) {
-					tool, ok := t.(*jsonv.Object)
+					tool, ok := t.(*jsjson.Object)
 					if !ok {
 						continue
 					}
-					n, _ := tool.Get("name")
-					ns, _ := n.(string)
+					ns, _ := tool.GetString("name")
 					os, ok := tool.Get("outputSchema")
 					if !ok {
 						continue
 					}
-					schemaObj, ok := os.(*jsonv.Object)
+					schemaObj, ok := os.(*jsjson.Object)
 					if !ok {
 						continue
 					}

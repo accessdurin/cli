@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/accessdurin/cli/internal/mcp/jsonv"
+	"github.com/accessdurin/cli/internal/jsjson"
 )
 
 // StdioDefaultMaxBufferSize is STDIO_DEFAULT_MAX_BUFFER_SIZE (10 MiB).
@@ -54,11 +54,11 @@ func (r *ReadBuffer) ReadMessage() (Message, error) {
 		if idx == -1 {
 			return nil, nil
 		}
-		line := strings.TrimSuffix(jsonv.DecodeUTF8(r.buf[:idx]), "\r")
+		line := strings.TrimSuffix(jsjson.DecodeUTF8(r.buf[:idx]), "\r")
 		r.buf = r.buf[idx+1:]
-		v, err := jsonv.ParseString(line)
+		v, err := jsjson.ParseString(line)
 		if err != nil {
-			var se *jsonv.SyntaxError
+			var se *jsjson.SyntaxError
 			if errors.As(err, &se) {
 				continue
 			}

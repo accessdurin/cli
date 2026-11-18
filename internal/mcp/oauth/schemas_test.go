@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/accessdurin/cli/internal/mcp/jsonv"
+	"github.com/accessdurin/cli/internal/jsjson"
 )
 
 type schemaCase struct {
@@ -49,14 +49,14 @@ func TestStoredCredentialSchemasMatchSDK(t *testing.T) {
 	}
 	check("tokens", fx.Tokens, func(b []byte) (any, error) { return ParseTokensJSON(b) })
 	check("client", fx.Clients, func(b []byte) (any, error) {
-		v, err := jsonv.Parse(b)
+		v, err := jsjson.Parse(b)
 		if err != nil {
 			return nil, err
 		}
 		return ParseClientInformation(v)
 	})
 	check("full", fx.Full, func(b []byte) (any, error) {
-		v, err := jsonv.Parse(b)
+		v, err := jsjson.Parse(b)
 		if err != nil {
 			return nil, err
 		}

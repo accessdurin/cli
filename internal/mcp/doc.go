@@ -8,9 +8,10 @@
 //   - mcp/oauth: auth() and its helpers (RFC 9728 / RFC 8414 / OIDC discovery, dynamic client
 //     registration, PKCE, code exchange, refresh, RFC 9207 iss checks, SEP-2352 issuer stamps).
 //   - mcp/httpx: the injected fetch abstraction (no default HTTP client is ever used).
-//   - mcp/schema: the zod v4 parse semantics the SDK's schemas rely on.
-//   - mcp/jsonv: a JavaScript-compatible JSON value model (to be replaced by internal/jsjson).
-//   - mcp/jsurl: the WHATWG URL subset the SDK needs (to be replaced by internal/weburl).
+//   - mcp/schema: the zod 4.6.5 parse semantics the SDK's schemas rely on, over jsjson values.
+//
+// JSON values are internal/jsjson values (a nil jsjson.Value is undefined) and URLs are
+// internal/weburl URLs, the module-wide JavaScript-compatible models.
 //
 // Faithfulness is checked against the real SDK: testdata/record.mjs and testdata/stdio.mjs run
 // the TypeScript SDK on the scenarios in testdata/scenarios and record request sequences,

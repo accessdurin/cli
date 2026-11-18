@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/accessdurin/cli/internal/mcp/jsonv"
+	"github.com/accessdurin/cli/internal/jsjson"
 )
 
 // sseEvent is an event emitted by eventsource-parser.
@@ -46,7 +46,7 @@ func parseSSE(r io.Reader, onEvent func(sseEvent), onRetry func(int)) error {
 		id, eventType, data, dataLines = "", "", "", 0
 	}
 	processLine := func(raw []byte) {
-		l := jsonv.DecodeUTF8(raw)
+		l := jsjson.DecodeUTF8(raw)
 		if l == "" {
 			dispatch()
 			return

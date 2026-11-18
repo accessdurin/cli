@@ -16,8 +16,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/accessdurin/cli/internal/mcp/jsonv"
-	"github.com/accessdurin/cli/internal/mcp/jsurl"
+	"github.com/accessdurin/cli/internal/jsjson"
+	"github.com/accessdurin/cli/internal/weburl"
 )
 
 // RedirectMode is RequestInit.redirect.
@@ -66,7 +66,7 @@ func (e *TypeError) Unwrap() error { return e.Err }
 // IsTypeError reports whether err is a JavaScript TypeError equivalent.
 func IsTypeError(err error) bool {
 	var te *TypeError
-	return errors.As(err, &te) || errors.Is(err, jsurl.ErrInvalidURL)
+	return errors.As(err, &te) || errors.Is(err, weburl.ErrInvalidURL)
 }
 
 // NewHTTPFetch adapts an explicit *http.Client to Fetch, honoring redirect modes. Transport
@@ -142,8 +142,7 @@ func Text(resp *http.Response) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	b = bytes.TrimPrefix(b, []byte{0xEF, 0xBB, 0xBF})
-	return jsonv.DecodeUTF8(b), nil
+	return jsjson.DecodeUTF8StripBOM(b), nil
 }
 
 // Discard reads and closes the body, ignoring errors (`await response.text?.().catch(() => {})`).
@@ -155,12 +154,12 @@ func Discard(resp *http.Response) {
 }
 
 // JSON reads the body like Response#json(): Text then JSON.parse.
-func JSON(resp *http.Response) (any, error) {
+func JSON(resp *http.Response) (jsjson.Value, error) {
 	text, err := Text(resp)
 	if err != nil {
 		return nil, err
 	}
-	return jsonv.ParseString(text)
+	return jsjson.ParseString(text)
 }
 
 func mergeHeaders(base, over http.Header) http.Header {
@@ -204,14 +203,14 @@ var redirectStatuses = map[int]bool{301: true, 302: true, 303: true, 307: true, 
 
 const maxRedirects = 5
 
-func isWithinOrigin(from, to *jsurl.URL) bool {
+func isWithinOrigin(from, to *weburl.URL) bool {
 	if from.Protocol() == to.Protocol() && from.Host() == to.Host() {
 		return true
 	}
 	return from.Protocol() == "http:" && to.Protocol() == "https:" && from.Hostname() == to.Hostname() && from.Port() == "" && to.Port() == ""
 }
 
-func redirectTarget(url string, resp *http.Response) *jsurl.URL {
+func redirectTarget(url string, resp *http.Response) *weburl.URL {
 	if !redirectStatuses[resp.StatusCode] {
 		return nil
 	}
@@ -219,11 +218,7 @@ func redirectTarget(url string, resp *http.Response) *jsurl.URL {
 	if location == "" {
 		return nil
 	}
-	base, err := jsurl.Parse(url, nil)
-	if err != nil {
-		return nil
-	}
-	target, err := jsurl.Parse(location, base)
+	target, err := weburl.ParseRef(location, url)
 	if err != nil {
 		return nil
 	}
@@ -254,7 +249,7 @@ func WithinOrigin(baseFetch Fetch) Fetch {
 			if target == nil || followed == maxRedirects {
 				return resp, nil
 			}
-			from, err := jsurl.Parse(current, nil)
+			from, err := weburl.Parse(current)
 			if err != nil {
 				return nil, &TypeError{err}
 			}
@@ -281,7 +276,7 @@ func UnfollowedRedirect(url string, resp *http.Response) string {
 	target.SetPassword("")
 	target.SetSearch("")
 	target.SetHash("")
-	if from, err := jsurl.Parse(respURL, nil); err == nil && target.Protocol() == "http:" && from.Protocol() == "https:" {
+	if from, err := weburl.Parse(respURL); err == nil && target.Protocol() == "http:" && from.Protocol() == "https:" {
 		target.SetProtocol("https:")
 		return fmt.Sprintf("Redirect from https to plain http not followed; try %s as the endpoint", target.Href())
 	}
