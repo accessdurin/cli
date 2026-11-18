@@ -6,17 +6,15 @@ on:
   workflow_dispatch:
   pull_request:
     paths:
-      - 'src/**'
-      - 'scripts/**'
+      - 'cmd/**'
+      - 'internal/**'
+      - 'tools/release/**'
+      - 'npm/**'
       - 'packaging/**'
       - 'Formula/**'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - 'pnpm-workspace.yaml'
-      - '.node-version'
-      - 'vite.config.ts'
+      - 'go.mod'
+      - 'go.sum'
       - 'LICENSE'
-      - 'licenses/**'
       - '.github/workflows/release.yml'
 
 permissions:
@@ -31,17 +29,21 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           fetch-depth: 0
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
-          node-version-file: .node-version
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm verify
+          go-version-file: go.mod
+      - run: go vet ./...
+      - run: go test ./internal/... ./cmd/... ./tools/...
+      - name: Run the black-box parity harness
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends dbus gnome-keyring libsecret-tools
+          e2e/run.sh
       - name: Check release version and main ancestry
         if: startsWith(github.ref, 'refs/tags/')
         run: |
-          node -e 'const p = require("./package.json"); if (process.env.GITHUB_REF_NAME !== "v" + p.version) process.exit(1)'
+          version=$(sed -n 's/^var Version = "\(.*\)"$/\1/p' internal/version/version.go)
+          test "$GITHUB_REF_NAME" = "v$version"
           git merge-base --is-ancestor HEAD origin/main
 
   package:
@@ -65,25 +67,22 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+      # npm packs the per-platform npm package; nothing is published.
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          node-version-file: .node-version
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm test src/agent-integrations.test.ts src/bridge-config.test.ts
-      - run: pnpm build
-      - run: pnpm package:release
-      - name: Smoke test packaged Unix launcher
-        if: runner.os != 'Windows'
-        run: ./.release-stage/bin/durin --help
+          node-version: 24
+      # The native credential stores and agent integrations, on each real OS.
+      - run: go test ./internal/credentials/ ./internal/app/
+      # Builds, starts the packaged executable with --help, then archives it.
+      - run: go run ./tools/release package
       - name: Smoke test Windows package and installer
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          & ./.release-stage/durin.cmd --help
-          if ($LASTEXITCODE -ne 0) { throw 'Packaged launcher failed' }
-          $version = (Get-Content package.json | ConvertFrom-Json).version
+          $version = (Select-String -Path internal/version/version.go -Pattern 'var Version = "(.+)"').Matches[0].Groups[1].Value
           $asset = "durin-$version-windows-x64.zip"
           $hash = (Get-FileHash "release/$asset" -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  $asset" | Set-Content release/SHA256SUMS
@@ -97,52 +96,69 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes ./release/*.deb
           durin --help
-      - name: Test Homebrew formula against the built npm archive
-        if: runner.os == 'macOS'
-        shell: bash
-        run: |
-          node scripts/release-metadata.mjs release
-          brew tap-new durin/ci
-          node -e 'const fs = require("node:fs"); const path = require("node:path"); const p = require("./package.json"); const text = fs.readFileSync("release/durin.rb", "utf8"); fs.writeFileSync("release/durin-ci.rb", text.replace(/url \"[^\"]+\"/, "url \"file://" + path.resolve("release/durin-cli-" + p.version + ".tgz") + "\""));'
-          cp release/durin-ci.rb "$(brew --repository durin/ci)/Formula/durin.rb"
-          brew install --build-from-source durin/ci/durin
-          brew test durin/ci/durin
-          rm release/durin-ci.rb release/durin.rb release/SHA256SUMS release/install-windows.ps1
       - name: Upload platform packages
-        if: matrix.target != 'linux-x64'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: durin-${{ matrix.target }}
-          path: |
-            release/*
-            !release/durin-cli-*.tgz
-          if-no-files-found: error
-      - name: Upload packages and npm source archive
-        if: matrix.target == 'linux-x64'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: durin-${{ matrix.target }}
           path: release/*
           if-no-files-found: error
 
+  metadata:
+    if: ${{ !cancelled() && needs.package.result == 'success' }}
+    needs: package
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: durin-*
+          path: release
+          merge-multiple: true
+      - run: go run ./tools/release metadata
+      - name: Install the generated Homebrew formula from the built archives
+        run: |
+          brew tap-new durin/ci
+          sed -E "s#https://github.com/accessdurin/cli/releases/download/v[^/]+/#file://$PWD/release/#" release/durin.rb > "$(brew --repository durin/ci)/Formula/durin.rb"
+          brew install durin/ci/durin
+          brew test durin/ci/durin
+      - name: Try the npm launcher with this platform's package
+        run: |
+          mkdir npm-check && cd npm-check && npm init --yes >/dev/null
+          npm install ../release/accessdurin-cli-darwin-arm64-*.tgz ../release/accessdurin-cli-[0-9]*.tgz
+          npx durin --help
+      - name: Upload release metadata
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: durin-release
+          path: release/*
+          if-no-files-found: error
+
   draft-release:
     if: startsWith(github.ref, 'refs/tags/')
-    needs: package
+    needs: metadata
     runs-on: ubuntu-24.04
     environment: cli-release
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
-          node-version-file: .node-version
+          go-version-file: go.mod
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          pattern: durin-*
+          name: durin-release
           path: release
-          merge-multiple: true
-      - run: node scripts/release-metadata.mjs release --check-formula
+      - name: Check the committed Homebrew formula matches these archives
+        run: |
+          cp release/durin.rb /tmp/durin.rb
+          cmp Formula/durin.rb /tmp/durin.rb || { echo "::error::Homebrew formula differs from this release. Regenerate it with go run ./tools/release metadata -write-formula before tagging."; exit 1; }
       - name: Create a reviewable draft release
         env:
           GH_TOKEN: ${{ github.token }}
