@@ -28,16 +28,15 @@ try {
     }
     $expanded = Join-Path $temporary 'expanded'
     Expand-Archive -LiteralPath $ArchivePath -DestinationPath $expanded
-    $node = Join-Path $expanded 'runtime\node.exe'
-    $cli = Join-Path $expanded 'dist\cli.js'
-    & $node $cli --help | Out-Null
+    $exe = Join-Path $expanded 'durin.exe'
+    & $exe --help | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'The packaged CLI could not start.' }
     if (Test-Path -LiteralPath $target) { throw 'This version is already installed. No files were replaced.' }
     New-Item -ItemType Directory -Path (Split-Path $target) -Force | Out-Null
     Move-Item -LiteralPath $expanded -Destination $target
     $bin = Join-Path $root 'bin'
     New-Item -ItemType Directory -Path $bin -Force | Out-Null
-    $shim = "@echo off`r`n`"$target\runtime\node.exe`" `"$target\dist\cli.js`" %*`r`n"
+    $shim = "@echo off`r`n`"$target\durin.exe`" %*`r`n"
     $stagedShim = Join-Path $bin ('durin-' + [Guid]::NewGuid().ToString('N') + '.cmd')
     [IO.File]::WriteAllText($stagedShim, $shim, (New-Object Text.UTF8Encoding($false)))
     Move-Item -LiteralPath $stagedShim -Destination (Join-Path $bin 'durin.cmd') -Force
