@@ -1,0 +1,125 @@
+// Command durin onboards an organization and connects it to the user's agent (src/cli.ts).
+package main
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"os"
+
+	"golang.org/x/term"
+
+	"github.com/accessdurin/cli/internal/app"
+	"github.com/accessdurin/cli/internal/clierror"
+	"github.com/accessdurin/cli/internal/telemetry"
+)
+
+type command func(ctx context.Context, options *app.CliOptions, io *app.IO) error
+
+func plain(f func(*app.CliOptions, *app.IO) error) command {
+	return func(_ context.Context, options *app.CliOptions, io *app.IO) error { return f(options, io) }
+}
+
+var commands = map[string]command{
+	"":         plain(app.Wizard),
+	"login":    plain(app.Wizard),
+	"signup":   plain(app.Wizard),
+	"install":  plain(app.Wizard),
+	"tools":    plain(app.ToolCommand),
+	"mcp":      plain(app.McpCommand),
+	"verify":   plain(app.VerifyProfile),
+	"profiles": plain(app.ProfileCommand),
+	"logout":   plain(app.LogoutCommand),
+	"hooks":    hooks,
+}
+
+func hooks(_ context.Context, options *app.CliOptions, io *app.IO) error {
+	if len(options.Positionals) < 2 || options.Positionals[1] != "run" {
+		return app.HookCommand(options, io)
+	}
+	harness, _ := options.Values.String("harness")
+	installation, err := app.ReadHookInstallation(options.Directory, harness)
+	if err != nil {
+		return err
+	}
+	if err := app.RunHook(installation, io.Stdin); err != nil {
+		return err
+	}
+	if installation.Format == "cursor" {
+		_, err = io.Stdout.Write([]byte(`{"permission":"allow"}` + "\n"))
+	}
+	return err
+}
+
+func durin(ctx context.Context, args []string, io *app.IO) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("panic: %v", r)
+		}
+	}()
+	options, err := app.ParseCliOptions(args)
+	if err != nil {
+		return err
+	}
+	if options.Values.Flag("help") {
+		_, err := io.Stdout.Write([]byte(app.Help))
+		return err
+	}
+	if err := app.ValidateCommandArguments(options); err != nil {
+		return err
+	}
+	name := ""
+	if len(options.Positionals) > 0 {
+		name = options.Positionals[0]
+	}
+	handler, ok := commands[name]
+	if !ok {
+		return clierror.New("Unknown command. Run durin --help.")
+	}
+	if err := app.AssertPrivateDirectory(options.Directory); err != nil {
+		return err
+	}
+	return handler(ctx, options, io)
+}
+
+const genericFailure = "Durin could not complete this request. Run durin in a terminal to verify your profile and authorization; retain the same idempotency key when retrying a tool call."
+
+// errorMessage is what the user sees: an expected error's message, or a generic one.
+func errorMessage(err error, localHook bool) string {
+	if e, ok := clierror.As(err); ok {
+		return e.Message
+	}
+	if localHook {
+		return "Durin could not complete this local hook check."
+	}
+	if a, ok := err.(*app.ArgumentError); ok && a.Code == "ERR_PARSE_ARGS_UNKNOWN_OPTION" {
+		return "Unknown option. Run durin --help."
+	}
+	return genericFailure
+}
+
+func run(args []string, stdin io.Reader, stdout, stderr io.Writer, isTTY func() bool) int {
+	localHook := len(args) >= 2 && args[0] == "hooks" && args[1] == "run"
+	if !localHook {
+		telemetry.Initialize()
+	}
+	streams := &app.IO{Stdin: stdin, Stdout: stdout, Stderr: stderr, IsTTY: isTTY}
+	err := telemetry.TraceCommand(func(ctx context.Context) error { return durin(ctx, args, streams) })
+	code := streams.ExitCode
+	if err != nil {
+		fmt.Fprint(stderr, app.TerminalText(errorMessage(err, localHook))+"\n")
+		code = 1
+		if localHook {
+			code = 2
+		} else {
+			telemetry.ReportUnexpected(err)
+		}
+	}
+	telemetry.Flush()
+	return code
+}
+
+func main() {
+	isTTY := func() bool { return term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd())) }
+	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr, isTTY))
+}
