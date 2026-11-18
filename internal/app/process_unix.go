@@ -4,6 +4,7 @@ package app
 
 import (
 	"errors"
+	"os"
 	"os/exec"
 
 	"golang.org/x/sys/unix"
@@ -19,3 +20,6 @@ func executable(path string) bool { return unix.Access(path, unix.X_OK) == nil }
 
 // hideWindow is spawn's windowsHide, which does nothing outside Windows.
 func hideWindow(*exec.Cmd) {}
+
+// getuid is process.getuid; tests replace it.
+var getuid = func() uint32 { return uint32(os.Getuid()) }

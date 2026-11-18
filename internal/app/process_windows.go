@@ -35,3 +35,6 @@ func executable(path string) bool {
 func hideWindow(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 }
+
+// getuid stands in for process.getuid, which Node does not have on Windows.
+var getuid = func() uint32 { return 0 }

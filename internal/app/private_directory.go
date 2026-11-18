@@ -81,9 +81,6 @@ func assertSafePath(directory string, uid uint32) error {
 	return nil
 }
 
-// getuid is process.getuid; tests replace it.
-var getuid = func() uint32 { return uint32(os.Getuid()) }
-
 // AssertPrivateDirectory: agents execute the runtime stored here, so other local users must
 // not control it. A missing directory is fine; it is created privately when needed.
 func AssertPrivateDirectory(directory string) error {
