@@ -1,0 +1,247 @@
+{
+  "steps": [
+    {
+      "op": "connect",
+      "result": {
+        "sessionId": null,
+        "protocolVersion": "2025-11-25"
+      },
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://app.example.test/mcp",
+          "headers": {
+            "accept": "application/json, text/event-stream",
+            "authorization": "Bearer old",
+            "content-type": "application/json"
+          },
+          "body": "{\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{},\"clientInfo\":{\"name\":\"Durin CLI\",\"version\":\"1.0.0\"}},\"jsonrpc\":\"2.0\",\"id\":0}",
+          "redirect": "error"
+        },
+        {
+          "method": "GET",
+          "url": "https://app.example.test/prm",
+          "headers": {
+            "mcp-protocol-version": "2025-11-25"
+          },
+          "body": null,
+          "redirect": "manual"
+        },
+        {
+          "method": "GET",
+          "url": "https://app.example.test/.well-known/oauth-authorization-server",
+          "headers": {
+            "accept": "application/json",
+            "mcp-protocol-version": "2025-11-25"
+          },
+          "body": null,
+          "redirect": "manual"
+        },
+        {
+          "method": "POST",
+          "url": "https://app.example.test/token",
+          "headers": {
+            "accept": "application/json",
+            "content-type": "application/x-www-form-urlencoded"
+          },
+          "body": "grant_type=refresh_token&refresh_token=rt&resource=https%3A%2F%2Fapp.example.test%2Fmcp&client_id=c-1",
+          "redirect": "manual"
+        },
+        {
+          "method": "POST",
+          "url": "https://app.example.test/mcp",
+          "headers": {
+            "accept": "application/json, text/event-stream",
+            "authorization": "Bearer new",
+            "content-type": "application/json"
+          },
+          "body": "{\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{},\"clientInfo\":{\"name\":\"Durin CLI\",\"version\":\"1.0.0\"}},\"jsonrpc\":\"2.0\",\"id\":0}",
+          "redirect": "error"
+        },
+        {
+          "method": "POST",
+          "url": "https://app.example.test/mcp",
+          "headers": {
+            "accept": "application/json, text/event-stream",
+            "authorization": "Bearer new",
+            "content-type": "application/json",
+            "mcp-protocol-version": "2025-11-25"
+          },
+          "body": "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+          "redirect": "error"
+        },
+        {
+          "method": "GET",
+          "url": "https://app.example.test/mcp",
+          "headers": {
+            "accept": "text/event-stream",
+            "authorization": "Bearer new",
+            "mcp-protocol-version": "2025-11-25"
+          },
+          "body": null,
+          "redirect": "error"
+        }
+      ],
+      "calls": [
+        [
+          "tokens",
+          null
+        ],
+        [
+          "discoveryState"
+        ],
+        [
+          "saveDiscoveryState",
+          {
+            "authorizationServerMetadata": {
+              "authorization_endpoint": "https://app.example.test/authorize",
+              "issuer": "https://app.example.test/",
+              "response_types_supported": [
+                "code"
+              ],
+              "token_endpoint": "https://app.example.test/token"
+            },
+            "authorizationServerUrl": "https://app.example.test/",
+            "resourceMetadata": {
+              "authorization_servers": [
+                "https://app.example.test/"
+              ],
+              "resource": "https://app.example.test/mcp"
+            },
+            "resourceMetadataUrl": "https://app.example.test/prm"
+          }
+        ],
+        [
+          "validateResourceURL",
+          "https://app.example.test/mcp",
+          "https://app.example.test/mcp"
+        ],
+        [
+          "clientInformation",
+          {
+            "issuer": "https://app.example.test/"
+          }
+        ],
+        [
+          "tokens",
+          {
+            "issuer": "https://app.example.test/"
+          }
+        ],
+        [
+          "saveTokens",
+          {
+            "access_token": "new",
+            "issuer": "https://app.example.test/",
+            "refresh_token": "rt2",
+            "token_type": "Bearer"
+          },
+          {
+            "issuer": "https://app.example.test/"
+          }
+        ],
+        [
+          "tokens",
+          null
+        ],
+        [
+          "tokens",
+          null
+        ],
+        [
+          "tokens",
+          null
+        ]
+      ],
+      "warnings": []
+    },
+    {
+      "op": "listTools",
+      "error": {
+        "name": "SdkHttpError",
+        "message": "Server returned 401 after re-authentication",
+        "code": "CLIENT_HTTP_AUTHENTICATION"
+      },
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://app.example.test/mcp",
+          "headers": {
+            "accept": "application/json, text/event-stream",
+            "authorization": "Bearer new",
+            "content-type": "application/json",
+            "mcp-protocol-version": "2025-11-25"
+          },
+          "body": "{\"method\":\"tools/list\",\"jsonrpc\":\"2.0\",\"id\":1}",
+          "redirect": "error"
+        },
+        {
+          "method": "POST",
+          "url": "https://app.example.test/token",
+          "headers": {
+            "accept": "application/json",
+            "content-type": "application/x-www-form-urlencoded"
+          },
+          "body": "grant_type=refresh_token&refresh_token=rt2&resource=https%3A%2F%2Fapp.example.test%2Fmcp&client_id=c-1",
+          "redirect": "manual"
+        },
+        {
+          "method": "POST",
+          "url": "https://app.example.test/mcp",
+          "headers": {
+            "accept": "application/json, text/event-stream",
+            "authorization": "Bearer new",
+            "content-type": "application/json",
+            "mcp-protocol-version": "2025-11-25"
+          },
+          "body": "{\"method\":\"tools/list\",\"jsonrpc\":\"2.0\",\"id\":1}",
+          "redirect": "error"
+        }
+      ],
+      "calls": [
+        [
+          "tokens",
+          null
+        ],
+        [
+          "discoveryState"
+        ],
+        [
+          "validateResourceURL",
+          "https://app.example.test/mcp",
+          "https://app.example.test/mcp"
+        ],
+        [
+          "clientInformation",
+          {
+            "issuer": "https://app.example.test/"
+          }
+        ],
+        [
+          "tokens",
+          {
+            "issuer": "https://app.example.test/"
+          }
+        ],
+        [
+          "saveTokens",
+          {
+            "access_token": "new",
+            "issuer": "https://app.example.test/",
+            "refresh_token": "rt2",
+            "token_type": "Bearer"
+          },
+          {
+            "issuer": "https://app.example.test/"
+          }
+        ],
+        [
+          "tokens",
+          null
+        ]
+      ],
+      "warnings": []
+    }
+  ],
+  "transportErrors": []
+}

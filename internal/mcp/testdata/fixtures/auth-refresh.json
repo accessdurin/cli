@@ -1,0 +1,115 @@
+{
+  "steps": [
+    {
+      "op": "auth",
+      "result": "AUTHORIZED",
+      "requests": [
+        {
+          "method": "GET",
+          "url": "https://app.example.test/.well-known/oauth-protected-resource/mcp",
+          "headers": {
+            "mcp-protocol-version": "2025-11-25"
+          },
+          "body": null,
+          "redirect": "manual"
+        },
+        {
+          "method": "GET",
+          "url": "https://auth.example.test/.well-known/oauth-authorization-server",
+          "headers": {
+            "accept": "application/json",
+            "mcp-protocol-version": "2025-11-25"
+          },
+          "body": null,
+          "redirect": "manual"
+        },
+        {
+          "method": "POST",
+          "url": "https://auth.example.test/oauth/token",
+          "headers": {
+            "accept": "application/json",
+            "authorization": "Basic Yy0xOnNlYw==",
+            "content-type": "application/x-www-form-urlencoded"
+          },
+          "body": "grant_type=refresh_token&refresh_token=rt-old&resource=https%3A%2F%2Fapp.example.test%2Fmcp",
+          "redirect": "manual"
+        }
+      ],
+      "calls": [
+        [
+          "discoveryState"
+        ],
+        [
+          "saveDiscoveryState",
+          {
+            "authorizationServerMetadata": {
+              "authorization_endpoint": "https://auth.example.test/authorize",
+              "issuer": "https://auth.example.test/",
+              "response_types_supported": [
+                "code"
+              ],
+              "token_endpoint": "https://auth.example.test/oauth/token",
+              "token_endpoint_auth_methods_supported": [
+                "client_secret_post",
+                "client_secret_basic"
+              ]
+            },
+            "authorizationServerUrl": "https://auth.example.test/",
+            "resourceMetadata": {
+              "authorization_servers": [
+                "https://auth.example.test/"
+              ],
+              "resource": "https://app.example.test/mcp"
+            }
+          }
+        ],
+        [
+          "validateResourceURL",
+          "https://app.example.test/mcp",
+          "https://app.example.test/mcp"
+        ],
+        [
+          "clientInformation",
+          {
+            "issuer": "https://auth.example.test/"
+          }
+        ],
+        [
+          "tokens",
+          {
+            "issuer": "https://auth.example.test/"
+          }
+        ],
+        [
+          "saveTokens",
+          {
+            "access_token": "old",
+            "issuer": "https://auth.example.test/",
+            "refresh_token": "rt-old",
+            "token_type": "Bearer"
+          },
+          {
+            "issuer": "https://auth.example.test/"
+          }
+        ],
+        [
+          "saveTokens",
+          {
+            "access_token": "new",
+            "expires_in": 60,
+            "issuer": "https://auth.example.test/",
+            "refresh_token": "rt-old",
+            "token_type": "Bearer"
+          },
+          {
+            "issuer": "https://auth.example.test/"
+          }
+        ]
+      ],
+      "warnings": [
+        "[mcp-sdk] SEP-2352: stored OAuth credential has no 'issuer' stamp (pre-upgrade storage or provider not round-tripping the value). SEP-2352 isolation is inactive for this read; ensure your provider round-trips the issuer field."
+      ]
+    }
+  ],
+  "transportErrors": []
+}

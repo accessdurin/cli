@@ -1,0 +1,148 @@
+{
+  "description": "A 401 with a resource_metadata challenge runs auth() (explicit metadata URL, refresh with the stored refresh token) and retries the request once with the new token; a second 401 after re-authentication is an error.",
+  "provider": {
+    "redirectUrl": "http://127.0.0.1/cb",
+    "clientMetadata": {
+      "redirect_uris": [
+        "http://127.0.0.1/cb"
+      ]
+    },
+    "tokens": {
+      "access_token": "old",
+      "token_type": "Bearer",
+      "refresh_token": "rt",
+      "issuer": "https://app.example.test/"
+    },
+    "clientInformation": {
+      "client_id": "c-1",
+      "issuer": "https://app.example.test/"
+    },
+    "state": "st"
+  },
+  "client": {
+    "name": "Durin CLI",
+    "version": "1.0.0"
+  },
+  "transport": {
+    "url": "https://app.example.test/mcp",
+    "requestInit": {
+      "redirect": "error"
+    },
+    "onInsufficientScope": "throw"
+  },
+  "routes": [
+    {
+      "method": "POST",
+      "path": "/mcp",
+      "rpcMethod": "initialize",
+      "responses": [
+        {
+          "status": 401,
+          "headers": {
+            "www-authenticate": "Bearer error=\"invalid_token\", resource_metadata=\"https://app.example.test/prm\", scope=\"mcp\""
+          }
+        },
+        {
+          "status": 200,
+          "json": {
+            "jsonrpc": "2.0",
+            "id": "$id",
+            "result": {
+              "protocolVersion": "2025-11-25",
+              "capabilities": {
+                "tools": {}
+              },
+              "serverInfo": {
+                "name": "s",
+                "version": "1"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/mcp",
+      "rpcMethod": "notifications/initialized",
+      "responses": [
+        {
+          "status": 202
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/mcp",
+      "responses": [
+        {
+          "status": 405
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/prm",
+      "responses": [
+        {
+          "status": 200,
+          "json": {
+            "resource": "https://app.example.test/mcp",
+            "authorization_servers": [
+              "https://app.example.test/"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/.well-known/oauth-authorization-server",
+      "responses": [
+        {
+          "status": 200,
+          "json": {
+            "issuer": "https://app.example.test/",
+            "authorization_endpoint": "https://app.example.test/authorize",
+            "token_endpoint": "https://app.example.test/token",
+            "response_types_supported": [
+              "code"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/token",
+      "responses": [
+        {
+          "status": 200,
+          "json": {
+            "access_token": "new",
+            "token_type": "Bearer",
+            "refresh_token": "rt2"
+          }
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/mcp",
+      "rpcMethod": "tools/list",
+      "responses": [
+        {
+          "status": 401
+        }
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "op": "connect"
+    },
+    {
+      "op": "listTools"
+    }
+  ]
+}

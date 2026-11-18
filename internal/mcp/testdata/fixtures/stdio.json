@@ -1,0 +1,392 @@
+{
+  "framing": {
+    "lines": [
+      {
+        "message": "{\"jsonrpc\":\"2.0\",\"id\":\"x\",\"method\":\"tools/call\",\"params\":{\"_meta\":{\"progressToken\":\"t\",\"io.modelcontextprotocol/related-task\":{\"taskId\":\"q\"},\"x\":1},\"b\":1,\"a\":2}}"
+      },
+      {
+        "message": "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}"
+      },
+      {
+        "message": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"a\",\"version\":\"1\"},\"b\":1},\"z\":1,\"a\":2}}"
+      },
+      {
+        "message": "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"_meta\":{}}}"
+      },
+      {
+        "message": "{\"jsonrpc\":\"2.0\",\"id\":1,\"error\":{\"code\":-1,\"message\":\"m\",\"data\":{\"x\":1}}}"
+      },
+      {
+        "message": "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32700,\"message\":\"parse\"}}"
+      },
+      {
+        "error": "ZodError"
+      },
+      {
+        "error": "ZodError"
+      },
+      {
+        "error": "ZodError"
+      },
+      {
+        "message": "{\"jsonrpc\":\"2.0\",\"method\":\"crlf\"}"
+      },
+      {
+        "message": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"one\"}"
+      },
+      {
+        "message": "{\"jsonrpc\":\"2.0\",\"id\":100,\"method\":\"hundred\"}"
+      },
+      {
+        "error": "ZodError"
+      },
+      {
+        "error": "ZodError"
+      },
+      {
+        "message": "{\"jsonrpc\":\"2.0\",\"id\":0,\"method\":\"negzero\"}"
+      },
+      {
+        "message": "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"dup2\"}"
+      },
+      {
+        "message": "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"m\",\"params\":{\"1\":1,\"2\":2,\"b\":1}}"
+      },
+      {
+        "message": "{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"ws\"}"
+      },
+      {
+        "message": "{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"m\",\"params\":{\"s\":\"\\ud800 lone é   \\u0001\"}}"
+      },
+      {
+        "error": "ZodError"
+      },
+      {
+        "error": "ZodError"
+      },
+      {
+        "error": "ZodError"
+      },
+      {
+        "message": "{\"jsonrpc\":\"2.0\",\"id\":10,\"method\":\"m\",\"params\":{\"n\":null,\"f\":0.1,\"g\":1e+21,\"h\":1e-7,\"i\":123456789012345680000}}"
+      },
+      {
+        "error": "ZodError"
+      },
+      {
+        "error": "ZodError"
+      }
+    ],
+    "invalidUtf8": [
+      {
+        "message": "{\"jsonrpc\":\"2.0\",\"id\":13,\"method\":\"bad��\"}"
+      }
+    ],
+    "split": [
+      {
+        "message": "{\"jsonrpc\":\"2.0\",\"method\":\"split\"}"
+      },
+      {
+        "message": "{\"jsonrpc\":\"2.0\",\"method\":\"next\"}"
+      }
+    ],
+    "oversize": [
+      {
+        "error": "Error"
+      },
+      {
+        "close": true
+      }
+    ]
+  },
+  "predicates": [
+    {
+      "value": "{\"params\":{\"b\":1,\"_meta\":{\"x\":1,\"progressToken\":\"t\",\"io.modelcontextprotocol/related-task\":{\"taskId\":\"q\",\"extra\":1}},\"a\":2},\"method\":\"tools/call\",\"id\":\"x\",\"jsonrpc\":\"2.0\"}",
+      "request": true,
+      "notification": false,
+      "result": false,
+      "error": false,
+      "initialize": false,
+      "initialized": false
+    },
+    {
+      "value": "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+      "request": false,
+      "notification": true,
+      "result": false,
+      "error": false,
+      "initialize": false,
+      "initialized": true
+    },
+    {
+      "value": "{\"id\":1,\"result\":{\"z\":1,\"_meta\":{\"b\":1,\"io.modelcontextprotocol/serverInfo\":{\"name\":\"a\",\"version\":\"1\",\"x\":1}},\"a\":2},\"jsonrpc\":\"2.0\"}",
+      "request": false,
+      "notification": false,
+      "result": true,
+      "error": false,
+      "initialize": false,
+      "initialized": false
+    },
+    {
+      "value": "{\"id\":2,\"jsonrpc\":\"2.0\",\"result\":{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":1}}}}",
+      "request": false,
+      "notification": false,
+      "result": true,
+      "error": false,
+      "initialize": false,
+      "initialized": false
+    },
+    {
+      "value": "{\"id\":1,\"jsonrpc\":\"2.0\",\"error\":{\"message\":\"m\",\"code\":-1,\"data\":{\"x\":1},\"extra\":2}}",
+      "request": false,
+      "notification": false,
+      "result": false,
+      "error": true,
+      "initialize": false,
+      "initialized": false
+    },
+    {
+      "value": "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32700,\"message\":\"parse\"}}",
+      "request": false,
+      "notification": false,
+      "result": false,
+      "error": true,
+      "initialize": false,
+      "initialized": false
+    },
+    {
+      "value": "{\"id\":null,\"jsonrpc\":\"2.0\",\"error\":{\"message\":\"m\",\"code\":1}}",
+      "request": false,
+      "notification": false,
+      "result": false,
+      "error": false,
+      "initialize": false,
+      "initialized": false
+    },
+    {
+      "value": "[{\"jsonrpc\":\"2.0\",\"method\":\"a\"}]",
+      "request": false,
+      "notification": false,
+      "result": false,
+      "error": false,
+      "initialize": false,
+      "initialized": false
+    },
+    {
+      "value": "{\"jsonrpc\":\"2.0\",\"method\":\"n\",\"params\":null}",
+      "request": false,
+      "notification": false,
+      "result": false,
+      "error": false,
+      "initialize": false,
+      "initialized": false
+    },
+    {
+      "value": "{\"jsonrpc\":\"2.0\",\"method\":\"crlf\"}",
+      "request": false,
+      "notification": true,
+      "result": false,
+      "error": false,
+      "initialize": false,
+      "initialized": false
+    },
+    {
+      "value": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"one\"}",
+      "request": true,
+      "notification": false,
+      "result": false,
+      "error": false,
+      "initialize": false,
+      "initialized": false
+    },
+    {
+      "value": "{\"jsonrpc\":\"2.0\",\"id\":100,\"method\":\"hundred\"}",
+      "request": true,
+      "notification": false,
+      "result": false,
+      "error": false,
+      "initialize": false,
+      "initialized": false
+    },
+    {
+      "value": "{\"jsonrpc\":\"2.0\",\"id\":9007199254740992,\"method\":\"big\"}",
+      "request": false,
+      "notification": false,
+      "result": false,
+      "error": false,
+      "initialize": false,
+      "initialized": false
+    },
+    {
+      "value": "{\"jsonrpc\":\"2.0\",\"id\":1.5,\"method\":\"frac\"}",
+      "request": false,
+      "notification": false,
+      "result": false,
+      "error": false,
+      "initialize": false,
+      "initialized": false
+    },
+    {
+      "value": "{\"jsonrpc\":\"2.0\",\"id\":0,\"method\":\"negzero\"}",
+      "request": true,
+      "notification": false,
+      "result": false,
+      "error": false,
+      "initialize": false,
+      "initialized": false
+    },
+    {
+      "value": "{\"jsonrpc\":\"2.0\",\"method\":\"dup2\",\"id\":3}",
+      "request": true,
+      "notification": false,
+      "result": false,
+      "error": false,
+      "initialize": false,
+      "initialized": false
+    },
+    {
+      "value": "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"m\",\"params\":{\"1\":1,\"2\":2,\"b\":1,\"__proto__\":{\"x\":1}}}",
+      "request": true,
+      "notification": false,
+      "result": false,
+      "error": false,
+      "initialize": false,
+      "initialized": false
+    },
+    {
+      "value": "{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"ws\"}",
+      "request": true,
+      "notification": false,
+      "result": false,
+      "error": false,
+      "initialize": false,
+      "initialized": false
+    },
+    {
+      "value": "{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"m\",\"params\":{\"s\":\"\\ud800 lone é   \\u0001\"}}",
+      "request": true,
+      "notification": false,
+      "result": false,
+      "error": false,
+      "initialize": false,
+      "initialized": false
+    },
+    {
+      "value": "{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"m\",\"extra\":1}",
+      "request": false,
+      "notification": false,
+      "result": false,
+      "error": false,
+      "initialize": false,
+      "initialized": false
+    },
+    {
+      "value": "{\"jsonrpc\":\"2.1\",\"id\":8,\"method\":\"m\"}",
+      "request": false,
+      "notification": false,
+      "result": false,
+      "error": false,
+      "initialize": false,
+      "initialized": false
+    },
+    {
+      "value": "{\"jsonrpc\":\"2.0\",\"id\":9,\"result\":[]}",
+      "request": false,
+      "notification": false,
+      "result": false,
+      "error": false,
+      "initialize": false,
+      "initialized": false
+    },
+    {
+      "value": "{\"jsonrpc\":\"2.0\",\"id\":10,\"method\":\"m\",\"params\":{\"n\":null,\"f\":0.1,\"g\":1e+21,\"h\":1e-7,\"i\":123456789012345680000}}",
+      "request": true,
+      "notification": false,
+      "result": false,
+      "error": false,
+      "initialize": false,
+      "initialized": false
+    },
+    {
+      "value": "{\"jsonrpc\":\"2.0\",\"id\":11,\"method\":\"m\",\"params\":[1,2]}",
+      "request": false,
+      "notification": false,
+      "result": false,
+      "error": false,
+      "initialize": false,
+      "initialized": false
+    },
+    {
+      "value": "{\"jsonrpc\":\"2.0\",\"id\":12,\"method\":\"m\",\"params\":{\"_meta\":{\"progressToken\":1.5}}}",
+      "request": false,
+      "notification": false,
+      "result": false,
+      "error": false,
+      "initialize": false,
+      "initialized": false
+    },
+    {
+      "value": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{},\"clientInfo\":{\"name\":\"agent\",\"version\":\"1.0.0\"}}}",
+      "request": true,
+      "notification": false,
+      "result": false,
+      "error": false,
+      "initialize": true,
+      "initialized": false
+    },
+    {
+      "value": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{\"elicitation\":{}},\"clientInfo\":{\"name\":\"agent\"}}}",
+      "request": true,
+      "notification": false,
+      "result": false,
+      "error": false,
+      "initialize": false,
+      "initialized": false
+    },
+    {
+      "value": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{\"elicitation\":{\"form\":{\"applyDefaults\":\"no\"}}},\"clientInfo\":{\"name\":\"a\",\"version\":\"1\"}}}",
+      "request": true,
+      "notification": false,
+      "result": false,
+      "error": false,
+      "initialize": false,
+      "initialized": false
+    },
+    {
+      "value": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{\"roots\":{\"listChanged\":true},\"experimental\":{\"x\":{\"y\":1}}},\"clientInfo\":{\"name\":\"a\",\"version\":\"1\",\"icons\":[{\"src\":\"s\",\"theme\":\"dim\"}]}}}",
+      "request": true,
+      "notification": false,
+      "result": false,
+      "error": false,
+      "initialize": false,
+      "initialized": false
+    },
+    {
+      "value": "{\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"x\",\"capabilities\":{},\"clientInfo\":{\"name\":\"a\",\"version\":\"1\"}},\"anything\":true}",
+      "request": false,
+      "notification": false,
+      "result": false,
+      "error": false,
+      "initialize": true,
+      "initialized": false
+    },
+    {
+      "value": "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\",\"params\":{\"_meta\":{\"progressToken\":\"p\"}}}",
+      "request": false,
+      "notification": true,
+      "result": false,
+      "error": false,
+      "initialize": false,
+      "initialized": true
+    },
+    {
+      "value": "{\"method\":\"notifications/initialized\",\"params\":5}",
+      "request": false,
+      "notification": false,
+      "result": false,
+      "error": false,
+      "initialize": false,
+      "initialized": false
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "description": "Refresh refused with invalid_grant: tokens are invalidated and auth retries once from cached discovery state, ending in a new authorization redirect.",
+  "provider": {
+    "redirectUrl": "http://127.0.0.1:5555/oauth/callback",
+    "state": "s2",
+    "clientMetadata": {"client_name": "Durin CLI", "redirect_uris": ["http://127.0.0.1:5555/oauth/callback"], "grant_types": ["authorization_code", "refresh_token"], "token_endpoint_auth_method": "none"},
+    "clientInformation": {"client_id": "c-1"},
+    "tokens": {"access_token": "old", "token_type": "Bearer", "refresh_token": "rt-old", "issuer": "https://app.example.test/"}
+  },
+  "routes": [
+    {"method": "GET", "path": "/.well-known/oauth-protected-resource/mcp", "responses": [{"status": 500}]},
+    {"method": "GET", "path": "/.well-known/oauth-authorization-server", "responses": [{"status": 200, "json": {"issuer": "https://app.example.test/", "authorization_endpoint": "https://app.example.test/authorize", "token_endpoint": "https://app.example.test/token", "response_types_supported": ["code"], "authorization_response_iss_parameter_supported": true}}]},
+    {"method": "POST", "path": "/token", "responses": [{"status": 400, "json": {"error": "invalid_grant", "error_description": "The grant was revoked."}}]}
+  ],
+  "steps": [
+    {"op": "auth", "serverUrl": "https://app.example.test/mcp"},
+    {"op": "auth", "serverUrl": "https://app.example.test/mcp", "authorizationCode": "c"}
+  ]
+}

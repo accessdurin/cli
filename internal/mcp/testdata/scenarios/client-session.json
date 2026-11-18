@@ -1,0 +1,36 @@
+{
+  "description": "RemoteMcpClient-style session: initialize (session id + negotiated version headers), initialized -> 202 -> standalone GET (405 tolerated), listTools across three pages (one SSE page with an event id), callTool result normalization (resultType removed, blocks stripped and reordered, missing content defaulted), close.",
+  "provider": {
+    "redirectUrl": null,
+    "clientMetadata": {"redirect_uris": ["http://127.0.0.1/cb"]},
+    "tokens": {"access_token": "at-1", "token_type": "Bearer", "issuer": "https://app.example.test/"},
+    "clientInformation": {"client_id": "c-1", "issuer": "https://app.example.test/"}
+  },
+  "client": {"name": "Durin CLI", "version": "1.0.0", "listMaxPages": 64},
+  "transport": {"url": "https://app.example.test/mcp/u/abc", "requestInit": {"redirect": "error"}, "onInsufficientScope": "throw"},
+  "routes": [
+    {"method": "POST", "path": "/mcp/u/abc", "rpcMethod": "initialize", "responses": [{"status": 200, "headers": {"mcp-session-id": "sess-1"}, "json": {"id": "$id", "result": {"protocolVersion": "2025-06-18", "capabilities": {"tools": {"listChanged": true}, "x": {}}, "serverInfo": {"name": "durin", "version": "1", "extra": 1}, "instructions": "hi", "extraTop": 1}, "jsonrpc": "2.0"}}]},
+    {"method": "POST", "path": "/mcp/u/abc", "rpcMethod": "notifications/initialized", "responses": [{"status": 202}]},
+    {"method": "GET", "path": "/mcp/u/abc", "responses": [{"status": 405}]},
+    {"method": "POST", "path": "/mcp/u/abc", "rpcMethod": "tools/list", "responses": [
+      {"status": 200, "headers": {"content-type": "application/json; charset=utf-8"}, "json": {"jsonrpc": "2.0", "id": "$id", "result": {"tools": [{"name": "echo", "inputSchema": {"type": "object", "x-extra": 1}, "outputSchema": {"type": "object", "properties": {"a": {"type": "number"}}, "required": ["a"]}, "annotations": {"readOnlyHint": true, "bogus": 1}, "vendorField": 2}], "nextCursor": "c1", "ttlMs": 0, "pageMeta": "kept"}}},
+      {"status": 200, "headers": {"content-type": "text/event-stream"}, "sse": ["id: e1\nevent: message\ndata: {\"jsonrpc\":\"2.0\",\"id\":$id,\"result\":{\"nextCursor\":\"c2\",\"tools\":[{\"name\":\"two\",\"description\":\"d\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"q\":{\"type\":\"string\"}}}}]}}\n\n"]},
+      {"status": 200, "json": {"jsonrpc": "2.0", "id": "$id", "result": {"tools": [{"title": "Three", "name": "three", "inputSchema": {"type": "object"}, "_meta": {"k": "v"}}]}}}
+    ]},
+    {"method": "POST", "path": "/mcp/u/abc", "rpcMethod": "tools/call", "responses": [
+      {"status": 200, "json": {"jsonrpc": "2.0", "id": "$id", "result": {"resultType": "complete", "isError": false, "unknownTop": 1, "content": [{"text": "hi", "type": "text", "extra": 1}, {"type": "resource_link", "uri": "https://x.example/r", "name": "n", "annotations": {"priority": 0.5, "zzz": 1}}, {"type": "resource", "resource": {"text": "t", "uri": "file:///a", "mimeType": "text/plain", "zz": 1}}], "structuredContent": {"a": 1}, "_meta": {"z": 1, "progressToken": "p"}}}},
+      {"status": 200, "json": {"jsonrpc": "2.0", "id": "$id", "result": {"structuredContent": {"b": 2}, "isError": true}}},
+      {"status": 200, "json": {"jsonrpc": "2.0", "id": "$id", "result": {"content": [{"type": "image", "data": "not base64!", "mimeType": "image/png"}]}}},
+      {"status": 200, "json": {"jsonrpc": "2.0", "id": "$id", "error": {"code": -32000, "message": "boom", "data": {"d": 1}, "extra": 1}}}
+    ]}
+  ],
+  "steps": [
+    {"op": "connect"},
+    {"op": "listTools"},
+    {"op": "callTool", "params": {"name": "echo", "arguments": {"x": 1}, "_meta": {"io.durin/control": {"idempotencyKey": "k1"}}}},
+    {"op": "callTool", "params": {"name": "two", "arguments": {}}},
+    {"op": "callTool", "params": {"name": "two", "arguments": {}}},
+    {"op": "callTool", "params": {"name": "two", "arguments": {}}},
+    {"op": "close"}
+  ]
+}
