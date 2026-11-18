@@ -39,10 +39,15 @@ export async function verifySavedBridge(
   }
 }
 
+/**
+ * The SDK's default environment, plus telemetry opt-outs and what the bridge needs to reach the
+ * OS credential store: on Linux the Secret Service is on the session bus, which libdbus finds
+ * only through DBUS_SESSION_BUS_ADDRESS or XDG_RUNTIME_DIR.
+ */
 const bridgeEnvironment = (): Record<string, string> => ({
   ...getDefaultEnvironment(),
   ...Object.fromEntries(
-    ['DO_NOT_TRACK', 'NODE_ENV']
+    ['DO_NOT_TRACK', 'NODE_ENV', 'DBUS_SESSION_BUS_ADDRESS', 'XDG_RUNTIME_DIR']
       .filter((key) => process.env[key] !== undefined)
       .map((key) => [key, process.env[key] as string]),
   ),
