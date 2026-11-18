@@ -247,10 +247,11 @@ other permissions (for example 0700). It refuses a configured or resolved path t
 passes through a symlink another user owns or a world-writable directory without the
 sticky bit; intermediate links of a multi-hop symlink chain are not checked. An
 installed runtime is reused only while its files match and no other user can modify
-them. These checks do not run on Windows. The CLI does not read
-`NODE_EXTRA_CA_CERTS`; on Linux, `SSL_CERT_FILE` and `SSL_CERT_DIR` select its
-trusted certificates. All three are passed to the verification child when present;
-custom enterprise certificate settings must also be available to your harness.
+them. These checks do not run on Windows. As before, PEM certificates named by
+`NODE_EXTRA_CA_CERTS` are trusted in addition to the system's roots; on Linux,
+`SSL_CERT_FILE` and `SSL_CERT_DIR` also select the trusted certificates. All three
+are passed to the verification child when present; custom enterprise certificate
+settings must also be available to your harness.
 
 ## Direct MCP and credentials
 

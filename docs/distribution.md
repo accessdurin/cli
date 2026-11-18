@@ -150,9 +150,9 @@ go run ./tools/release metadata -write-formula
 `metadata` writes the npm launcher package `@accessdurin/cli`, the Homebrew
 formula `durin.rb` (and, with `-write-formula`, `Formula/durin.rb`), copies
 `install-windows.ps1`, and generates `SHA256SUMS` over every asset. The formula
-pins each archive's SHA-256, so it must be generated from the same archives the
-release ships. Review and commit the regenerated `Formula/durin.rb` with the
-version change.
+pins each archive's SHA-256, so it must come from the same archives the release
+ships: after publishing a release, commit its `durin.rb` asset as
+`Formula/durin.rb` (or run `metadata -write-formula` on the downloaded assets).
 
 The [release workflow](../.github/workflows/release.yml) relies on the full
 verification in [verify.yml](../.github/workflows/verify.yml) for pull requests and
@@ -169,12 +169,11 @@ native macOS or Windows behavior.
 For a tagged release, the workflow requires the tag to match the version in
 `internal/version/version.go` and the commit to belong to `main`. Set up the
 `cli-release` GitHub environment with any desired maintainer review rules. After
-all packages pass, the final job checks that the committed `Formula/durin.rb`
-matches the generated formula and creates a **draft** GitHub release containing
-all assets. It never publishes that draft or replaces existing release assets on a
-retry. Review the draft and publish it when ready. If an archive changes,
-regenerate the formula and make a new reviewed version rather than replacing
-published bytes.
+all packages pass, the final job creates a **draft** GitHub release containing all
+assets, including the generated `durin.rb`. It never publishes that draft or replaces existing release assets on a
+retry. Review the draft and publish it when ready, then update the tap's
+`Formula/durin.rb` from it. If an archive changes, make a new reviewed version
+rather than replacing published bytes.
 
 Publish the npm packages separately from the release assets, the five platform
 packages first and then the launcher; see [Publish to npm](../README.md#publish-to-npm).

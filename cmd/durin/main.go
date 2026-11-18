@@ -121,5 +121,6 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, isTTY func() 
 
 func main() {
 	isTTY := func() bool { return term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd())) }
+	app.TrustExtraCACertificates(os.Stderr)
 	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr, isTTY))
 }

@@ -155,10 +155,6 @@ jobs:
         with:
           name: durin-release
           path: release
-      - name: Check the committed Homebrew formula matches these archives
-        run: |
-          cp release/durin.rb /tmp/durin.rb
-          cmp Formula/durin.rb /tmp/durin.rb || { echo "::error::Homebrew formula differs from this release. Regenerate it with go run ./tools/release metadata -write-formula before tagging."; exit 1; }
       - name: Create a reviewable draft release
         env:
           GH_TOKEN: ${{ github.token }}
