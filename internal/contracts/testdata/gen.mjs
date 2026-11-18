@@ -7,6 +7,8 @@
 // that the function threw.
 import { register } from 'node:module';
 import { writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 register(new URL('./ts-loader.mjs', import.meta.url));
 const src = new URL('../../../src/contracts/', import.meta.url);
@@ -126,8 +128,14 @@ const schemaCases = [
   ['cliProfileSchema', json({ ...production, version: 1 })],
   ['cliProfileSchema', '[]'],
   ['cliProfileSchema', 'null'],
-  ['cliToolCallSchema', '{"name":"tool","arguments":{"a":[1,{"__proto__":{"x":1}}],"__proto__":2},"idempotencyKey":"k-1"}'],
-  ['cliToolCallSchema', '{"name":"tool","arguments":{},"idempotencyKey":"k","approvalId":"a/b:c.d"}'],
+  [
+    'cliToolCallSchema',
+    '{"name":"tool","arguments":{"a":[1,{"__proto__":{"x":1}}],"__proto__":2},"idempotencyKey":"k-1"}',
+  ],
+  [
+    'cliToolCallSchema',
+    '{"name":"tool","arguments":{},"idempotencyKey":"k","approvalId":"a/b:c.d"}',
+  ],
   ['cliToolCallSchema', '{"name":"-tool","arguments":{},"idempotencyKey":"k"}'],
   ['cliToolCallSchema', '{"name":"tool","arguments":[],"idempotencyKey":"k"}'],
   ['cliToolCallSchema', '{"name":"tool","arguments":{},"idempotencyKey":"k k"}'],
@@ -142,32 +150,71 @@ const schemaCases = [
   ['mcpToolsPageSchema', '{"tools":[],"nextCursor":null}'],
   ['mcpToolsPageSchema', '{"tools":[{"name":"","inputSchema":{"type":"object"}}]}'],
   ['mcpToolsPageSchema', '{"tools":[{"name":"x","inputSchema":{"type":"string"}}]}'],
-  ['mcpToolsListSchema', '{"tools":[{"name":"a","inputSchema":{"type":"object"}},{"name":"b","title":"B","inputSchema":{"type":"object"}}]}'],
-  ['mcpToolsListSchema', '{"tools":[{"name":"a","inputSchema":{"type":"object"}},{"name":"a","inputSchema":{"type":"object"}}]}'],
+  [
+    'mcpToolsListSchema',
+    '{"tools":[{"name":"a","inputSchema":{"type":"object"}},{"name":"b","title":"B","inputSchema":{"type":"object"}}]}',
+  ],
+  [
+    'mcpToolsListSchema',
+    '{"tools":[{"name":"a","inputSchema":{"type":"object"}},{"name":"a","inputSchema":{"type":"object"}}]}',
+  ],
   ['mcpToolsListSchema', '{"tools":[],"nextCursor":"more"}'],
   ['mcpToolsListSchema', '{"tools":[],"nextCursor":null}'],
   [
     'mcpToolResultSchema',
     '{"content":[{"type":"text","text":"hi","extra":1},{"type":"image","data":"aGk=","mimeType":"image/png"},{"type":"resource","resource":{"uri":"u","text":"t"}},{"type":"resource_link","uri":"u","name":"n","size":3}],"structuredContent":{"a":1},"isError":false,"other":1}',
   ],
-  ['mcpToolResultSchema', '{"content":[{"type":"text","text":"x"}],"_meta":{"io.durin/control":{"idempotencyKey":"k"}}}'],
-  ['mcpToolResultSchema', '{"content":[{"type":"resource","resource":{"uri":"u","text":"t","blob":"aGk="}}]}'],
-  ['mcpToolResultSchema', '{"content":[{"type":"image","data":"not base64!","mimeType":"image/png"}]}'],
+  [
+    'mcpToolResultSchema',
+    '{"content":[{"type":"text","text":"x"}],"_meta":{"io.durin/control":{"idempotencyKey":"k"}}}',
+  ],
+  [
+    'mcpToolResultSchema',
+    '{"content":[{"type":"resource","resource":{"uri":"u","text":"t","blob":"aGk="}}]}',
+  ],
+  [
+    'mcpToolResultSchema',
+    '{"content":[{"type":"image","data":"not base64!","mimeType":"image/png"}]}',
+  ],
   ['mcpToolResultSchema', `{"content":[{"type":"text","text":"${'x'.repeat(16_385)}"}]}`],
-  ['mcpToolResultSchema', `{"content":[{"type":"text","text":"${'x'.repeat(16_000)}"},{"type":"text","text":"${'x'.repeat(16_000)}"},{"type":"text","text":"${'x'.repeat(16_000)}"},{"type":"text","text":"${'x'.repeat(16_000)}"},{"type":"text","text":"${'x'.repeat(16_000)}"}]}`],
+  [
+    'mcpToolResultSchema',
+    `{"content":[{"type":"text","text":"${'x'.repeat(16_000)}"},{"type":"text","text":"${'x'.repeat(16_000)}"},{"type":"text","text":"${'x'.repeat(16_000)}"},{"type":"text","text":"${'x'.repeat(16_000)}"},{"type":"text","text":"${'x'.repeat(16_000)}"}]}`,
+  ],
   ['mcpToolResultSchema', '{"content":[]}'],
   ['mcpEndpointSchema', '{"status":"ready","url":"https://mcp.example/mcp/u/x"}'],
   ['mcpEndpointSchema', '{"status":"unconfigured","url":null}'],
   ['mcpEndpointSchema', '{"status":"ready","url":null}'],
   ['mcpEndpointSchema', '{"status":"gone","url":null}'],
-  ['cliAuthConfigSchema', '{"clientId":"c","issuer":"https://i","providerOrigin":"https://p","appOrigin":"https://a"}'],
-  ['cliAuthConfigSchema', '{"clientId":"c","issuer":"https://i","providerOrigin":"https://p","appOrigin":"https://a","x":1}'],
-  ['deviceChallengeSchema', '{"device_code":"d","user_code":"u","verification_uri":"https://v","expires_in":600,"x":1}'],
-  ['deviceChallengeSchema', '{"device_code":"d","user_code":"u","verification_uri":"https://v","expires_in":600,"interval":61}'],
-  ['deviceChallengeSchema', '{"device_code":"d","user_code":"u","verification_uri":"https://v","expires_in":1.5}'],
+  [
+    'cliAuthConfigSchema',
+    '{"clientId":"c","issuer":"https://i","providerOrigin":"https://p","appOrigin":"https://a"}',
+  ],
+  [
+    'cliAuthConfigSchema',
+    '{"clientId":"c","issuer":"https://i","providerOrigin":"https://p","appOrigin":"https://a","x":1}',
+  ],
+  [
+    'deviceChallengeSchema',
+    '{"device_code":"d","user_code":"u","verification_uri":"https://v","expires_in":600,"x":1}',
+  ],
+  [
+    'deviceChallengeSchema',
+    '{"device_code":"d","user_code":"u","verification_uri":"https://v","expires_in":600,"interval":61}',
+  ],
+  [
+    'deviceChallengeSchema',
+    '{"device_code":"d","user_code":"u","verification_uri":"https://v","expires_in":1.5}',
+  ],
   ['deviceSessionSchema', '{"access_token":"a","refresh_token":"r","user":{"id":"u"}}'],
-  ['deviceSessionSchema', '{"access_token":"a","refresh_token":"r","organization_id":"o","user":{"id":"u"}}'],
-  ['deviceSessionSchema', '{"access_token":"a","refresh_token":"r","organization_id":"","user":{"id":"u"}}'],
+  [
+    'deviceSessionSchema',
+    '{"access_token":"a","refresh_token":"r","organization_id":"o","user":{"id":"u"}}',
+  ],
+  [
+    'deviceSessionSchema',
+    '{"access_token":"a","refresh_token":"r","organization_id":"","user":{"id":"u"}}',
+  ],
   ['authorizationCallbackSchema', '{"state":"s","code":"c","iss":"https://i"}'],
   ['authorizationCallbackSchema', '{"state":"s","error":"access_denied"}'],
   ['authorizationCallbackSchema', '{"state":"s","code":"c","error":"e"}'],
@@ -176,7 +223,10 @@ const schemaCases = [
     'onboardingStatusSchema',
     '{"organizationId":null,"journey":"organization_creator","next":"/onboarding","allowed":true,"profile":{"organizationId":"o","creatorId":"c","enrollment":"required","title":"  CTO ","headcount":5,"source":null,"otherSource":null,"paymentReady":false,"completedAt":null,"version":2},"step":"source","tenantReady":false}',
   ],
-  ['onboardingStatusSchema', '{"organizationId":"o","journey":"existing","next":"/connections","allowed":true,"profile":null,"step":"complete","tenantReady":true}'],
+  [
+    'onboardingStatusSchema',
+    '{"organizationId":"o","journey":"existing","next":"/connections","allowed":true,"profile":null,"step":"complete","tenantReady":true}',
+  ],
   ['onboardingAnswerSchema', '{"step":"title","version":1,"value":"  CEO  "}'],
   ['onboardingAnswerSchema', '{"step":"source","version":1,"value":"other"}'],
   ['onboardingAnswerSchema', '{"step":"source","version":1,"value":"other","other":" a friend "}'],
@@ -186,8 +236,14 @@ const schemaCases = [
     'sessionSchema',
     '{"mode":"workos","principalId":"p","name":"n","email":"e","role":"admin","organizationId":"o","organizations":[{"id":"o","name":"O","x":1}],"onboarding":{"organizationId":"o","journey":"existing","next":"/connections","allowed":true}}',
   ],
-  ['organizationCreateSchema', '{"name":"Acme","idempotencyKey":"10000000-0000-4000-8000-000000000001"}'],
-  ['organizationCreateSchema', '{"name":"Acme","idempotencyKey":"10000000-0000-0000-8000-000000000001"}'],
+  [
+    'organizationCreateSchema',
+    '{"name":"Acme","idempotencyKey":"10000000-0000-4000-8000-000000000001"}',
+  ],
+  [
+    'organizationCreateSchema',
+    '{"name":"Acme","idempotencyKey":"10000000-0000-0000-8000-000000000001"}',
+  ],
   [
     'personalBootstrapSchema',
     `{"organization":{"id":"o","name":"O","environment":"production"},"membership":{"principalId":"p","role":"member","active":true,"revocationEpoch":0},"entitlements":{"organizationId":"o","package":"standard"},"session":{"mode":"dev","principalId":"p","name":"n","email":"e","role":"member","organizationId":"o","organizations":[]},"mcp":{"status":"needs_setup","url":"https://x/mcp/u/${hex('a')}"},"settings":{"retention":"metadata_only","environment":"production"}}`,
@@ -208,7 +264,12 @@ const run = (name, input) => {
     return { schema: name, input, threw: error.constructor.name };
   }
   if (parsed.success) return { schema: name, input, ok: true, output: JSON.stringify(parsed.data) };
-  return { schema: name, input, ok: false, custom: parsed.error.issues.map(describe).filter(Boolean) };
+  return {
+    schema: name,
+    input,
+    ok: false,
+    custom: parsed.error.issues.map(describe).filter(Boolean),
+  };
 };
 const attempt = (fn) => {
   try {
@@ -245,12 +306,26 @@ const urls = [
   'http://localhost.',
   'http://LocalHost.:8',
 ];
-const hostsToCheck = ['localhost', 'LOCALHOST.', '[::1]', '::1', '127.0.0.1', '0x7f.1', 'example.com', '[::ffff:7f00:1]', ''];
+const hostsToCheck = [
+  'localhost',
+  'LOCALHOST.',
+  '[::1]',
+  '::1',
+  '127.0.0.1',
+  '0x7f.1',
+  'example.com',
+  '[::ffff:7f00:1]',
+  '',
+];
 const hostScopes = [
   { appOrigin: 'https://app.getdurin.com', development: false },
   { appOrigin: 'https://moria.app.getdurin.com', development: false },
   { appOrigin: 'https://app.example.test', development: false },
-  { appOrigin: 'https://app.example.test', development: false, accountIssuer: 'https://t.authkit.app' },
+  {
+    appOrigin: 'https://app.example.test',
+    development: false,
+    accountIssuer: 'https://t.authkit.app',
+  },
   { appOrigin: 'http://127.0.0.1:5270', development: true },
   { appOrigin: 'https://app.example.test.', development: false },
   { appOrigin: 'https://app.example.test:8443', development: false },
@@ -271,46 +346,48 @@ const hostUrls = [
   'nope',
   'foo://a%zz/',
 ];
-const functionCases = [
-  ...urls.flatMap((value) =>
-    [false, true].map((dev) => ({ fn: 'safeCliUrl', args: [value, dev], ...attempt(() => url.safeCliUrl(value, dev)) })),
-  ),
-  ...hostsToCheck.map((value) => ({ fn: 'loopbackCliHost', args: [value], ...attempt(() => url.loopbackCliHost(value)) })),
-  ...hostScopes.flatMap((scope) =>
-    host.cliHostRoles.flatMap((role) =>
-      hostUrls.map((value) => ({
-        fn: 'untrustedCliHost',
-        args: [role, value, scope],
-        ...attempt(() => host.untrustedCliHost(role, value, scope)),
-      })),
-    ),
-  ),
-  ...hostScopes.flatMap((scope) =>
-    ['mcpIssuer', 'accountIssuer', 'resource'].flatMap((role) =>
-      hostUrls.map((value) => ({
-        fn: 'canonicalIssuer',
-        args: [role, value, scope],
-        ...attempt(() => host.canonicalIssuer(role, value, scope)),
-      })),
-    ),
-  ),
-  ...hostScopes.map((scope) => ({
-    fn: 'deploymentHostAllowlist',
-    args: [scope],
-    ...attempt(() => host.deploymentHostAllowlist(scope)),
-  })),
-  ...[
-    { hosts: ['issuer.example.test'], development: false },
-    { hosts: ['127.0.0.1'], development: false },
-    { hosts: [], development: true },
-  ].flatMap((allowlist) =>
-    [...hostUrls, 'https://ISSUER.Example.test/token', 'https://issuer.example.test:443/x'].map((value) => ({
-      fn: 'unlistedCliHost',
-      args: [value, allowlist],
-      ...attempt(() => host.unlistedCliHost(value, allowlist)),
-    })),
-  ),
+const functionCases = [];
+const record = (fn, args, call) => {
+  functionCases.push(Object.assign({ fn, args }, attempt(call)));
+};
+const allowlists = [
+  { hosts: ['issuer.example.test'], development: false },
+  { hosts: ['127.0.0.1'], development: false },
+  { hosts: [], development: true },
 ];
+for (const value of urls)
+  for (const dev of [false, true])
+    record('safeCliUrl', [value, dev], () => url.safeCliUrl(value, dev));
+for (const value of hostsToCheck)
+  record('loopbackCliHost', [value], () => url.loopbackCliHost(value));
+for (const scope of hostScopes) {
+  for (const role of host.cliHostRoles)
+    for (const value of hostUrls)
+      record('untrustedCliHost', [role, value, scope], () =>
+        host.untrustedCliHost(role, value, scope),
+      );
+  for (const role of ['mcpIssuer', 'accountIssuer', 'resource'])
+    for (const value of hostUrls)
+      record('canonicalIssuer', [role, value, scope], () =>
+        host.canonicalIssuer(role, value, scope),
+      );
+  record('deploymentHostAllowlist', [scope], () => host.deploymentHostAllowlist(scope));
+}
+for (const allowlist of allowlists)
+  for (const value of [
+    ...hostUrls,
+    'https://ISSUER.Example.test/token',
+    'https://issuer.example.test:443/x',
+  ])
+    record('unlistedCliHost', [value, allowlist], () => host.unlistedCliHost(value, allowlist));
 
-const fixtures = { schemas: schemaCases.map(([name, input]) => run(name, input)), functions: functionCases };
-writeFileSync(new URL('./fixtures.json', import.meta.url), `${JSON.stringify(fixtures, null, 1)}\n`);
+const fixtures = {
+  schemas: schemaCases.map(([name, input]) => run(name, input)),
+  functions: functionCases,
+};
+const output = new URL('./fixtures.json', import.meta.url);
+writeFileSync(output, `${JSON.stringify(fixtures)}\n`);
+execFileSync(fileURLToPath(new URL('../../../node_modules/.bin/prettier', import.meta.url)), [
+  '--write',
+  fileURLToPath(output),
+]);
