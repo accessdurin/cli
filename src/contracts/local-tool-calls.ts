@@ -27,7 +27,7 @@ export const localToolCallSchema = z
     mcpServer: mcpNameSchema(100),
     tool: mcpNameSchema(128),
     transport: z.enum(['stdio', 'loopback_http']),
-    outcome: z.enum(['succeeded', 'failed']),
+    outcome: z.enum(['succeeded', 'failed', 'unknown']),
     argumentsJson: z.string().max(LOCAL_TOOL_CALL_ARGUMENT_BYTES),
     argumentsTruncated: z.boolean(),
     observedAt: z.iso.datetime(),

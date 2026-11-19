@@ -4,7 +4,7 @@ import type { BridgeConfiguration } from './bridge-config.js';
 import { parseConfig } from './config.js';
 import { assertHooksEnabled, editJsonc, harnessCommandLine } from './hook-config.js';
 import { regularText, saveFileChange } from './managed-files.js';
-import { reportingPath } from './report-hook.js';
+import { readReporting, reportingPath } from './report-hook.js';
 import { isReportFormat, type ReportFormat } from './tool-call-event.js';
 import { CliError } from './cli-options.js';
 
@@ -52,19 +52,57 @@ const eventEntries = (raw: string, event: string) =>
   array.parse(object.parse(jsonc(raw).hooks ?? {})[event] ?? []);
 const reportEntry = (plan: Plan, command: string) =>
   plan.grouped ? { matcher: 'mcp__.*', hooks: [plan.handler(command)] } : plan.handler(command);
-function withEvent(raw: string, event: string, plan: Plan, command: string): string {
-  const entries = eventEntries(raw, event);
-  if (entries.some((entry) => hasCommand(entry, command, plan.grouped))) return raw;
-  return editJsonc(raw, ['hooks', event, entries.length], reportEntry(plan, command));
+type Commands = Readonly<{ current: string; previous?: string | undefined }>;
+/** The slot to write: the existing handler for this or the previous command, else a new one. */
+function slot(entries: readonly Record<string, unknown>[], plan: Plan, commands: Commands) {
+  const existing = [commands.current, commands.previous]
+    .filter((command): command is string => command !== undefined)
+    .map((command) => entries.findIndex((entry) => hasCommand(entry, command, plan.grouped)))
+    .find((index) => index >= 0);
+  return existing ?? entries.length;
 }
-/** Adds Durin's post-tool report handler to a harness hook file, keeping every other hook. */
-export function updatedReportConfig(raw: string, format: ReportFormat, command: string): string {
+function withEvent(raw: string, event: string, plan: Plan, commands: Commands): string {
+  const entries = eventEntries(raw, event);
+  if (entries.some((entry) => hasCommand(entry, commands.current, plan.grouped))) return raw;
+  return editJsonc(
+    raw,
+    ['hooks', event, slot(entries, plan, commands)],
+    reportEntry(plan, commands.current),
+  );
+}
+/**
+ * Adds Durin's post-tool report handler to a harness hook file, keeping every other hook.
+ * A handler for `previous` (an earlier CLI or Node path) is replaced rather than duplicated.
+ */
+export function updatedReportConfig(
+  raw: string,
+  format: ReportFormat,
+  command: string,
+  previous?: string,
+): string {
   const config = jsonc(raw);
   assertHooksEnabled(config);
   const plan = PLANS[format];
   const versioned =
     format === 'cursor' && config.version === undefined ? editJsonc(raw, ['version'], 1) : raw;
-  return plan.events.reduce((text, event) => withEvent(text, event, plan, command), versioned);
+  const commands = { current: command, previous };
+  return plan.events.reduce((text, event) => withEvent(text, event, plan, commands), versioned);
+}
+const canUpdate = (raw: string, format: ReportFormat): boolean => {
+  try {
+    updatedReportConfig(raw, format, 'durin-availability-check');
+    return true;
+  } catch {
+    return false;
+  }
+};
+const hookText = (agent: AgentConfig) =>
+  regularText(agent.hookConfig?.path ?? '').catch(() => null);
+/** False when the harness has hooks turned off, so setup does not offer reporting. */
+export async function reportingAvailable(agent: AgentConfig): Promise<boolean> {
+  const format = supportedFormat(agent);
+  if (!format) return false;
+  return canUpdate((await hookText(agent)) ?? '{}', format);
 }
 
 /**
@@ -78,8 +116,10 @@ export async function installReporting(
   const { harness, format, target } = reportTarget(agent);
   const command = harnessCommandLine(reportArguments(bridge, harness), format);
   const before = await regularText(target);
-  const after = updatedReportConfig(before ?? '{}', format, command);
   const path = reportingPath(bridge.configDirectory, harness);
+  const previous = (await readReporting(bridge.configDirectory, harness).catch(() => null))
+    ?.command;
+  const after = updatedReportConfig(before ?? '{}', format, command, previous);
   const record = {
     harness,
     format,

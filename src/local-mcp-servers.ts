@@ -1,46 +1,89 @@
 import { isIP } from 'node:net';
-import { isAbsolute, join } from 'node:path';
+import { dirname, isAbsolute, join } from 'node:path';
 import { z } from 'zod';
 import type { AgentConfig } from './agents.js';
 import { parseConfig, readConfig } from './config.js';
-import type { ReportFormat } from './tool-call-event.js';
+import type { McpTarget, ReportFormat } from './tool-call-event.js';
 
 export type LocalTransport = 'stdio' | 'loopback_http';
-type Source = Readonly<{ path: string; format: AgentConfig['format']; servers: string[] }>;
 /** The harness's user-level MCP configuration that setup wrote the Durin bridge into. */
 export type McpConfigLocation = Readonly<Pick<AgentConfig, 'configPath' | 'format' | 'serverKey'>>;
+/** One table of MCP servers: a file and the key path to the table inside it. */
+type Scope = Readonly<{ path: string; format: AgentConfig['format']; table: readonly string[] }>;
+type Entry = Record<string, unknown>;
+export type LocalServer = Readonly<{ transport: LocalTransport; server: string; tool: string }>;
 const record = z.record(z.string(), z.unknown());
 
-/** Project-scoped MCP files each harness reads in addition to its user configuration. */
-const PROJECT_SOURCES: Readonly<Record<ReportFormat, readonly Source[]>> = {
-  claude: [{ path: '.mcp.json', format: 'jsonc', servers: ['mcpServers'] }],
-  codex: [{ path: join('.codex', 'config.toml'), format: 'toml', servers: ['mcp_servers'] }],
-  cursor: [{ path: join('.cursor', 'mcp.json'), format: 'jsonc', servers: ['mcpServers'] }],
+/** Project files each harness reads, relative to a project folder. */
+const PROJECT_FILES: Readonly<Record<ReportFormat, readonly Omit<Scope, never>[]>> = {
+  claude: [{ path: '.mcp.json', format: 'jsonc', table: ['mcpServers'] }],
+  codex: [{ path: join('.codex', 'config.toml'), format: 'toml', table: ['mcp_servers'] }],
+  cursor: [{ path: join('.cursor', 'mcp.json'), format: 'jsonc', table: ['mcpServers'] }],
   windsurf: [],
 };
-function sources(
-  format: ReportFormat,
-  agent: McpConfigLocation,
-  cwd: string | undefined,
-): Source[] {
-  const user: Source = { path: agent.configPath, format: agent.format, servers: [agent.serverKey] };
-  if (!cwd || !isAbsolute(cwd)) return [user];
-  const projects = PROJECT_SOURCES[format].map(
-    (source): Source => Object.assign({}, source, { path: join(cwd, source.path) }),
-  );
-  return [user, ...projects];
+/** The working directory and its parents, nearest first, so a `cd` into a subfolder still finds the project. */
+export function ancestors(cwd: string | undefined): string[] {
+  if (!cwd || !isAbsolute(cwd)) return [];
+  const parent = dirname(cwd);
+  return parent === cwd ? [cwd] : [cwd, ...ancestors(parent)].slice(0, 32);
 }
+const projectScopes = (format: ReportFormat, folders: readonly string[]): Scope[] =>
+  folders.flatMap((folder) =>
+    PROJECT_FILES[format].map(
+      (file): Scope => Object.assign({}, file, { path: join(folder, file.path) }),
+    ),
+  );
+/** Claude Code keeps `--scope local` servers in its user file under projects[<folder>]. */
+const claudeLocalScopes = (agent: McpConfigLocation, folders: readonly string[]): Scope[] =>
+  folders.map((folder) => ({
+    path: agent.configPath,
+    format: agent.format,
+    table: ['projects', folder, 'mcpServers'],
+  }));
+/**
+ * Scopes in the harness's precedence order: Claude Code local, then project, then user;
+ * other harnesses project, then user.
+ */
+function scopes(format: ReportFormat, agent: McpConfigLocation, cwd: string | undefined): Scope[] {
+  const folders = ancestors(cwd);
+  const local = format === 'claude' ? claudeLocalScopes(agent, folders) : [];
+  const user: Scope = { path: agent.configPath, format: agent.format, table: [agent.serverKey] };
+  return [...local, ...projectScopes(format, folders), user];
+}
+
 const nested = (value: unknown, path: readonly string[]): unknown =>
   path.reduce<unknown>((node, key) => record.safeParse(node).data?.[key], value);
-/** Claude Code also keeps servers added with `--scope local` under projects[<cwd>]. */
-const claudeProjectServers = (config: unknown, cwd: string | undefined) =>
-  cwd ? nested(config, ['projects', cwd, 'mcpServers']) : undefined;
-async function entryIn(source: Source, name: string, cwd: string | undefined) {
-  const raw = await readConfig(source.path).catch(() => null);
-  if (raw === null) return null;
-  const config = parseConfig(raw, { format: source.format } as AgentConfig);
-  const scopes = [...source.servers.map((key) => config[key]), claudeProjectServers(config, cwd)];
-  return scopes.map((servers) => record.safeParse(nested(servers, [name])).data).find(Boolean);
+/** Claude Code replaces characters outside [A-Za-z0-9_-] in server names when it names tools. */
+export const normalizedServer = (name: string) => name.replaceAll(/[^A-Za-z0-9_-]/gu, '_');
+function matchingKey(table: Record<string, unknown>, server: string): string | undefined {
+  if (Object.hasOwn(table, server)) return server;
+  return Object.keys(table).find((key) => normalizedServer(key) === server);
+}
+type Reader = (scope: Scope) => Promise<Record<string, unknown> | null>;
+async function load(scope: Scope) {
+  const raw = await readConfig(scope.path).catch(() => null);
+  return raw === null ? null : parseConfig(raw, { format: scope.format } as AgentConfig);
+}
+function configReader(): Reader {
+  const files = new Map<string, Promise<Record<string, unknown> | null>>();
+  return (scope) => {
+    if (!files.has(scope.path))
+      files.set(
+        scope.path,
+        load(scope).catch(() => null),
+      );
+    return files.get(scope.path) ?? Promise.resolve(null);
+  };
+}
+type Match = Readonly<{ key: string; tool: string; entry: unknown }>;
+async function found(scope: Scope, read: Reader, targets: readonly McpTarget[]) {
+  const table = record.safeParse(nested(await read(scope), scope.table)).data ?? {};
+  return targets
+    .map((target) => ({ target, key: matchingKey(table, target.server) }))
+    .map(({ target, key }): Match | null =>
+      key ? { key, tool: target.tool, entry: table[key] } : null,
+    )
+    .find((match) => match !== null);
 }
 
 const LOOPBACK_NAMES = new Set(['localhost', '::1']);
@@ -57,46 +100,49 @@ export function loopbackUrl(value: string): boolean {
     return false;
   }
 }
-const argv = (entry: Record<string, unknown>): string[] =>
+const argv = (entry: Entry): string[] =>
   [entry.command, entry.args].flat().filter((part): part is string => typeof part === 'string');
+const profileFlag = (part: string) => part === '--profile' || part.startsWith('--profile=');
 /** The Durin bridge runs `<cli> mcp serve --profile …`; its calls already reach the gateway. */
-const durinBridge = (entry: Record<string, unknown>): boolean =>
-  ['mcp', 'serve', '--profile'].every((part) => argv(entry).includes(part));
-const remoteUrl = (entry: Record<string, unknown>): string | undefined =>
+const durinBridge = (entry: Entry): boolean => {
+  const parts = argv(entry);
+  return [parts.includes('mcp'), parts.includes('serve'), parts.some(profileFlag)].every(Boolean);
+};
+const remoteUrl = (entry: Entry): string | undefined =>
   [entry.url, entry.serverUrl, entry.httpUrl].find((value) => typeof value === 'string') as
     | string
     | undefined;
-
 const urlTransport = (url: string): LocalTransport | null =>
   loopbackUrl(url) ? 'loopback_http' : null;
-const commandTransport = (entry: Record<string, unknown>): LocalTransport | null =>
+const commandTransport = (entry: Entry): LocalTransport | null =>
   argv(entry).length > 0 ? 'stdio' : null;
-const skipped = (entry: Record<string, unknown>): boolean =>
+const skipped = (entry: Entry): boolean =>
   [entry.disabled === true, entry.enabled === false, durinBridge(entry)].some(Boolean);
 
-export function entryTransport(entry: Record<string, unknown>): LocalTransport | null {
-  if (skipped(entry)) return null;
+export function entryTransport(value: unknown): LocalTransport | null {
+  const entry = record.safeParse(value).data;
+  if (!entry || skipped(entry)) return null;
   const url = remoteUrl(entry);
   return url === undefined ? commandTransport(entry) : urlTransport(url);
 }
 
 /**
- * Finds the named server in the harness's MCP configuration and returns its
- * transport when it runs on this machine. Unknown, remote and Durin servers are
- * null, so they are never reported as local.
+ * Finds the server the call went to, in the harness's own precedence order, and
+ * returns it when it runs on this machine. The first scope that defines the server
+ * decides; remote, disabled, unknown and Durin servers are never local.
  */
-export async function localServerTransport(input: {
+export async function localServer(input: {
   readonly format: ReportFormat;
   readonly agent: McpConfigLocation;
-  readonly server: string;
+  readonly targets: readonly McpTarget[];
   readonly cwd?: string | undefined;
-}): Promise<LocalTransport | null> {
-  const found = await sources(input.format, input.agent, input.cwd).reduce<
-    Promise<Record<string, unknown> | null | undefined>
-  >(
-    async (previous, source) =>
-      (await previous) ?? (await entryIn(source, input.server, input.cwd).catch(() => null)),
+}): Promise<LocalServer | null> {
+  const read = configReader();
+  const match = await scopes(input.format, input.agent, input.cwd).reduce<Promise<Match | null>>(
+    async (previous, scope) =>
+      (await previous) ?? (await found(scope, read, input.targets)) ?? null,
     Promise.resolve(null),
   );
-  return found ? entryTransport(found) : null;
+  const transport = match ? entryTransport(match.entry) : null;
+  return match && transport ? { transport, server: match.key, tool: match.tool } : null;
 }

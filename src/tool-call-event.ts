@@ -6,11 +6,12 @@ export type ReportFormat = (typeof REPORT_FORMATS)[number];
 export const isReportFormat = (value: string): value is ReportFormat =>
   (REPORT_FORMATS as readonly string[]).includes(value);
 
+/** A server and tool a call may have targeted; the harness configuration decides which. */
+export type McpTarget = Readonly<{ server: string; tool: string }>;
 export type ObservedCall = Readonly<{
-  server: string;
-  tool: string;
+  targets: readonly McpTarget[];
   input: unknown;
-  outcome: 'succeeded' | 'failed';
+  outcome: 'succeeded' | 'failed' | 'unknown';
   sessionId?: string | undefined;
   turnId?: string | undefined;
   toolCallId?: string | undefined;
@@ -50,10 +51,20 @@ const windsurfSchema = z.object({
   }),
 });
 
-/** Claude Code and Codex name MCP tools `mcp__<server>__<tool>`. */
-export function qualifiedMcpTool(name: string): { server: string; tool: string } | null {
-  const match = /^mcp__(.+?)__(.+)$/u.exec(name);
-  return match?.[1] && match[2] ? { server: match[1], tool: match[2] } : null;
+/**
+ * Claude Code and Codex name MCP tools `mcp__<server>__<tool>`. A server or tool name
+ * may itself contain `__`, so every split is a candidate, shortest server first.
+ */
+export function mcpTargets(name: string): McpTarget[] {
+  if (!name.startsWith('mcp__')) return [];
+  const parts = name.slice(5).split('__');
+  return parts
+    .slice(1)
+    .map((_, index) => ({
+      server: parts.slice(0, index + 1).join('__'),
+      tool: parts.slice(index + 1).join('__'),
+    }))
+    .filter((target) => target.server !== '' && target.tool !== '');
 }
 const decoded = (value: unknown): unknown => {
   if (typeof value !== 'string') return value;
@@ -74,10 +85,10 @@ const standardOutcome = (event: StandardEvent) =>
 const TURN_FIELD = { claude: 'prompt_id', codex: 'turn_id' } as const;
 function standard(raw: unknown, format: 'claude' | 'codex'): ObservedCall | null {
   const event = standardSchema.parse(raw);
-  const target = qualifiedMcpTool(event.tool_name);
-  if (!target) return null;
+  const targets = mcpTargets(event.tool_name);
+  if (targets.length === 0) return null;
   return {
-    ...target,
+    targets,
     input: event.tool_input,
     outcome: standardOutcome(event),
     sessionId: event.session_id,
@@ -89,8 +100,7 @@ function standard(raw: unknown, format: 'claude' | 'codex'): ObservedCall | null
 function cursor(raw: unknown): ObservedCall {
   const event = cursorSchema.parse(raw);
   return {
-    server: event.mcp_server_name,
-    tool: event.tool_name.replace(/^MCP:/u, ''),
+    targets: [{ server: event.mcp_server_name, tool: event.tool_name.replace(/^MCP:/u, '') }],
     input: decoded(event.tool_input),
     outcome: outcome(reportedError(event.result_json)),
     sessionId: event.conversation_id,
@@ -101,10 +111,10 @@ function cursor(raw: unknown): ObservedCall {
 function windsurf(raw: unknown): ObservedCall {
   const event = windsurfSchema.parse(raw);
   return {
-    server: event.tool_info.mcp_server_name,
-    tool: event.tool_info.mcp_tool_name,
+    targets: [{ server: event.tool_info.mcp_server_name, tool: event.tool_info.mcp_tool_name }],
     input: decoded(event.tool_info.mcp_tool_arguments),
-    outcome: 'succeeded',
+    // Windsurf's post_mcp_tool_use payload does not say whether the tool failed.
+    outcome: 'unknown',
     sessionId: event.trajectory_id,
     turnId: event.execution_id,
     cwd: event.tool_info.cwd,

@@ -21,7 +21,7 @@ import { CliError } from './cli-options.js';
 import { deploymentHostAllowlist } from './contracts/cli-host.js';
 import { installSkills } from './install-skills.js';
 import { installHooks } from './install-hooks.js';
-import { installReporting, reportingSupported } from './install-reporting.js';
+import { installReporting, reportingAvailable } from './install-reporting.js';
 import { endpointChecker } from './hook-checker.js';
 
 type Options = {
@@ -181,7 +181,7 @@ async function setupIntegrations(
   });
 }
 async function chooseReporting(options: Options, agent: AgentConfig): Promise<boolean> {
-  if (!reportingSupported(agent) || !options.ui.agent.reporting) return false;
+  if (!options.ui.agent.reporting || !(await reportingAvailable(agent))) return false;
   const endpoint = (await endpointChecker(agent.id ?? '')) !== null;
   return options.ui.agent.reporting(agent, { endpoint });
 }

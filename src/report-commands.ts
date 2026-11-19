@@ -1,5 +1,6 @@
 import type { CliOptions } from './cli-options.js';
 import { withProfileClient } from './profile-client.js';
+import { FileProfiles } from './profiles.js';
 import { reportHook } from './report-hook.js';
 import { flushSpool, spoolDirectory } from './report-spool.js';
 
@@ -14,6 +15,12 @@ export async function reportCommand(options: CliOptions): Promise<void> {
 }
 /** `durin hooks flush`: delivers spooled calls; started detached by the report hook. */
 export async function flushCommand(options: CliOptions): Promise<void> {
-  const spool = spoolDirectory(options.directory, options.values.profile ?? '');
-  await flushSpool(spool, (work) => withProfileClient(options, work)).catch(() => 0);
+  const profile = await new FileProfiles(options.directory)
+    .load(options.values.profile)
+    .catch(() => null);
+  if (!profile) return;
+  const scoped = { ...options, values: { ...options.values, profile: profile.id } };
+  await flushSpool(spoolDirectory(options.directory, profile.id), (work) =>
+    withProfileClient(scoped, work),
+  ).catch(() => 0);
 }

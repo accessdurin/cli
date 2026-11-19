@@ -11,11 +11,9 @@ import {
 } from './contracts/local-tool-calls.js';
 import { endpointChecker } from './hook-checker.js';
 import { readHookInstallation } from './hook-runner.js';
-import {
-  localServerTransport,
-  type LocalTransport,
-  type McpConfigLocation,
-} from './local-mcp-servers.js';
+import { homedir } from 'node:os';
+import { stat } from 'node:fs/promises';
+import { localServer, type LocalServer, type McpConfigLocation } from './local-mcp-servers.js';
 import { regularText } from './managed-files.js';
 import { spoolCall, spoolDirectory } from './report-spool.js';
 import { isReportFormat, observedMcpCall, type ObservedCall } from './tool-call-event.js';
@@ -79,7 +77,7 @@ function reportId(harness: string, call: ObservedCall): string {
 export function localToolCall(
   harness: string,
   call: ObservedCall,
-  transport: LocalTransport,
+  server: LocalServer,
 ): LocalToolCall | null {
   const parsed = localToolCallSchema.safeParse({
     reportId: reportId(harness, call),
@@ -88,9 +86,9 @@ export function localToolCall(
     sessionId: identifier(call.sessionId),
     turnId: identifier(call.turnId),
     toolCallId: identifier(call.toolCallId),
-    mcpServer: call.server,
-    tool: call.tool,
-    transport,
+    mcpServer: server.server,
+    tool: server.tool,
+    transport: server.transport,
     outcome: call.outcome,
     ...encodedArguments(call.input),
     observedAt: new Date().toISOString(),
@@ -98,13 +96,15 @@ export function localToolCall(
   return parsed.success ? parsed.data : null;
 }
 
+export const EVENT_LIMIT_BYTES = 16 * 1_048_576;
 async function readEvent(input: Readable): Promise<unknown> {
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of input) {
     const part = Buffer.from(chunk);
     size += part.length;
-    if (size > 1_048_576) return null;
+    // Post-tool payloads carry the tool's result, which is never sent but can be large.
+    if (size > EVENT_LIMIT_BYTES) return null;
     chunks.push(part);
   }
   return JSON.parse(Buffer.concat(chunks).toString('utf8').replace(/^﻿/u, '')) as unknown;
@@ -129,6 +129,7 @@ export function launchFlush(input: { cliPath: string; directory: string; profile
 
 export type ReportDependencies = Readonly<{
   endpointPresent?: (directory: string, installation: ReportingInstallation) => Promise<boolean>;
+  home?: string;
   flush?: (input: { cliPath: string; directory: string; profileId: string }) => void;
 }>;
 export type ReportOutcome = 'disabled' | 'endpoint' | 'ignored' | 'not_local' | 'queued';
@@ -141,13 +142,25 @@ async function endpointWired(directory: string, installation: ReportingInstallat
     Boolean,
   );
 }
+/** The Endpoint app refreshes this file at least hourly while signed in and removes it on sign-out. */
+export const endpointReportingMarker = (home: string) =>
+  join(home, 'Library', 'Application Support', 'Durin Observer', 'Organization', 'reporting.json');
+export const ENDPOINT_MARKER_MAX_AGE_MS = 2 * 3_600_000;
+async function endpointSignedIn(home: string): Promise<boolean> {
+  const info = await stat(endpointReportingMarker(home)).catch(() => null);
+  return info !== null && Date.now() - info.mtimeMs <= ENDPOINT_MARKER_MAX_AGE_MS;
+}
 /**
- * Endpoint reports a harness's local MCP calls only when its helper is installed and
- * wired into that harness's hooks; otherwise the CLI reports them.
+ * Endpoint reports a harness's local MCP calls only when its helper is installed, wired
+ * into that harness's hooks, and signed in to an organization; otherwise the CLI reports.
  */
-const endpointCovers = async (directory: string, installation: ReportingInstallation) =>
-  (await endpointChecker(installation.harness)) !== null &&
-  (await endpointWired(directory, installation));
+const endpointCovers =
+  (home: string) => async (directory: string, installation: ReportingInstallation) =>
+    [
+      (await endpointChecker(installation.harness)) !== null,
+      await endpointWired(directory, installation),
+      await endpointSignedIn(home),
+    ].every(Boolean);
 
 type Format = Parameters<typeof observedMcpCall>[0];
 const observedCall = (installation: ReportingInstallation, raw: unknown) =>
@@ -158,9 +171,9 @@ async function localCall(
   agent: McpConfigLocation,
 ) {
   const format = installation.format as Format;
-  const transport = await localServerTransport({ format, agent, ...call });
-  if (!transport) return 'not_local' as const;
-  return localToolCall(installation.harness, call, transport) ?? ('ignored' as const);
+  const server = await localServer({ format, agent, targets: call.targets, cwd: call.cwd });
+  if (!server) return 'not_local' as const;
+  return localToolCall(installation.harness, call, server) ?? ('ignored' as const);
 }
 async function queuedCall(installation: ReportingInstallation, raw: unknown) {
   const call = observedCall(installation, raw);
@@ -168,7 +181,7 @@ async function queuedCall(installation: ReportingInstallation, raw: unknown) {
   return localCall(installation, call, installation.mcpConfig);
 }
 const withDefaults = (dependencies: ReportDependencies | undefined) => ({
-  endpointPresent: endpointCovers,
+  endpointPresent: endpointCovers(dependencies?.home ?? homedir()),
   flush: launchFlush,
   ...dependencies,
 });

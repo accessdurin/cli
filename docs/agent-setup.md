@@ -160,9 +160,11 @@ overwritten. Backups can contain existing settings; keep them private.
 ## Local MCP tool calls
 
 Agents also call MCP servers that run on your computer: a local command, or an HTTP
-server on `localhost`/`127.0.0.1`/`::1`. Those calls do not pass through the Durin
+server on `localhost`/`127.0.0.0/8`/`::1`. Those calls do not pass through the Durin
 gateway. Setup asks whether to report them to your organization (the default is
-yes) and, if you agree, adds a post-tool hook:
+yes) and, if you agree, adds a post-tool hook. Setup does not ask when the harness
+has hooks turned off. Re-running setup after the CLI or Node path changes replaces
+the earlier handler instead of adding a second one.
 
 | Harness     | Hook                                                               |
 | ----------- | ------------------------------------------------------------------ |
@@ -173,31 +175,46 @@ yes) and, if you agree, adds a post-tool hook:
 
 Gemini CLI, Copilot CLI, OpenCode and custom harnesses do not report yet.
 
-For each call, the hook looks the server up in the harness's MCP configuration
-(and the project's `.mcp.json`, `.cursor/mcp.json` or `.codex/config.toml`). It
-reports only servers that run a local command or use a loopback URL. The Durin
-bridge, remote servers, disabled servers, servers it cannot find (including Claude
-plugin servers) and built-in tools are skipped.
+For each call, the hook finds the server the way the harness does, nearest scope
+first: for Claude Code, servers added for the project (`projects[<folder>]` in
+`~/.claude.json`), then the project's `.mcp.json`, then user servers; for Codex and
+Cursor, the project's `.codex/config.toml` or `.cursor/mcp.json`, then the user file.
+Project lookups start at the working directory and walk up its parent folders, so a
+`cd` into a subfolder still finds the project. Claude Code rewrites characters outside
+`[A-Za-z0-9_-]` in server names as `_` when it names tools, and a name may contain
+`__`, so the hook compares names the same way and tries every split. It reports only
+servers that run a local command or use a loopback URL. The Durin bridge
+(`… mcp serve --profile …`), remote servers, disabled servers, servers it cannot
+find (including Claude plugin servers) and built-in tools are skipped.
 
 A report holds the harness, session, turn and call IDs, the server and tool names,
-local or loopback transport, success or failure, and the tool arguments as JSON of
-at most 16 KiB. Larger arguments are replaced with `{}` and marked truncated. Tool
-results are never sent. Your organization's capture policy decides whether the
-arguments are kept (metadata only, or a redacted copy).
+local or loopback transport, the outcome (success or failure; `unknown` for Windsurf,
+whose payload does not say), and the tool arguments as JSON of at most 16 KiB.
+Larger arguments are replaced with `{}` and marked truncated. Tool results are never
+sent; hook events up to 16 MiB are read so a large result does not hide the call.
+Your organization's capture policy decides whether the arguments are kept (metadata
+only, or a redacted copy).
 
 If Durin Endpoint covers the harness, Endpoint reports these calls and the CLI hook
-stays quiet, so each call is reported once. Endpoint covers it when its helper is
-installed (found the same way setup finds it) and runs as that harness's pre-tool
-hook, either directly or as the CLI's local checker. Otherwise, or once Endpoint is
-removed, the CLI hook reports. Endpoint sends its reports only while it is signed in
-to your organization.
+stays quiet, so each call is reported once. Endpoint covers it when all three hold:
+its helper is installed (found the same way setup finds it), it runs as that
+harness's pre-tool hook (directly or as the CLI's local checker), and Endpoint is
+signed in to an organization. The app shows that by refreshing
+`~/Library/Application Support/Durin Observer/Organization/reporting.json` at least
+hourly; the CLI treats a file older than two hours as signed out. Otherwise the CLI
+hook reports. The marker does not name the organization, so the CLI cannot tell
+whether Endpoint and the CLI profile use the same one.
 
 The hook never blocks or fails a tool call. It writes the call to
 `reporting/spool/` under the Durin configuration directory (private files, at most
-200 calls, kept up to 7 days). It then starts `durin hooks flush` in the background,
-which sends the waiting calls over the profile's MCP connection with
-`durin_report_local_tool_call`. Calls that cannot be sent (offline, signed out) or that the
-gateway rejects wait for the next flush until they age out.
+200 calls, kept up to 7 days) and starts `durin hooks flush` in the background. The
+flush sends waiting calls with `durin_report_local_tool_call`, opening a connection
+for at most 5 calls at a time (up to 50 per run), so the Durin bridge, which shares
+the profile lock, waits at most for one short batch. It picks up calls queued while
+it runs. A call the gateway rejects is retried up to 5 times. After a failure
+(offline, signed out or rejected), flushes back off from one minute up to an hour.
+Unreadable files and leftovers of interrupted writes are removed. Run
+`durin hooks flush [--profile <id>]` to send waiting calls now.
 
 To stop reporting, remove the Durin `hooks report` handler from the harness hook
 file, then delete `reporting/<harness>.json` under the Durin configuration

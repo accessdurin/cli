@@ -1,14 +1,14 @@
-import { mkdtemp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readdir, readFile, rm, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { agentsFor } from './agents.js';
-import { installReporting, updatedReportConfig } from './install-reporting.js';
-import { entryTransport, localServerTransport, loopbackUrl } from './local-mcp-servers.js';
-import { localToolCall, reportHook } from './report-hook.js';
+import { installReporting, reportingAvailable, updatedReportConfig } from './install-reporting.js';
+import { entryTransport, localServer, loopbackUrl } from './local-mcp-servers.js';
+import { endpointReportingMarker, localToolCall, reportHook } from './report-hook.js';
 import { flushSpool, spoolCall, spoolDirectory, SPOOL_LIMITS } from './report-spool.js';
-import { observedMcpCall } from './tool-call-event.js';
+import { mcpTargets, observedMcpCall } from './tool-call-event.js';
 import type { LocalToolCall } from './contracts/local-tool-calls.js';
 
 const temporary: string[] = [];
@@ -40,7 +40,11 @@ const claudeEvent = (changes: Record<string, unknown> = {}) => ({
 
 describe('post-tool events', () => {
   it.each([
-    ['claude', claudeEvent(), { server: 'filesystem', tool: 'read_file', turnId: 'prompt-9' }],
+    [
+      'claude',
+      claudeEvent(),
+      { targets: [{ server: 'filesystem', tool: 'read_file' }], turnId: 'prompt-9' },
+    ],
     [
       'claude',
       claudeEvent({ hook_event_name: 'PostToolUseFailure' }),
@@ -62,7 +66,7 @@ describe('post-tool events', () => {
         result_json: '{"content":[]}',
         workspace_roots: ['/repo'],
       },
-      { server: 'docs', tool: 'search', input: { query: 'durin' }, cwd: '/repo' },
+      { targets: [{ server: 'docs', tool: 'search' }], input: { query: 'durin' }, cwd: '/repo' },
     ],
     [
       'windsurf',
@@ -72,13 +76,22 @@ describe('post-tool events', () => {
         execution_id: 'execution',
         tool_info: { mcp_server_name: 'db', mcp_tool_name: 'query', mcp_tool_arguments: { q: 1 } },
       },
-      { server: 'db', tool: 'query', sessionId: 'trajectory', turnId: 'execution' },
+      {
+        targets: [{ server: 'db', tool: 'query' }],
+        outcome: 'unknown',
+        sessionId: 'trajectory',
+        turnId: 'execution',
+      },
     ],
   ] as const)('reads %s MCP calls', (format, raw, expected) => {
     expect(observedMcpCall(format, raw)).toMatchObject(expected);
   });
-  it('ignores built-in tools', () => {
+  it('ignores built-in tools and offers every split of a name containing __', () => {
     expect(observedMcpCall('claude', claudeEvent({ tool_name: 'Bash' }))).toBeNull();
+    expect(mcpTargets('mcp__a__b__c')).toEqual([
+      { server: 'a', tool: 'b__c' },
+      { server: 'a__b', tool: 'c' },
+    ]);
   });
 });
 
@@ -93,42 +106,64 @@ describe('local server classification', () => {
     [{ url: 'http://127.0.0.1.example.com/mcp' }, null],
     [{ command: 'npx', disabled: true }, null],
     [bridgeEntry, null],
+    [{ command: 'durin', args: ['mcp', 'serve', `--profile=${PROFILE}`] }, null],
     [{}, null],
   ])('classifies %j as %s', (entry, expected) => {
     expect(entryTransport(entry)).toBe(expected);
   });
   it('rejects malformed URLs', () => expect(loopbackUrl('not a url')).toBe(false));
-  it('finds user, Claude local-scope and project servers, and skips unknown ones', async () => {
+  it('follows Claude Code precedence from a subfolder and matches normalized names', async () => {
     const root = await home();
     const project = join(root, 'project');
-    await mkdir(project);
+    await mkdir(join(project, 'packages', 'api'), { recursive: true });
     const agent = agentsFor(root).claude!;
     await writeFile(
       agent.configPath,
       JSON.stringify({
-        mcpServers: { filesystem: { command: 'npx' }, 'durin-bbbbbbbbbbbb': bridgeEntry },
+        mcpServers: {
+          filesystem: { command: 'npx' },
+          shadowed: { command: 'npx' },
+          'my.files': { command: 'node' },
+          a__b: { command: 'node' },
+          'durin-bbbbbbbbbbbb': bridgeEntry,
+        },
         projects: { [project]: { mcpServers: { scoped: { url: 'http://localhost:1/mcp' } } } },
       }),
     );
     await writeFile(
       join(project, '.mcp.json'),
-      JSON.stringify({ mcpServers: { team: { command: 'node', args: ['server.js'] } } }),
+      JSON.stringify({
+        mcpServers: { team: { command: 'node' }, shadowed: { url: 'https://remote.example/mcp' } },
+      }),
     );
-    const transport = (server: string) =>
-      localServerTransport({ format: 'claude', agent, server, cwd: project });
-    expect(await transport('filesystem')).toBe('stdio');
-    expect(await transport('scoped')).toBe('loopback_http');
-    expect(await transport('team')).toBe('stdio');
-    expect(await transport('durin-bbbbbbbbbbbb')).toBeNull();
-    expect(await transport('plugin_tools_db')).toBeNull();
+    const lookup = (name: string) =>
+      localServer({
+        format: 'claude',
+        agent,
+        targets: mcpTargets(name),
+        cwd: join(project, 'packages', 'api'),
+      });
+    expect(await lookup('mcp__filesystem__read')).toEqual({
+      transport: 'stdio',
+      server: 'filesystem',
+      tool: 'read',
+    });
+    expect(await lookup('mcp__scoped__q')).toMatchObject({ transport: 'loopback_http' });
+    expect(await lookup('mcp__team__q')).toMatchObject({ transport: 'stdio' });
+    expect(await lookup('mcp__shadowed__q')).toBeNull();
+    expect(await lookup('mcp__my_files__read')).toMatchObject({ server: 'my.files' });
+    expect(await lookup('mcp__a__b__run')).toMatchObject({ server: 'a__b', tool: 'run' });
+    expect(await lookup('mcp__durin-bbbbbbbbbbbb__durin_call_tool')).toBeNull();
+    expect(await lookup('mcp__plugin_tools_db__q')).toBeNull();
   });
 });
 
+const STDIO = { transport: 'stdio', server: 'filesystem', tool: 'read_file' } as const;
 describe('reported calls', () => {
   const observed = observedMcpCall('claude', claudeEvent())!;
   it('derives a stable report ID from the agent call and never sends results', () => {
-    const first = localToolCall('claude', observed, 'stdio')!;
-    const second = localToolCall('claude', observed, 'stdio')!;
+    const first = localToolCall('claude', observed, STDIO)!;
+    const second = localToolCall('claude', observed, STDIO)!;
     expect(first.reportId).toBe(second.reportId);
     expect(first.reportId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-/u);
     expect(JSON.parse(first.argumentsJson)).toEqual({ path: '/home/dev/notes.md' });
@@ -138,16 +173,16 @@ describe('reported calls', () => {
     const large = localToolCall(
       'claude',
       { ...observed, input: { blob: 'x'.repeat(20_000) } },
-      'stdio',
+      STDIO,
     );
     expect(large).toMatchObject({ argumentsJson: '{}', argumentsTruncated: true });
     const wrapped = localToolCall(
       'claude',
       { ...observed, input: ['a'], sessionId: 'has space' },
-      'stdio',
+      STDIO,
     );
     expect(wrapped).toMatchObject({ argumentsJson: '{"value":["a"]}', sessionId: null });
-    expect(localToolCall('claude', { ...observed, server: 'quote"server' }, 'stdio')).toBeNull();
+    expect(localToolCall('claude', observed, { ...STDIO, server: 'quote"server' })).toBeNull();
   });
 });
 
@@ -211,7 +246,7 @@ describe('report hook', () => {
     expect(await fixture.spooled()).toEqual([]);
     expect(fixture.flush).not.toHaveBeenCalled();
   });
-  it('defers to Endpoint only when its helper is wired into the harness hooks', async () => {
+  it('defers to Endpoint only while its helper is wired in and it is signed in', async () => {
     const fixture = await reportingFixture();
     const helper = '/Applications/Durin Endpoint Client.app/Contents/Helpers/observer-preflight';
     const covers = vi.spyOn(await import('./hook-checker.js'), 'endpointChecker');
@@ -226,8 +261,12 @@ describe('report hook', () => {
           cliPath: fixture.bridge.cliPath,
           stdin: Readable.from([JSON.stringify(claudeEvent())]),
         },
-        { flush: fixture.flush },
+        { flush: fixture.flush, home: fixture.root },
       );
+    expect(await run()).toBe('queued');
+    const marker = endpointReportingMarker(fixture.root);
+    await mkdir(join(marker, '..'), { recursive: true });
+    await writeFile(marker, '{"signedIn":true}');
     expect(await run()).toBe('queued');
     await writeFile(
       hooks,
@@ -237,6 +276,9 @@ describe('report hook', () => {
       ),
     );
     expect(await run()).toBe('endpoint');
+    const stale = new Date(Date.now() - 3 * 3_600_000);
+    await utimes(marker, stale, stale);
+    expect(await run()).toBe('queued');
   });
   it('does nothing until reporting is installed for the harness', async () => {
     const root = await home();
@@ -253,43 +295,78 @@ describe('spool', () => {
     ...localToolCall(
       'claude',
       { ...observedMcpCall('claude', claudeEvent())!, toolCallId: `call-${index}` },
-      'stdio',
+      STDIO,
     )!,
   });
-  it('delivers each call once over one session and keeps calls after a failure', async () => {
-    const spool = join(await home(), 'spool');
-    await Promise.all([1, 2, 3].map((index) => spoolCall(spool, call(index))));
-    const sent: unknown[] = [];
-    const failing = vi.fn<() => Promise<never>>(async () => {
-      throw new Error('offline');
-    });
-    await expect(flushSpool(spool, async () => failing())).rejects.toThrow('offline');
-    expect(await readdir(spool)).toHaveLength(3);
-    const delivered = await flushSpool(spool, async (work) =>
-      work({
+  const files = async (spool: string) =>
+    (await readdir(spool)).filter((name) => name.endsWith('.json') && !name.startsWith('.'));
+  const accepting = (sent: unknown[], connections: { count: number }) =>
+    (async (work) => {
+      connections.count += 1;
+      return work({
         callTool: async (input) => {
           sent.push(input);
           return { content: [], isError: false };
         },
-      }),
-    );
-    expect(delivered).toBe(3);
-    expect(sent).toHaveLength(3);
+      });
+    }) as Parameters<typeof flushSpool>[1];
+  it('delivers in short sessions, backs off after a failure, and keeps calls for later', async () => {
+    const spool = join(await home(), 'spool');
+    await Promise.all(Array.from({ length: 12 }, (_, index) => spoolCall(spool, call(index))));
+    let now = Date.now();
+    const clock = () => now;
+    const failing = vi.fn<() => Promise<never>>(async () => {
+      throw new Error('offline');
+    });
+    await expect(flushSpool(spool, async () => failing(), clock)).rejects.toThrow('offline');
+    expect(await files(spool)).toHaveLength(12);
+    const sent: unknown[] = [];
+    const connections = { count: 0 };
+    expect(await flushSpool(spool, accepting(sent, connections), clock)).toBe(0);
+    now += SPOOL_LIMITS.backoffMs + 1;
+    expect(await flushSpool(spool, accepting(sent, connections), clock)).toBe(12);
+    expect(connections.count).toBe(3);
     expect(sent[0]).toMatchObject({
       name: 'durin_report_local_tool_call',
       arguments: { call: { reporter: 'cli' } },
       idempotencyKey: expect.stringMatching(/^[0-9a-f-]{36}$/u),
     });
-    expect((await readdir(spool)).filter((name) => name.endsWith('.json'))).toEqual([]);
-    expect(await flushSpool(spool, async () => failing())).toBe(0);
+    expect(await files(spool)).toEqual([]);
   });
-  it('keeps calls the gateway rejects until they age out', async () => {
+  it('picks up calls queued during a flush and drops unreadable files', async () => {
     const spool = join(await home(), 'spool');
     await spoolCall(spool, call(1));
-    await flushSpool(spool, async (work) =>
-      work({ callTool: async () => ({ content: [], isError: true }) }),
+    await writeFile(join(spool, '00000000-0000-4000-8000-000000000000.json'), '');
+    const sent: unknown[] = [];
+    let queued = false;
+    const result = await flushSpool(spool, async (work) =>
+      work({
+        callTool: async (input) => {
+          sent.push(input);
+          if (!queued) await spoolCall(spool, call(2));
+          queued = true;
+          return { content: [], isError: false };
+        },
+      }),
     );
-    expect((await readdir(spool)).filter((name) => name.endsWith('.json'))).toHaveLength(1);
+    expect(result).toBe(2);
+    expect(await files(spool)).toEqual([]);
+  });
+  it('retries a rejected call a few times, then drops it', async () => {
+    const spool = join(await home(), 'spool');
+    await spoolCall(spool, call(1));
+    let now = Date.now();
+    const rejecting = (async (work) =>
+      work({ callTool: async () => ({ content: [], isError: true }) })) as Parameters<
+      typeof flushSpool
+    >[1];
+    const attempts = Array.from({ length: SPOOL_LIMITS.attempts }, () => 0);
+    await attempts.reduce(async (previous) => {
+      await previous;
+      now += SPOOL_LIMITS.maxBackoffMs + 1;
+      await flushSpool(spool, rejecting, () => now);
+    }, Promise.resolve());
+    expect(await files(spool)).toEqual([]);
   });
   it('keeps only the newest calls within the file budget', async () => {
     const spool = join(await home(), 'spool');
@@ -334,6 +411,23 @@ describe('hook configuration', () => {
   ] as const)('writes the %s handler', (format, expected) => {
     expect(JSON.parse(updatedReportConfig('{}', format, command))).toEqual(expected);
   });
+  it('replaces the handler for a previous CLI path instead of adding another', () => {
+    const moved = "'/node' '/new/cli.mjs' 'hooks' 'report'";
+    const updated = updatedReportConfig(
+      updatedReportConfig('{}', 'claude', command),
+      'claude',
+      moved,
+      command,
+    );
+    const hooks = JSON.parse(updated).hooks;
+    expect(hooks.PostToolUse).toHaveLength(1);
+    expect(hooks.PostToolUse[0].hooks[0].command).toBe(moved);
+    expect(
+      JSON.parse(
+        updatedReportConfig(updatedReportConfig('{}', 'cursor', command), 'cursor', moved, command),
+      ).hooks.afterMCPExecution,
+    ).toEqual([{ command: moved, timeout: 10 }]);
+  });
   it('refuses to edit a harness whose hooks are disabled', () => {
     expect(() => updatedReportConfig('{"disableAllHooks":true}', 'claude', command)).toThrow(
       'disabled',
@@ -349,5 +443,11 @@ describe('hook configuration', () => {
         configDirectory: root,
       }),
     ).rejects.toThrow('no local tool-call reporting adapter');
+    expect(await reportingAvailable(agentsFor(root).gemini!)).toBe(false);
+    const claude = agentsFor(root).claude!;
+    expect(await reportingAvailable(claude)).toBe(true);
+    await mkdir(join(claude.hookConfig!.path, '..'), { recursive: true });
+    await writeFile(claude.hookConfig!.path, '{"disableAllHooks":true}');
+    expect(await reportingAvailable(claude)).toBe(false);
   });
 });
