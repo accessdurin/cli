@@ -185,10 +185,12 @@ at most 16 KiB. Larger arguments are replaced with `{}` and marked truncated. To
 results are never sent. Your organization's capture policy decides whether the
 arguments are kept (metadata only, or a redacted copy).
 
-If Durin Endpoint is installed for the harness (its helper is found the same way
-setup finds it), Endpoint reports these calls and the CLI hook stays quiet. That
-way each call is reported once. The CLI hook takes over again if Endpoint is
-removed.
+If Durin Endpoint covers the harness, Endpoint reports these calls and the CLI hook
+stays quiet, so each call is reported once. Endpoint covers it when its helper is
+installed (found the same way setup finds it) and runs as that harness's pre-tool
+hook, either directly or as the CLI's local checker. Otherwise, or once Endpoint is
+removed, the CLI hook reports. Endpoint sends its reports only while it is signed in
+to your organization.
 
 The hook never blocks or fails a tool call. It writes the call to
 `reporting/spool/` under the Durin configuration directory (private files, at most

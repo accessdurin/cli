@@ -211,6 +211,33 @@ describe('report hook', () => {
     expect(await fixture.spooled()).toEqual([]);
     expect(fixture.flush).not.toHaveBeenCalled();
   });
+  it('defers to Endpoint only when its helper is wired into the harness hooks', async () => {
+    const fixture = await reportingFixture();
+    const helper = '/Applications/Durin Endpoint Client.app/Contents/Helpers/observer-preflight';
+    const covers = vi.spyOn(await import('./hook-checker.js'), 'endpointChecker');
+    covers.mockResolvedValue({ command: helper, args: [], timeoutMs: 1000 });
+    const hooks = fixture.agents.claude!.hookConfig!.path;
+    const original = await readFile(hooks, 'utf8');
+    const run = () =>
+      reportHook(
+        {
+          directory: fixture.bridge.configDirectory,
+          harness: 'claude',
+          cliPath: fixture.bridge.cliPath,
+          stdin: Readable.from([JSON.stringify(claudeEvent())]),
+        },
+        { flush: fixture.flush },
+      );
+    expect(await run()).toBe('queued');
+    await writeFile(
+      hooks,
+      original.replace(
+        '"hooks": {',
+        `"hooks": { "PreToolUse": [{ "matcher": ".*", "hooks": [{ "type": "command", "command": "'${helper}' --client claude" }] }],`,
+      ),
+    );
+    expect(await run()).toBe('endpoint');
+  });
   it('does nothing until reporting is installed for the harness', async () => {
     const root = await home();
     const result = await reportHook(

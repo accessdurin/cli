@@ -10,6 +10,7 @@ import {
   type LocalToolCall,
 } from './contracts/local-tool-calls.js';
 import { endpointChecker } from './hook-checker.js';
+import { readHookInstallation } from './hook-runner.js';
 import {
   localServerTransport,
   type LocalTransport,
@@ -127,11 +128,26 @@ export function launchFlush(input: { cliPath: string; directory: string; profile
 }
 
 export type ReportDependencies = Readonly<{
-  endpointPresent?: (harness: string) => Promise<boolean>;
+  endpointPresent?: (directory: string, installation: ReportingInstallation) => Promise<boolean>;
   flush?: (input: { cliPath: string; directory: string; profileId: string }) => void;
 }>;
 export type ReportOutcome = 'disabled' | 'endpoint' | 'ignored' | 'not_local' | 'queued';
-const endpointInstalled = async (harness: string) => (await endpointChecker(harness)) !== null;
+const ENDPOINT_HELPER = 'observer-preflight';
+/** The harness runs Endpoint's helper either directly or as the CLI's configured checker. */
+async function endpointWired(directory: string, installation: ReportingInstallation) {
+  const hooks = (await regularText(installation.target).catch(() => null)) ?? '';
+  const checker = await readHookInstallation(directory, installation.harness).catch(() => null);
+  return [hooks.includes(ENDPOINT_HELPER), checker?.checker.command.endsWith(ENDPOINT_HELPER)].some(
+    Boolean,
+  );
+}
+/**
+ * Endpoint reports a harness's local MCP calls only when its helper is installed and
+ * wired into that harness's hooks; otherwise the CLI reports them.
+ */
+const endpointCovers = async (directory: string, installation: ReportingInstallation) =>
+  (await endpointChecker(installation.harness)) !== null &&
+  (await endpointWired(directory, installation));
 
 type Format = Parameters<typeof observedMcpCall>[0];
 const observedCall = (installation: ReportingInstallation, raw: unknown) =>
@@ -152,7 +168,7 @@ async function queuedCall(installation: ReportingInstallation, raw: unknown) {
   return localCall(installation, call, installation.mcpConfig);
 }
 const withDefaults = (dependencies: ReportDependencies | undefined) => ({
-  endpointPresent: endpointInstalled,
+  endpointPresent: endpointCovers,
   flush: launchFlush,
   ...dependencies,
 });
@@ -169,7 +185,7 @@ export async function reportHook(
   const resolved = withDefaults(dependencies);
   const installation = await readReporting(input.directory, input.harness);
   if (!installation) return 'disabled';
-  if (await resolved.endpointPresent(input.harness)) return 'endpoint';
+  if (await resolved.endpointPresent(input.directory, installation)) return 'endpoint';
   const call = await queuedCall(installation, await readEvent(input.stdin));
   if (typeof call === 'string') return call;
   const { directory, cliPath } = input;

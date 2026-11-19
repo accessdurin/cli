@@ -120,7 +120,7 @@ const chooseChecker: NonNullable<SetupUi['agent']['checker']> = async (agent) =>
     : null;
 };
 const ENDPOINT_NOTE = {
-  true: 'Durin Endpoint is installed and reports these calls itself; this hook stays quiet while it is installed.',
+  true: 'When Durin Endpoint’s helper runs for this agent, Endpoint reports these calls and this hook stays quiet.',
   false: 'If you later install Durin Endpoint, it takes over and this hook stays quiet.',
 } as const;
 const chooseReporting: NonNullable<SetupUi['agent']['reporting']> = async (agent, context) => {
