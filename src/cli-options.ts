@@ -22,6 +22,9 @@ Usage:
   durin mcp endpoint            Print the personal URL for a direct MCP client
   durin hooks status            Show local checker and hook configuration status
   durin hooks run --harness <id> Run a configured local pre-tool checker (JSON stdin)
+  durin hooks report --harness <id>
+                                Report a local MCP tool call from a post-tool hook (JSON stdin)
+  durin hooks flush             Send reported local MCP tool calls waiting on this computer
 
 Options:
   --profile <id>                Select an explicit organization profile
@@ -30,7 +33,7 @@ Options:
   --force                       logout: clear the local grant even if revocation fails
   --app-url <origin>            Durin app origin (default: https://app.getdurin.com)
   --dev                        Allow loopback hosts and HTTP for local development
-  --harness <id>                hooks run: selected built-in or custom harness
+  --harness <id>                hooks run/report: selected built-in or custom harness
   -h, --help                   Show this help
 
 Agent selection happens during onboarding. Direct MCP clients authorize separately.

@@ -19,6 +19,8 @@ const RULES: Readonly<Record<string, Rule>> = {
   'profiles use': { positions: 3, flags: ['config-dir'] },
   'hooks status': { positions: 2, flags: ['config-dir'] },
   'hooks run': { positions: 2, flags: ['config-dir', 'harness'] },
+  'hooks report': { positions: 2, flags: ['config-dir', 'harness'] },
+  'hooks flush': { positions: 2, flags: profile },
 };
 const commandKey = (positions: readonly string[]): string =>
   ['tools', 'mcp', 'profiles', 'hooks'].includes(positions[0] ?? '')

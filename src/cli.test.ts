@@ -1,5 +1,5 @@
 import { execFile, spawnSync } from 'node:child_process';
-import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { createServer, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -9,6 +9,8 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { build } from 'vite';
 import { installRuntime } from './install-runtime.js';
 import { installHooks } from './install-hooks.js';
+import { installReporting } from './install-reporting.js';
+import { spoolDirectory } from './report-spool.js';
 import { agentsFor } from './agents.js';
 
 const exec = promisify(execFile);
@@ -86,6 +88,32 @@ describe.concurrent('CLI public interface', () => {
           execution: 'not-verified',
         },
       ]);
+      const agent = agentsFor(directory).claude!;
+      await writeFile(agent.configPath, JSON.stringify({ mcpServers: { fs: { command: 'npx' } } }));
+      await installReporting(agent, {
+        nodePath: process.execPath,
+        cliPath: runtime,
+        profileId: 'a'.repeat(64),
+        configDirectory: directory,
+      });
+      const report = (event: string) => {
+        const request = exec(process.execPath, [
+          runtime,
+          'hooks',
+          'report',
+          '--harness',
+          'claude',
+          '--config-dir',
+          directory,
+        ]);
+        request.child.stdin!.end(event);
+        return request;
+      };
+      const call = { ...input, hook_event_name: 'PostToolUse', tool_name: 'mcp__fs__read' };
+      await expect(report(JSON.stringify(call))).resolves.toMatchObject({ stdout: '', stderr: '' });
+      await expect(report('not json')).resolves.toMatchObject({ stdout: '', stderr: '' });
+      const spooled = await readdir(spoolDirectory(directory, 'a'.repeat(64)));
+      expect(spooled.filter((name) => name.endsWith('.json'))).toHaveLength(1);
     } finally {
       await rm(directory, { recursive: true, force: true });
     }

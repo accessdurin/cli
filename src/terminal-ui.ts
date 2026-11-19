@@ -119,11 +119,38 @@ const chooseChecker: NonNullable<SetupUi['agent']['checker']> = async (agent) =>
     ? readChecker(await fileQuestion('Path to your local checker descriptor JSON'))
     : null;
 };
+const ENDPOINT_NOTE = {
+  true: 'Durin Endpoint is installed and reports these calls itself; this hook stays quiet while it is installed.',
+  false: 'If you later install Durin Endpoint, it takes over and this hook stays quiet.',
+} as const;
+const chooseReporting: NonNullable<SetupUi['agent']['reporting']> = async (agent, context) => {
+  p.note(
+    [
+      `When ${terminalText(agent.name)} calls an MCP server running on this computer (a local command or a localhost URL),`,
+      'Durin sends the server, tool, outcome and tool arguments to your organization.',
+      'Your organization’s capture policy decides whether the arguments are kept. Results are never sent.',
+      ENDPOINT_NOTE[String(context.endpoint) as 'true' | 'false'],
+    ].join('\n'),
+    'Local MCP tool calls',
+  );
+  return guard(
+    await p.confirm({
+      message: 'Report local MCP tool calls to your organization?',
+      initialValue: true,
+    }),
+  );
+};
+const reportReporting = (reporting: boolean | undefined) => {
+  if (reporting)
+    p.log.info('Local MCP tool calls: reporting configured; reopen the agent to activate.');
+};
 const reportIntegrations: NonNullable<SetupUi['agent']['integrations']> = ({
   skills,
   hooks,
   custom,
+  reporting,
 }) => {
+  reportReporting(reporting);
   p.log.info(
     `Durin skills installed: ${skills}. Local hooks: ${hooks ? 'configured; reopen the agent to activate' : 'not configured in this run; existing hooks retained'}.`,
   );
@@ -144,6 +171,7 @@ const agentQuestions: SetupUi['agent'] = {
   custom: async () =>
     readCustomHarness(await fileQuestion('Path to your custom harness descriptor JSON')),
   checker: chooseChecker,
+  reporting: chooseReporting,
   integrations: reportIntegrations,
   configured: (path) =>
     p.note(`Config: ${terminalText(path)}\nMCP sign-in is pending.`, 'Agent configured'),

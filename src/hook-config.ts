@@ -28,13 +28,19 @@ export type HookConfiguration = {
   windows?: boolean;
   previousHandler?: Record<string, unknown>;
 };
-function commandLine(input: HookConfiguration): string {
-  const args = hookArguments(input.bridge, input.harness);
-  if (!(input.windows ?? process.platform === 'win32')) return args.map(shellQuote).join(' ');
+const commandLine = (input: HookConfiguration): string =>
+  harnessCommandLine(hookArguments(input.bridge, input.harness), input.format, input.windows);
+/** Quotes an argv for the shell the harness uses to run a hook command. */
+export function harnessCommandLine(
+  args: readonly string[],
+  format: HookFormat,
+  windows = process.platform === 'win32',
+): string {
+  if (!windows) return args.map(shellQuote).join(' ');
   const script = `& ${args.map(powershellQuote).join(' ')}; exit $LASTEXITCODE`;
   // These harnesses already launch PowerShell. Exit that shell explicitly so a
   // denial stays exit 2 rather than PowerShell -Command normalizing it to 1.
-  if (['claude', 'cursor'].includes(input.format)) return script;
+  if (['claude', 'cursor'].includes(format)) return script;
   return `powershell.exe -NoProfile -NonInteractive -EncodedCommand ${Buffer.from(script, 'utf16le').toString('base64')}`;
 }
 export function updatedHookConfig(raw: string, input: HookConfiguration): string {
@@ -45,7 +51,7 @@ export function updatedHookConfig(raw: string, input: HookConfiguration): string
   if (input.format === 'copilot') return copilotConfig(raw, config, input);
   return updateEvents(raw, config, input);
 }
-function assertHooksEnabled(config: Record<string, unknown>) {
+export function assertHooksEnabled(config: Record<string, unknown>) {
   const hooksConfig = object.parse(config.hooksConfig ?? {});
   if (config.disableAllHooks === true || hooksConfig.enabled === false)
     throw new CliError(
@@ -68,10 +74,10 @@ function upsertHandler(
 ) {
   const handler = generatedHookHandler(input);
   const location = handlerLocation(groups, input, handler);
-  if (location) return edit(raw, ['hooks', event, ...location], handler);
+  if (location) return editJsonc(raw, ['hooks', event, ...location], handler);
   const entry = grouped(input.format) ? { matcher: '.*', hooks: [handler] } : handler;
   // Appending to the syntax tree keeps comments inside every existing handler.
-  return edit(raw, ['hooks', event, groups.length], entry);
+  return editJsonc(raw, ['hooks', event, groups.length], entry);
 }
 function handlerLocation(
   groups: Record<string, unknown>[],
@@ -153,7 +159,7 @@ function customConfig(raw: string, config: Record<string, unknown>, args: string
     throw new CliError(
       'Conflicting custom Durin hook configuration. Preserve it and review the descriptor.',
     );
-  return edit(raw, ['durin'], { command: args });
+  return editJsonc(raw, ['durin'], { command: args });
 }
 function copilotConfig(raw: string, config: Record<string, unknown>, input: HookConfiguration) {
   const hooks = object.parse(config.hooks ?? {});
@@ -163,9 +169,9 @@ function copilotConfig(raw: string, config: Record<string, unknown>, input: Hook
 function versioned(raw: string, config: Record<string, unknown>) {
   if (config.version !== undefined && config.version !== 1)
     throw new CliError('Unsupported hooks configuration version.');
-  return edit(raw, ['version'], 1);
+  return editJsonc(raw, ['version'], 1);
 }
-const edit = (raw: string, path: (string | number)[], value: unknown) =>
+export const editJsonc = (raw: string, path: (string | number)[], value: unknown) =>
   applyEdits(
     raw,
     modify(raw, path, value, {

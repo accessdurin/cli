@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -121,6 +121,9 @@ describe('setup MCP host pinning', () => {
     const agentConfig = join(directory, 'claude.json');
     const requested: string[] = [];
     const integrations = vi.fn<NonNullable<SetupUi['agent']['integrations']>>();
+    const reporting = vi.fn<NonNullable<SetupUi['agent']['reporting']>>(
+      async () => options.integrations ?? false,
+    );
     const ready = vi.fn<SetupUi['agent']['ready']>();
     vi.mocked(setupAccount).mockResolvedValueOnce(verifiedAccount(appOrigin, endpoint));
     const request: typeof fetch = async (input) => {
@@ -172,6 +175,7 @@ describe('setup MCP host pinning', () => {
           integrations,
           checker: async () =>
             options.integrations ? { command: process.execPath, args: [], timeoutMs: 1000 } : null,
+          reporting,
         },
         openAuthorization: async () => {},
         stage: () => {},
@@ -185,6 +189,9 @@ describe('setup MCP host pinning', () => {
       outcome,
       requested,
       integrations: integrations.mock.calls,
+      reportingAsked: reporting.mock.calls.map(([, context]) => context),
+      hookConfig: await readFile(join(directory, 'hooks.json'), 'utf8').catch(() => ''),
+      reportingRecorded: existsSync(join(directory, 'reporting', 'claude.json')),
       ready: ready.mock.calls,
       skillsInstalled: existsSync(join(directory, 'skills', 'durin-tools', 'SKILL.md')),
       hooksInstalled: existsSync(join(directory, 'hooks.json')),
@@ -201,7 +208,22 @@ describe('setup MCP host pinning', () => {
     expect(result.outcome).toBeNull();
     expect(result.skillsInstalled).toBe(true);
     expect(result.hooksInstalled).toBe(true);
-    expect(result.integrations).toEqual([[{ skills: 5, hooks: true, custom: false }]]);
+    expect(result.integrations).toEqual([
+      [{ skills: 5, hooks: true, custom: false, reporting: true }],
+    ]);
+    expect(result.reportingAsked).toEqual([{ endpoint: false }]);
+    const hooks = JSON.parse(result.hookConfig).hooks;
+    expect(hooks.PreToolUse).toHaveLength(1);
+    expect(hooks.PostToolUse).toEqual([
+      {
+        matcher: 'mcp__.*',
+        hooks: [
+          expect.objectContaining({ async: true, command: expect.stringContaining("'report'") }),
+        ],
+      },
+    ]);
+    expect(hooks.PostToolUseFailure).toEqual(hooks.PostToolUse);
+    expect(result.reportingRecorded).toBe(true);
     expect(result.ready).toMatchObject([
       [{ organization: 'One', agent: 'Claude Code', toolCount: 3 }],
     ]);

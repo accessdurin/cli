@@ -15,8 +15,24 @@ import { assertPrivateDirectory } from './private-directory.js';
 import { sanitizeConsole, terminalText } from './terminal-text.js';
 import { hookCommand } from './install-hooks.js';
 import { readHookInstallation, runHook } from './hook-runner.js';
+import { flushCommand, reportCommand } from './report-commands.js';
 
-const localHook = process.argv[2] === 'hooks' && process.argv[3] === 'run';
+const hookAction = process.argv[2] === 'hooks' ? process.argv[3] : undefined;
+const localHook = hookAction === 'run';
+// Reporting runs beside the agent: it must stay silent and never fail a tool call.
+const reportingHook = hookAction === 'report' || hookAction === 'flush';
+async function runLocalCheck(options: CliOptions): Promise<void> {
+  const installation = await readHookInstallation(options.directory, options.values.harness ?? '');
+  await runHook(installation, process.stdin);
+  if (installation.format === 'cursor') process.stdout.write('{"permission":"allow"}\n');
+}
+const HOOK_ACTIONS: Readonly<Record<string, (options: CliOptions) => Promise<void>>> = {
+  run: runLocalCheck,
+  report: reportCommand,
+  flush: flushCommand,
+};
+const hookHandler = (name: string) =>
+  (Object.hasOwn(HOOK_ACTIONS, name) ? HOOK_ACTIONS[name] : undefined) ?? hookCommand;
 
 const COMMANDS: Readonly<Record<string, (options: CliOptions) => Promise<void>>> = {
   '': wizard,
@@ -28,18 +44,10 @@ const COMMANDS: Readonly<Record<string, (options: CliOptions) => Promise<void>>>
   verify: verifyProfile,
   profiles: profileCommand,
   logout: logoutCommand,
-  hooks: async (options) => {
-    if (options.positionals[1] !== 'run') return hookCommand(options);
-    const installation = await readHookInstallation(
-      options.directory,
-      options.values.harness ?? '',
-    );
-    await runHook(installation, process.stdin);
-    if (installation.format === 'cursor') process.stdout.write('{"permission":"allow"}\n');
-  },
+  hooks: (options) => hookHandler(options.positionals[1] ?? '')(options),
 };
 sanitizeConsole(console);
-if (!localHook) initializeTelemetry();
+if (!localHook && !reportingHook) initializeTelemetry();
 async function main(): Promise<void> {
   const options = cliOptions(process.argv.slice(2));
   if (options.values.help) {
@@ -55,13 +63,14 @@ async function main(): Promise<void> {
 }
 void Promise.resolve()
   .then(() => traceCommand(main))
-  .catch((error: unknown) => {
-    const message = error instanceof CliError ? error.message : unexpectedMessage(error);
-    process.stderr.write(`${terminalText(message)}\n`);
-    process.exitCode = localHook ? 2 : 1;
-    if (!localHook) reportUnexpectedError(error);
-  })
+  .catch((error: unknown) => (reportingHook ? undefined : reportFailure(error)))
   .finally(flushTelemetry);
+function reportFailure(error: unknown): void {
+  const message = error instanceof CliError ? error.message : unexpectedMessage(error);
+  process.stderr.write(`${terminalText(message)}\n`);
+  process.exitCode = localHook ? 2 : 1;
+  if (!localHook) reportUnexpectedError(error);
+}
 const safeError = (error: unknown): string => {
   if (
     error instanceof TypeError &&

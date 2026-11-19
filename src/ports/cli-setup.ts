@@ -13,7 +13,14 @@ export interface SetupAgentQuestions {
   choose(): Promise<string>;
   custom?(): Promise<AgentConfig>;
   checker?(agent: AgentConfig): Promise<HookChecker | null>;
-  integrations?(result: { skills: number; hooks: boolean; custom: boolean }): void;
+  /** Asks whether to report calls to local MCP servers, with their arguments, to the organization. */
+  reporting?(agent: AgentConfig, context: { endpoint: boolean }): Promise<boolean>;
+  integrations?(result: {
+    skills: number;
+    hooks: boolean;
+    custom: boolean;
+    reporting?: boolean;
+  }): void;
   configured(path: string): void;
   ready(result: {
     organization: string;

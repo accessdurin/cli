@@ -21,6 +21,8 @@ import { CliError } from './cli-options.js';
 import { deploymentHostAllowlist } from './contracts/cli-host.js';
 import { installSkills } from './install-skills.js';
 import { installHooks } from './install-hooks.js';
+import { installReporting, reportingSupported } from './install-reporting.js';
+import { endpointChecker } from './hook-checker.js';
 
 type Options = {
   readonly appOrigin: string;
@@ -169,7 +171,19 @@ async function setupIntegrations(
   const skills = await installSkills(agent);
   const checker = await chooseChecker(options, agent);
   if (checker) await installHooks(agent, bridge, checker);
-  options.ui.agent.integrations?.({ skills, hooks: Boolean(checker), custom: isCustom(agent) });
+  const reporting = await chooseReporting(options, agent);
+  if (reporting) await installReporting(agent, bridge);
+  options.ui.agent.integrations?.({
+    skills,
+    hooks: Boolean(checker),
+    custom: isCustom(agent),
+    reporting,
+  });
+}
+async function chooseReporting(options: Options, agent: AgentConfig): Promise<boolean> {
+  if (!reportingSupported(agent) || !options.ui.agent.reporting) return false;
+  const endpoint = (await endpointChecker(agent.id ?? '')) !== null;
+  return options.ui.agent.reporting(agent, { endpoint });
 }
 const isCustom = (agent: AgentConfig): boolean => agent.id?.startsWith('custom') ?? false;
 const setupAgents = (options: Options) => options.agents ?? localAgents();

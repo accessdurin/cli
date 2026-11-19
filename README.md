@@ -112,7 +112,8 @@ app's port:
 Interactive setup installs five portable skills from a pinned snapshot of
 [accessdurin/skills](https://github.com/accessdurin/skills). It also offers local
 pre-tool hooks using an installed supported Endpoint helper or a selected custom
-checker. See [agent setup](docs/agent-setup.md) for the setup prompt, supported
+checker, and a post-tool hook that reports calls to MCP servers running on your
+computer, with their arguments, unless Durin Endpoint covers that harness. See [agent setup](docs/agent-setup.md) for the setup prompt, supported
 harnesses, custom descriptors, preservation rules, and hook/reporting boundaries.
 
 [Distribution documentation](docs/distribution.md) covers Homebrew, Debian/Ubuntu
@@ -145,7 +146,7 @@ package and Claude plugin are distributed separately.
 4. Choose Claude Code, Codex, Cursor, Windsurf, OpenCode, Gemini CLI, Copilot CLI, or a custom harness. Install the harness first.
 5. Authorize that organization's MCP in the browser. This consent is separate from
    your account login. The CLI checks the saved bridge and authenticated tool catalog.
-6. Install the bundled Durin skills and choose an installed Endpoint helper, a custom local checker, or continuing without hooks. Reopen your chosen harness when setup finishes. An empty catalog is reported as
+6. Install the bundled Durin skills and choose an installed Endpoint helper, a custom local checker, or continuing without hooks. Choose whether to report calls to local MCP servers to your organization. Reopen your chosen harness when setup finishes. An empty catalog is reported as
    connected with no tools; ask an administrator to enable a connection or grant access.
 
 `durin login`, `durin signup`, and `durin install` start or resume the same journey.
@@ -168,6 +169,8 @@ It does not trust a saved completion flag. No pasted endpoint or token is requir
 | `durin mcp endpoint`                                                | Print the personal endpoint for a direct MCP client                           |
 | `durin hooks status`                                                | Inspect local checker and hook configuration; execution remains unverified    |
 | `durin hooks run --harness <id>`                                    | Run a configured local checker with JSON input on stdin                       |
+| `durin hooks report --harness <id>`                                 | Report a local MCP tool call from a post-tool hook (JSON on stdin)            |
+| `durin hooks flush`                                                 | Send reported local MCP tool calls waiting on this computer                   |
 | `durin logout`                                                      | Revoke the selected MCP grant where supported and clear its local credentials |
 
 | Flag                      | Applies to                                                               |

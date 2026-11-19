@@ -141,8 +141,8 @@ not turn every violation into a denial. Native harness failure and timeout behav
 still applies. Cursor hooks request `failClosed`; Codex requires reviewing and
 trusting the configured hook with `/hooks`.
 
-These hooks do not independently send tool inputs to a new Durin API. They pass
-inputs to the local checker. An enrolled Endpoint app can report its own violation
+These pre-tool hooks pass inputs only to the local checker. Reporting local MCP
+tool calls is a separate post-tool hook, described below. An enrolled Endpoint app can report its own violation
 metadata according to its platform's capabilities and separate authorization.
 Calls through the Durin MCP bridge still send arguments to the organization gateway
 and provider. A local hook does not replace gateway permissions or approvals.
@@ -156,6 +156,50 @@ Hook changes retain unrelated handlers and JSONC comments, use private temporary
 files and backups named `*.durin-backup-*`, and reject concurrent modifications.
 Disabled hooks are not silently enabled. A user-edited OpenCode plugin is not
 overwritten. Backups can contain existing settings; keep them private.
+
+## Local MCP tool calls
+
+Agents also call MCP servers that run on your computer: a local command, or an HTTP
+server on `localhost`/`127.0.0.1`/`::1`. Those calls do not pass through the Durin
+gateway. Setup asks whether to report them to your organization (the default is
+yes) and, if you agree, adds a post-tool hook:
+
+| Harness     | Hook                                                               |
+| ----------- | ------------------------------------------------------------------ |
+| Claude Code | `PostToolUse` and `PostToolUseFailure`, matcher `mcp__.*`, `async` |
+| Codex       | `PostToolUse`, matcher `mcp__.*`, `async`; review it in `/hooks`   |
+| Cursor      | `afterMCPExecution`                                                |
+| Windsurf    | `post_mcp_tool_use`                                                |
+
+Gemini CLI, Copilot CLI, OpenCode and custom harnesses do not report yet.
+
+For each call, the hook looks the server up in the harness's MCP configuration
+(and the project's `.mcp.json`, `.cursor/mcp.json` or `.codex/config.toml`). It
+reports only servers that run a local command or use a loopback URL. The Durin
+bridge, remote servers, disabled servers, servers it cannot find (including Claude
+plugin servers) and built-in tools are skipped.
+
+A report holds the harness, session, turn and call IDs, the server and tool names,
+local or loopback transport, success or failure, and the tool arguments as JSON of
+at most 16 KiB. Larger arguments are replaced with `{}` and marked truncated. Tool
+results are never sent. Your organization's capture policy decides whether the
+arguments are kept (metadata only, or a redacted copy).
+
+If Durin Endpoint is installed for the harness (its helper is found the same way
+setup finds it), Endpoint reports these calls and the CLI hook stays quiet. That
+way each call is reported once. The CLI hook takes over again if Endpoint is
+removed.
+
+The hook never blocks or fails a tool call. It writes the call to
+`reporting/spool/` under the Durin configuration directory (private files, at most
+200 calls, kept up to 7 days). It then starts `durin hooks flush` in the background,
+which sends the waiting calls over the profile's MCP connection with
+`durin_report_local_tool_call`. Calls that cannot be sent (offline, signed out) wait
+for the next flush.
+
+To stop reporting, remove the Durin `hooks report` handler from the harness hook
+file, then delete `reporting/<harness>.json` under the Durin configuration
+directory. Without that file the hook does nothing.
 
 ## Custom harness descriptor
 
