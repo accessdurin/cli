@@ -59,16 +59,16 @@ async function deliver(client: Pick<CliMcpAccess, 'callTool'>, path: string): Pr
   const parsed = localToolCallSchema.safeParse(
     JSON.parse(await readFile(path, 'utf8').catch(() => 'null')),
   );
-  // A call the gateway answered, even with a rejection, would fail the same way again.
-  if (parsed.success)
-    await client.callTool({
-      name: MCP_REPORT_LOCAL_TOOL_CALL_TOOL,
-      arguments: { call: parsed.data },
-      idempotencyKey: parsed.data.reportId,
-    });
-  await rm(path, { force: true });
+  if (!parsed.success) return void (await rm(path, { force: true }));
+  const result = await client.callTool({
+    name: MCP_REPORT_LOCAL_TOOL_CALL_TOOL,
+    arguments: { call: parsed.data },
+    idempotencyKey: parsed.data.reportId,
+  });
+  // A rejected call (for example from a gateway that does not know the tool yet) stays
+  // until it ages out, so it is sent once the gateway accepts it.
+  if (!result.isError) await rm(path, { force: true });
 }
-
 /**
  * Sends every spooled call over one MCP session. A thrown error (offline, signed
  * out) stops the flush and leaves the remaining calls for the next one.

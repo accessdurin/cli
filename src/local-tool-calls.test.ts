@@ -283,6 +283,14 @@ describe('spool', () => {
     expect((await readdir(spool)).filter((name) => name.endsWith('.json'))).toEqual([]);
     expect(await flushSpool(spool, async () => failing())).toBe(0);
   });
+  it('keeps calls the gateway rejects until they age out', async () => {
+    const spool = join(await home(), 'spool');
+    await spoolCall(spool, call(1));
+    await flushSpool(spool, async (work) =>
+      work({ callTool: async () => ({ content: [], isError: true }) }),
+    );
+    expect((await readdir(spool)).filter((name) => name.endsWith('.json'))).toHaveLength(1);
+  });
   it('keeps only the newest calls within the file budget', async () => {
     const spool = join(await home(), 'spool');
     await Promise.all(

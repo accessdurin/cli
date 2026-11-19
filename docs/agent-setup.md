@@ -196,8 +196,8 @@ The hook never blocks or fails a tool call. It writes the call to
 `reporting/spool/` under the Durin configuration directory (private files, at most
 200 calls, kept up to 7 days). It then starts `durin hooks flush` in the background,
 which sends the waiting calls over the profile's MCP connection with
-`durin_report_local_tool_call`. Calls that cannot be sent (offline, signed out) wait
-for the next flush.
+`durin_report_local_tool_call`. Calls that cannot be sent (offline, signed out) or that the
+gateway rejects wait for the next flush until they age out.
 
 To stop reporting, remove the Durin `hooks report` handler from the harness hook
 file, then delete `reporting/<harness>.json` under the Durin configuration
