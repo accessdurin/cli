@@ -132,14 +132,21 @@ it.each(formats)(
   },
 );
 
-it('keeps a synthesized Windsurf session stable when no native ID is sent', () => {
-  const anonymous = { ...inputFor('windsurf'), trajectory_id: undefined };
-  const first = normalizeHook(anonymous, 'windsurf').session_id;
-  expect(first).toMatch(/^windsurf-synth-[0-9a-f]{64}$/);
-  expect(normalizeHook(anonymous, 'windsurf').session_id).toBe(first);
+it('maps Windsurf conversation and turn IDs and never links calls without one', () => {
+  const windsurf = { ...inputFor('windsurf'), execution_id: 'turn' };
+  expect(normalizeHook(windsurf, 'windsurf')).toMatchObject({
+    session_id: 'session',
+    turn_id: 'turn',
+  });
   expect(
-    normalizeHook({ ...anonymous, session_id: 'native', trajectory_id: 'other' }, 'windsurf'),
-  ).toMatchObject({ session_id: 'native' });
+    normalizeHook({ ...windsurf, session_id: 'native', trajectory_id: 'other' }, 'windsurf')
+      .session_id,
+  ).toBe('native');
+  const anonymous = { ...windsurf, trajectory_id: '', execution_id: '' };
+  const first = normalizeHook(anonymous, 'windsurf');
+  expect(first.session_id).toMatch(/^[0-9a-f-]{36}$/);
+  expect(first.turn_id).toBeUndefined();
+  expect(normalizeHook(anonymous, 'windsurf').session_id).not.toBe(first.session_id);
 });
 
 it('keeps mixed third-party hook groups and refuses disabled or malformed configurations', async () => {

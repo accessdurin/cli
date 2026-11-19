@@ -80,7 +80,7 @@ Sources for the native formats: [Claude skills](https://code.claude.com/docs/en/
 [Cursor skills](https://cursor.com/docs/skills),
 [Cursor hooks](https://cursor.com/docs/hooks),
 [Windsurf skills](https://docs.windsurf.com/de/windsurf/cascade/skills),
-[Windsurf hooks](https://docs.windsurf.com/de/windsurf/cascade/hooks) (common input fields, including `trajectory_id`),
+[Windsurf hooks](https://docs.windsurf.com/de/windsurf/cascade/hooks) (common input fields, including `trajectory_id` and `execution_id`),
 [OpenCode plugin APIs](https://opencode.ai/docs/build/plugins/migrate-v1/),
 [Gemini hooks](https://geminicli.com/docs/hooks/),
 [Gemini skills](https://geminicli.com/docs/cli/skills/),
@@ -134,11 +134,9 @@ transcript paths, are dropped. Harnesses that do not provide a call identifier
 receive an opaque generated ID for each call.
 
 `session_id` is the harness's native session ID. Windsurf's is the Cascade
-`trajectory_id`. If a Windsurf event has neither, the CLI derives
-`windsurf-synth-<sha256>` from the parent process that spawned the hook (and its
-start time on Linux). This stays the same for every call that process spawns but
-is only a fallback: a shell wrapper between Windsurf and the hook (as on Windows)
-makes it change per call.
+`trajectory_id`, and its per-turn `execution_id` becomes `turn_id`. If a Windsurf
+event has no non-empty conversation ID, each call gets its own opaque ID, so calls
+are never linked to an unrelated conversation.
 
 Durin Endpoint identifies the harness from the hook's `--client` argument today
 and may read `durin_harness` to support additional harnesses later.
