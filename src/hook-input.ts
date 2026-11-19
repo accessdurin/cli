@@ -1,4 +1,5 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { z } from 'zod';
 import type { HookFormat } from './agents.js';
 import { CliError } from './cli-options.js';
@@ -56,6 +57,27 @@ function copilotInput(raw: Record<string, unknown>) {
   };
 }
 const optionalId = (value: unknown) => stringValue(value) ?? randomUUID();
+// Windsurf sends `trajectory_id` for the whole Cascade conversation. Without it,
+// fall back to the spawning Windsurf process so calls still group per session.
+const windsurfSessionId = (raw: Record<string, unknown>) =>
+  stringValue(raw.session_id) ?? stringValue(raw.trajectory_id) ?? synthesizedSessionId();
+let synthesized: string | undefined;
+function synthesizedSessionId() {
+  synthesized ??= `windsurf-synth-${createHash('sha256').update(parentProcessKey()).digest('hex')}`;
+  return synthesized;
+}
+function parentProcessKey() {
+  const parent = String(process.ppid);
+  try {
+    // Linux only: boot ID plus the parent's start time (field 22) keeps a reused PID distinct.
+    const stat = readFileSync(`/proc/${parent}/stat`, 'utf8');
+    const started = stat.slice(stat.lastIndexOf(')') + 2).split(' ')[19];
+    const boot = readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim();
+    return started ? `${parent}:${started}:${boot}` : parent;
+  } catch {
+    return parent;
+  }
+}
 function windsurfInput(raw: Record<string, unknown>) {
   const info = object.parse(raw.tool_info);
   const names: Record<string, string> = {
@@ -72,7 +94,7 @@ function windsurfInput(raw: Record<string, unknown>) {
       : names[action];
   return {
     hook_event_name: 'PreToolUse',
-    session_id: optionalId(raw.session_id),
+    session_id: windsurfSessionId(raw),
     tool_use_id: optionalId(raw.tool_use_id),
     tool_name: tool,
     tool_input:

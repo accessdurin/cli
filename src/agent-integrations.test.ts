@@ -9,6 +9,7 @@ import { agentsFor, type HookFormat } from './agents.js';
 import { installSkills } from './install-skills.js';
 import { installHooks } from './install-hooks.js';
 import { readHookInstallation, runHook } from './hook-runner.js';
+import { normalizeHook } from './hook-input.js';
 import { readCustomHarness } from './custom-harness.js';
 import { updatedHookConfig } from './hook-config.js';
 import { planManagedFile, saveFileChange } from './managed-files.js';
@@ -54,7 +55,7 @@ const inputFor = (format: HookFormat) => {
   if (format === 'windsurf')
     return {
       agent_action_name: 'pre_mcp_tool_use',
-      session_id: 'session',
+      trajectory_id: 'session',
       tool_use_id: 'call',
       tool_info: {
         mcp_server_name: 'sandbox',
@@ -130,6 +131,16 @@ it.each(formats)(
     expect(saved).not.toContain('resource');
   },
 );
+
+it('keeps a synthesized Windsurf session stable when no native ID is sent', () => {
+  const anonymous = { ...inputFor('windsurf'), trajectory_id: undefined };
+  const first = normalizeHook(anonymous, 'windsurf').session_id;
+  expect(first).toMatch(/^windsurf-synth-[0-9a-f]{64}$/);
+  expect(normalizeHook(anonymous, 'windsurf').session_id).toBe(first);
+  expect(
+    normalizeHook({ ...anonymous, session_id: 'native', trajectory_id: 'other' }, 'windsurf'),
+  ).toMatchObject({ session_id: 'native' });
+});
 
 it('keeps mixed third-party hook groups and refuses disabled or malformed configurations', async () => {
   const { bridge } = await fixture();
