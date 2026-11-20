@@ -123,9 +123,20 @@ var windsurfTools = map[string]string{
 	"pre_write_code":  "Write",
 }
 
-func optionalID(value jsjson.Value) jsjson.Value {
-	if s, ok := value.(jsjson.String); ok {
+// nonEmpty returns value when it is a non-empty string, and nil otherwise.
+func nonEmpty(value jsjson.Value) jsjson.Value {
+	if s, ok := value.(jsjson.String); ok && s != "" {
 		return s
+	}
+	return nil
+}
+
+// firstID is the first non-empty string among values, or a fresh opaque ID.
+func firstID(values ...jsjson.Value) jsjson.Value {
+	for _, value := range values {
+		if id := nonEmpty(value); id != nil {
+			return id
+		}
 	}
 	return newUUID()
 }
@@ -165,10 +176,16 @@ func windsurfInput(raw *jsjson.Object) (*jsjson.Object, error) {
 	}
 	out := jsjson.Obj(
 		jsjson.KV("hook_event_name", jsjson.String("PreToolUse")),
-		jsjson.KV("session_id", optionalID(get(raw, "session_id"))),
-		jsjson.KV("tool_use_id", optionalID(get(raw, "tool_use_id"))),
+		// Windsurf sends trajectory_id for the whole Cascade conversation and execution_id for one
+		// agent turn. Empty values count as missing; without a native ID each call keeps its own
+		// opaque ID rather than being linked to an unrelated conversation.
+		jsjson.KV("session_id", firstID(get(raw, "session_id"), get(raw, "trajectory_id"))),
+		jsjson.KV("tool_use_id", firstID(get(raw, "tool_use_id"))),
 		jsjson.KV("tool_name", jsjson.String(tool)),
 	)
+	if turn := nonEmpty(get(raw, "execution_id")); turn != nil {
+		out.Set("turn_id", turn)
+	}
 	var input jsjson.Value = shellArguments(info)
 	if action == "pre_mcp_tool_use" {
 		if input, err = argumentsObject(get(info, "mcp_tool_arguments")); err != nil {

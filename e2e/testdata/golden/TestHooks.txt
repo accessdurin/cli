@@ -77,21 +77,21 @@ exit: 0
 --- stdout
 --- stderr
 ## checker received
-{"hook_event_name":"PreToolUse","session_id":"<UUID-3>","tool_use_id":"<UUID-4>","tool_name":"Bash","tool_input":{"command_line":"ls -la","cwd":"/work","command":"ls -la"},"cwd":"/work","durin_harness":"windsurf"}
+{"hook_event_name":"PreToolUse","session_id":"x","tool_use_id":"<UUID-3>","tool_name":"Bash","tool_input":{"command_line":"ls -la","cwd":"/work","command":"ls -la"},"cwd":"/work","durin_harness":"windsurf"}
 ⏎ (no trailing newline)
 ## durin hooks run --harness windsurf --config-dir <TMP>/config
 exit: 0
 --- stdout
 --- stderr
 ## checker received
-{"hook_event_name":"PreToolUse","session_id":"s6","tool_use_id":"<UUID-5>","tool_name":"mcp__durin__list","tool_input":{"a":1},"durin_harness":"windsurf"}
+{"hook_event_name":"PreToolUse","session_id":"s6","tool_use_id":"<UUID-4>","tool_name":"mcp__durin__list","tool_input":{"a":1},"durin_harness":"windsurf"}
 ⏎ (no trailing newline)
 ## durin hooks run --harness windsurf --config-dir <TMP>/config
 exit: 0
 --- stdout
 --- stderr
 ## checker received
-{"hook_event_name":"PreToolUse","session_id":"<UUID-6>","tool_use_id":"<UUID-7>","tool_name":"Write","tool_input":{"file_path":"/work/a.txt","edits":[]},"durin_harness":"windsurf"}
+{"hook_event_name":"PreToolUse","session_id":"<UUID-5>","tool_use_id":"<UUID-6>","tool_name":"Write","tool_input":{"file_path":"/work/a.txt","edits":[]},"durin_harness":"windsurf"}
 ⏎ (no trailing newline)
 ## durin hooks run --harness windsurf --config-dir <TMP>/config
 exit: 2
