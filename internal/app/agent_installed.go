@@ -11,7 +11,11 @@ var macApps = map[string]string{
 	"codex":    "Codex.app",
 	"cursor":   "Cursor.app",
 	"windsurf": "Windsurf.app",
+	"kiro":     "Kiro.app",
 }
+
+// agentExecutables are the executable names a harness may be installed as.
+var agentExecutables = map[string][]string{"kiro": {"kiro", "kiro-cli"}}
 
 // currentPlatform is process.platform.
 func currentPlatform() string {
@@ -35,6 +39,19 @@ func appInstalled(key, platform string) bool {
 }
 
 func executableInstalled(key string, env Env, platform string) bool {
+	names, ok := agentExecutables[key]
+	if !ok {
+		names = []string{key}
+	}
+	for _, name := range names {
+		if executableNamed(name, env, platform) {
+			return true
+		}
+	}
+	return false
+}
+
+func executableNamed(key string, env Env, platform string) bool {
 	extensions := []string{""}
 	delimiter := ":"
 	if platform == "win32" {

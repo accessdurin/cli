@@ -77,8 +77,320 @@ profiles/<PROFILE>.json file 0600
         "hooks": [
           {
             "type": "command",
-            "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config'",
+            "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'PreToolUse'",
             "timeout": 7
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'PermissionRequest'",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PermissionDenied": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'PermissionDenied'",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'PostToolUse'",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'PostToolUseFailure'",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'SessionStart'",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Setup": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'Setup'",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'UserPromptSubmit'",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "UserPromptExpansion": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'UserPromptExpansion'",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolBatch": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'PostToolBatch'",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'Notification'",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'SubagentStart'",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'SubagentStop'",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "TaskCreated": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'TaskCreated'",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "TaskCompleted": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'TaskCompleted'",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'Stop'",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "StopFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'StopFailure'",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "TeammateIdle": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'TeammateIdle'",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "InstructionsLoaded": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'InstructionsLoaded'",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "ConfigChange": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'ConfigChange'",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "CwdChanged": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'CwdChanged'",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "DirectoryAdded": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'DirectoryAdded'",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "FileChanged": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'FileChanged'",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'PreCompact'",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'PostCompact'",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostModelSwitch": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'PostModelSwitch'",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Elicitation": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'Elicitation'",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "ElicitationResult": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'ElicitationResult'",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'SessionEnd'",
+            "timeout": 10
           }
         ]
       }
@@ -102,11 +414,162 @@ profiles/<PROFILE>.json file 0600
   "installedAt": "<DATE>",
   "handler": {
     "type": "command",
-    "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config'",
+    "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'PreToolUse'",
     "timeout": 7
+  },
+  "handlers": {
+    "PreToolUse": {
+      "type": "command",
+      "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'PreToolUse'",
+      "timeout": 7
+    },
+    "PermissionRequest": {
+      "type": "command",
+      "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'PermissionRequest'",
+      "timeout": 10
+    },
+    "PermissionDenied": {
+      "type": "command",
+      "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'PermissionDenied'",
+      "timeout": 10
+    },
+    "PostToolUse": {
+      "type": "command",
+      "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'PostToolUse'",
+      "timeout": 10
+    },
+    "PostToolUseFailure": {
+      "type": "command",
+      "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'PostToolUseFailure'",
+      "timeout": 10
+    },
+    "SessionStart": {
+      "type": "command",
+      "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'SessionStart'",
+      "timeout": 10
+    },
+    "Setup": {
+      "type": "command",
+      "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'Setup'",
+      "timeout": 10
+    },
+    "UserPromptSubmit": {
+      "type": "command",
+      "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'UserPromptSubmit'",
+      "timeout": 10
+    },
+    "UserPromptExpansion": {
+      "type": "command",
+      "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'UserPromptExpansion'",
+      "timeout": 10
+    },
+    "PostToolBatch": {
+      "type": "command",
+      "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'PostToolBatch'",
+      "timeout": 10
+    },
+    "Notification": {
+      "type": "command",
+      "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'Notification'",
+      "timeout": 10
+    },
+    "SubagentStart": {
+      "type": "command",
+      "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'SubagentStart'",
+      "timeout": 10
+    },
+    "SubagentStop": {
+      "type": "command",
+      "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'SubagentStop'",
+      "timeout": 10
+    },
+    "TaskCreated": {
+      "type": "command",
+      "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'TaskCreated'",
+      "timeout": 10
+    },
+    "TaskCompleted": {
+      "type": "command",
+      "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'TaskCompleted'",
+      "timeout": 10
+    },
+    "Stop": {
+      "type": "command",
+      "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'Stop'",
+      "timeout": 10
+    },
+    "StopFailure": {
+      "type": "command",
+      "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'StopFailure'",
+      "timeout": 10
+    },
+    "TeammateIdle": {
+      "type": "command",
+      "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'TeammateIdle'",
+      "timeout": 10
+    },
+    "InstructionsLoaded": {
+      "type": "command",
+      "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'InstructionsLoaded'",
+      "timeout": 10
+    },
+    "ConfigChange": {
+      "type": "command",
+      "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'ConfigChange'",
+      "timeout": 10
+    },
+    "CwdChanged": {
+      "type": "command",
+      "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'CwdChanged'",
+      "timeout": 10
+    },
+    "DirectoryAdded": {
+      "type": "command",
+      "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'DirectoryAdded'",
+      "timeout": 10
+    },
+    "FileChanged": {
+      "type": "command",
+      "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'FileChanged'",
+      "timeout": 10
+    },
+    "PreCompact": {
+      "type": "command",
+      "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'PreCompact'",
+      "timeout": 10
+    },
+    "PostCompact": {
+      "type": "command",
+      "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'PostCompact'",
+      "timeout": 10
+    },
+    "PostModelSwitch": {
+      "type": "command",
+      "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'PostModelSwitch'",
+      "timeout": 10
+    },
+    "Elicitation": {
+      "type": "command",
+      "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'Elicitation'",
+      "timeout": 10
+    },
+    "ElicitationResult": {
+      "type": "command",
+      "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'ElicitationResult'",
+      "timeout": 10
+    },
+    "SessionEnd": {
+      "type": "command",
+      "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'SessionEnd'",
+      "timeout": 10
+    }
   },
   "assetDigest": "<DIGEST>"
 }
+## systemctl calls
+--user daemon-reload
+--user enable durin-observer.service
+--user restart durin-observer.service
 ## skills
 durin-hooks dir 0700
 durin-hooks/.durin-install.json file 0600

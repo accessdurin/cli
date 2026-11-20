@@ -1,0 +1,96 @@
+## durin observer status --config-dir <TMP>/config
+exit: 0
+--- stdout
+{
+  "service": {
+    "manager": "systemd-user",
+    "path": "<TMP>/home/.config/systemd/user/durin-observer.service",
+    "installed": false,
+    "running": false
+  },
+  "address": "<TMP>/config/observer/observer.sock",
+  "running": false,
+  "observer": null,
+  "capture": {
+    "available": false,
+    "bytes": 0,
+    "segments": 0,
+    "maxBytes": 536870912,
+    "maxAgeHours": 168
+  },
+  "config": {},
+  "availableDnsSources": [
+    {
+      "source": "systemd-resolved",
+      "description": "resolvectl monitor (systemd-resolved; usually needs root)"
+    }
+  ]
+}
+--- stderr
+## durin hooks run --harness claude --config-dir <TMP>/config --event UserPromptSubmit
+exit: 0
+--- stdout
+--- stderr
+## durin hooks run --harness cursor --config-dir <TMP>/config --event beforeSubmitPrompt
+exit: 0
+--- stdout
+{"continue":true}
+--- stderr
+## socket permissions
+socket 600, directory 700
+## durin hooks run --harness claude --config-dir <TMP>/config --event UserPromptSubmit
+exit: 0
+--- stdout
+--- stderr
+## durin hooks run --harness codex --config-dir <TMP>/config --event Stop
+exit: 0
+--- stdout
+--- stderr
+## durin hooks run --harness opencode --config-dir <TMP>/config --event session.idle
+exit: 0
+--- stdout
+--- stderr
+## durin observer status --config-dir <TMP>/config (summarized)
+exit: 0
+--- stdout
+running=true service.installed=false service.manager=systemd-user
+received=3 stored=5 dropped=0 detections=2 socketTable=ok rssUnder200MB=true dnsSources=1
+capture: available=true segments=1 maxBytes=536870912 maxAgeHours=24
+--- stderr
+## credentials
+observer:capture-key (label keyring:observer:capture-key@com.getdurin.cli)
+## durin observer export --config-dir <TMP>/config (summarized, sorted)
+exit: 0
+--- stdout
+connection harness=<one of the hook harnesses: true> close provider=anthropic host=api.anthropic.com remote=127.0.0.2 pidIsTest=true
+connection harness=<one of the hook harnesses: true> open provider=anthropic host=api.anthropic.com remote=127.0.0.2 pidIsTest=true
+hook harness=claude UserPromptSubmit {"prompt":"use sk-ant-e2e-SECRET-0123456789","session_id":"s1"}
+hook harness=codex Stop {"session_id":"s1","stop_hook_active":false}
+hook harness=opencode session.idle {"properties":{"sessionID":"s2"},"type":"session.idle"}
+--- stderr
+## durin observer purge --config-dir <TMP>/config
+exit: 0
+--- stdout
+{
+  "deletedSegments": 1
+}
+--- stderr
+## durin observer status after purge (summarized)
+exit: 0
+--- stdout
+running=true service.installed=false service.manager=systemd-user
+received=3 stored=5 dropped=0 detections=2 socketTable=ok rssUnder200MB=true dnsSources=1
+capture: available=true segments=0 maxBytes=536870912 maxAgeHours=24
+--- stderr
+## durin observer purge --config-dir <TMP>/config
+exit: 0
+--- stdout
+{
+  "deletedSegments": 0
+}
+--- stderr
+## durin observer bogus --config-dir <TMP>/config
+exit: 1
+--- stdout
+--- stderr
+Unknown command. Run durin --help.

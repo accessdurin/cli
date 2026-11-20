@@ -51,16 +51,23 @@ redirect existing agent connections.
 
 | Harness            | MCP configuration                     | Skills                        | Local hook configuration                                                                         |
 | ------------------ | ------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------ |
-| Claude Code        | `~/.claude.json`                      | `~/.claude/skills`            | `~/.claude/settings.json`, `PreToolUse`                                                          |
-| Codex              | `~/.codex/config.toml`                | `~/.agents/skills`            | `~/.codex/hooks.json`, `PreToolUse`                                                              |
-| Cursor             | `~/.cursor/mcp.json`                  | `~/.cursor/skills`            | `~/.cursor/hooks.json`, `preToolUse`                                                             |
-| Windsurf           | `~/.codeium/windsurf/mcp_config.json` | `~/.codeium/windsurf/skills`  | `~/.codeium/windsurf/hooks.json`, pre-tool events                                                |
+| Claude Code        | `~/.claude.json`                      | `~/.claude/skills`            | `~/.claude/settings.json`; check on `PreToolUse`                                                 |
+| Codex              | `~/.codex/config.toml`                | `~/.agents/skills`            | `~/.codex/hooks.json`; check on `PreToolUse`                                                     |
+| Cursor             | `~/.cursor/mcp.json`                  | `~/.cursor/skills`            | `~/.cursor/hooks.json`; check on `preToolUse`                                                    |
+| Windsurf           | `~/.codeium/windsurf/mcp_config.json` | `~/.codeium/windsurf/skills`  | `~/.codeium/windsurf/hooks.json`; check on the pre-tool events                                   |
 | OpenCode           | `~/.config/opencode/opencode.json(c)` | `~/.config/opencode/skills`   | `~/.config/opencode/plugins/durin.js`, V2 `execute.before` and V1 1.18.29+ `tool.execute.before` |
-| Gemini CLI         | `~/.gemini/settings.json`             | `~/.gemini/skills`            | Same settings file, `BeforeTool`                                                                 |
-| GitHub Copilot CLI | `~/.copilot/mcp-config.json`          | `~/.copilot/skills`           | `~/.copilot/hooks/durin.json`, `preToolUse`                                                      |
+| Gemini CLI         | `~/.gemini/settings.json`             | `~/.gemini/skills`            | Same settings file; check on `BeforeTool`                                                        |
+| GitHub Copilot CLI | `~/.copilot/mcp-config.json`          | `~/.copilot/skills`           | `~/.copilot/hooks/durin.json`; check on `preToolUse`                                             |
+| pi                 | `~/.pi/agent/mcp.json`                | `~/.pi/agent/skills`          | `~/.pi/agent/extensions/durin.ts`; check on `tool_call`                                          |
+| Kiro               | `~/.kiro/settings/mcp.json`           | not installed                 | `~/.kiro/hooks/durin.json` (v1 hook format); check on `PreToolUse`                               |
 | Custom harness     | Descriptor-selected JSONC/TOML file   | Descriptor-selected directory | Compatible native adapter or a generated command descriptor                                      |
 
-Claude paths honor `CLAUDE_CONFIG_DIR`; Codex configuration honors `CODEX_HOME`.
+Besides the pre-tool check, durin registers a capture-only handler for every
+other hook event each harness supports; see [hooks and the observer](hooks-and-observer.md)
+for the event lists, the events deliberately left out, and what is captured.
+
+Claude paths honor `CLAUDE_CONFIG_DIR`; Codex configuration honors `CODEX_HOME`. pi
+honors `PI_CODING_AGENT_DIR`.
 Codex's user skills use its current `~/.agents/skills` discovery path. Copilot
 honors `COPILOT_HOME`. OpenCode honors `OPENCODE_CONFIG` for MCP configuration
 and `XDG_CONFIG_HOME` for global skill/plugin discovery.
@@ -89,7 +96,9 @@ and [Copilot hooks](https://docs.github.com/en/copilot/reference/hooks-reference
 ## Local checks and Endpoint
 
 Setup offers an installed Durin Endpoint helper when it can locate a supported
-helper, a custom local checker, or skipping local hook setup. Skipping preserves any existing local hooks; it does not disable them. It does not
+helper, a custom local checker, or skipping local pre-tool checks. Skipping keeps
+a checker an earlier run configured and still installs capture-only hooks for
+built-in harnesses (custom descriptors get no hooks without a checker). It does not
 install the native Endpoint application or enroll a device for organization
 reporting. MCP access works independently of local checker installation.
 

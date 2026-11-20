@@ -29,6 +29,14 @@ Usage:
   durin mcp endpoint            Print the personal URL for a direct MCP client
   durin hooks status            Show local checker and hook configuration status
   durin hooks run --harness <id> Run a configured local pre-tool checker (JSON stdin)
+  durin hooks run --harness <id> --event <name>
+                                Handle one harness hook event (JSON stdin)
+  durin observer status         Show the local observer service and capture status
+  durin observer install | remove
+                                Install or remove the observer service
+  durin observer purge          Delete everything the observer captured
+  durin observer export         Print the decrypted capture as JSON lines
+  durin observe                 Run the observer (the service runs this)
 
 Options:
   --profile <id>                Select an explicit organization profile
@@ -38,6 +46,7 @@ Options:
   --app-url <origin>            Durin app origin (default: https://app.getdurin.com)
   --dev                        Allow loopback hosts and HTTP for local development
   --harness <id>                hooks run: selected built-in or custom harness
+  --event <name>                hooks run: the harness hook event being handled
   -h, --help                   Show this help
 
 Agent selection happens during onboarding. Direct MCP clients authorize separately.
@@ -79,6 +88,8 @@ var cliOptionTypes = map[string]optionType{
 	"dev":             booleanOption,
 	"force":           booleanOption,
 	"harness":         stringOption,
+	"event":           stringOption,
+	"supervise":       booleanOption,
 }
 
 // CliValues are parseArgs's values: Keys lists the options given, in the order each was first

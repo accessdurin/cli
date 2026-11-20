@@ -183,7 +183,7 @@ func (q agentQuestions) Checker(ctx context.Context, agent contracts.AgentConfig
 	}
 	options = append(options,
 		promptOption{Value: "custom", Label: "Use a custom local checker", Hint: "Select a checker descriptor JSON file"},
-		promptOption{Value: "skip", Label: "Skip local hook setup", Hint: "Existing hooks are preserved"},
+		promptOption{Value: "skip", Label: "Skip local pre-tool checks", Hint: "Hooks still capture events locally; an existing checker is kept"},
 	)
 	choice, err := q.p.selectOne(ctx, "Configure local pre-tool checks?", options)
 	if err != nil {
@@ -212,6 +212,12 @@ func (q agentQuestions) Integrations(result ports.IntegrationsResult) {
 		hooks = "configured; reopen the agent to activate"
 	}
 	q.p.info(fmt.Sprintf("Durin skills installed: %d. Local hooks: %s.", result.Skills, hooks))
+	if result.Hooks && !result.Checker {
+		q.p.info("Local pre-tool checks are off; hooks only capture events for the local observer.")
+	}
+	if result.Observer != "" {
+		q.p.info("Durin observer: " + TerminalText(result.Observer) + ".")
+	}
 	if result.Custom && result.Hooks {
 		q.p.info("Wire the generated hook command into your custom harness before tool execution.")
 	}

@@ -253,3 +253,8 @@ func removeRetired(runtimeDir string) {
 		_ = os.Remove(path)
 	}
 }
+
+// RuntimeExecutablePath is <directory>/runtime/durin[.exe], the executable setup publishes.
+func RuntimeExecutablePath(directory string) string {
+	return filepath.Join(directory, "runtime", RuntimeExecutableName())
+}

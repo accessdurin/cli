@@ -79,7 +79,7 @@ func adaptedInput(raw *jsjson.Object, format string) (*jsjson.Object, error) {
 }
 
 func standardInput(raw *jsjson.Object, format string) (*jsjson.Object, error) {
-	adapted := format == "cursor" || format == "opencode" || format == "gemini"
+	adapted := format == "cursor" || format == "opencode" || format == "gemini" || format == "pi" || format == "kiro"
 	out := raw.Clone()
 	if adapted {
 		out.Set("hook_event_name", jsjson.String("PreToolUse"))
@@ -88,7 +88,7 @@ func standardInput(raw *jsjson.Object, format string) (*jsjson.Object, error) {
 	}
 	out.Set("session_id", nullish(get(raw, "session_id"), func() jsjson.Value { return get(raw, "conversation_id") }))
 	out.Set("tool_use_id", nullish(get(raw, "tool_use_id"), func() jsjson.Value {
-		if format == "gemini" {
+		if format == "gemini" || format == "kiro" || format == "pi" {
 			return newUUID()
 		}
 		return nil
