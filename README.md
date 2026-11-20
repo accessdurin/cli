@@ -19,7 +19,7 @@ You can use either client independently, or configure both for the same organiza
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Tool access      | The CLI configures an MCP bridge and invokes tools; the gateway checks access, policy and required independent approval. | Local policies record violations. Default rules flag activity; an optional custom checker can reject a call through a supported harness hook.       |
 | Authorization    | Account login and organization-specific MCP consent establish the CLI profile and tool grant.                            | Separate device enrollment authorizes organization reporting; it does not grant MCP tool access.                                                    |
-| Harness coverage | Setup adapters for Claude Code, Codex, Cursor, Windsurf, OpenCode, Gemini CLI, Copilot CLI and custom harnesses.         | Local Claude Code and Codex activity; Codex desktop hook execution remains unverified. CLI support for a harness does not imply Endpoint coverage.  |
+| Harness coverage | Setup adapters for Claude Code, Codex, Cursor, Windsurf, OpenCode, Gemini CLI, Copilot CLI, pi, Kiro and custom harnesses. | Local Claude Code and Codex activity; Codex desktop hook execution remains unverified. CLI support for a harness does not imply Endpoint coverage.  |
 | Data sent        | Invoked tool arguments go to the selected Durin gateway and, on execution, the provider.                                 | Organization reporting sends violation metadata, not commands, arguments, paths, prompts or transcripts. Without enrollment, violations stay local. |
 
 Gateway authorization applies to requests routed through Durin. Unrelated shell
@@ -126,6 +126,14 @@ pre-tool hooks using an installed supported Endpoint helper or a selected custom
 checker. See [agent setup](docs/agent-setup.md) for the setup prompt, supported
 harnesses, custom descriptors, preservation rules, and hook/reporting boundaries.
 
+Setup also registers a capture-only handler for every other hook event the
+harness supports and installs the **observer**, a per-user background service
+that receives those events, notices connections to AI providers (OpenAI,
+Anthropic, OpenRouter), and keeps an encrypted, size- and age-bounded capture on
+this machine. Nothing it captures leaves the machine. See
+[hooks and the observer](docs/hooks-and-observer.md) for what is captured, where,
+for how long, and how to purge or remove it.
+
 [Distribution documentation](docs/distribution.md) covers Homebrew, Debian/Ubuntu
 packages, Windows per-user installation, portable archives, and the release workflow.
 Those channels require publishing their matching release; this repository does not
@@ -153,10 +161,10 @@ package and Claude plugin are distributed separately.
 2. Select a verified organization, or create one if you have no memberships.
 3. Answer the organization's required questions in the CLI. Complete payment setup
    in the browser when requested; the CLI waits for payment and tenant readiness.
-4. Choose Claude Code, Codex, Cursor, Windsurf, OpenCode, Gemini CLI, Copilot CLI, or a custom harness. Install the harness first.
+4. Choose Claude Code, Codex, Cursor, Windsurf, OpenCode, Gemini CLI, Copilot CLI, pi, Kiro, or a custom harness. Install the harness first.
 5. Authorize that organization's MCP in the browser. This consent is separate from
    your account login. The CLI checks the saved bridge and authenticated tool catalog.
-6. Install the bundled Durin skills and choose an installed Endpoint helper, a custom local checker, or continuing without hooks. Reopen your chosen harness when setup finishes. An empty catalog is reported as
+6. Install the bundled Durin skills and choose an installed Endpoint helper, a custom local checker, or continuing without pre-tool checks; capture hooks and the observer are installed either way. Reopen your chosen harness when setup finishes. An empty catalog is reported as
    connected with no tools; ask an administrator to enable a connection or grant access.
 
 `durin login`, `durin signup`, and `durin install` start or resume the same journey.
@@ -178,7 +186,11 @@ It does not trust a saved completion flag. No pasted endpoint or token is requir
 | `durin mcp serve`                                                   | Start a noninteractive stdio bridge                                           |
 | `durin mcp endpoint`                                                | Print the personal endpoint for a direct MCP client                           |
 | `durin hooks status`                                                | Inspect local checker and hook configuration; execution remains unverified    |
-| `durin hooks run --harness <id>`                                    | Run a configured local checker with JSON input on stdin                       |
+| `durin hooks run --harness <id> [--event <name>]`                   | Handle a harness hook event (JSON on stdin): check or capture                 |
+| `durin observer status`                                             | Show the observer service, its counters and the capture                       |
+| `durin observer install` / `remove`                                 | Install or remove the per-user observer service                               |
+| `durin observer purge` / `export`                                   | Delete the capture, or print it decrypted as JSON lines                       |
+| `durin observe`                                                     | Run the observer in the foreground (what the service runs)                    |
 | `durin logout`                                                      | Revoke the selected MCP grant where supported and clear its local credentials |
 
 | Flag                      | Applies to                                                               |
@@ -399,7 +411,8 @@ DO_NOT_TRACK=1 durin verify --profile <profile-id>
 
 In PowerShell, use `$env:DO_NOT_TRACK = '1'` before running `durin` or starting
 your agent. Setup passes this choice to its verification subprocess. Reporting
-is also disabled when `NODE_ENV=test`; local hook commands do not initialize it.
+is also disabled when `NODE_ENV=test`; local hook commands and the observer do not
+initialize it, and telemetry never includes captured hook or traffic content.
 
 Never commit local environment files, API keys, account sessions, client profiles,
 private keys, or credential-store exports. These are not required to build or test.

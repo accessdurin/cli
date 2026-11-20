@@ -31,6 +31,8 @@ var commands = map[string]command{
 	"profiles": plain(app.ProfileCommand),
 	"logout":   app.LogoutCommand,
 	"hooks":    hooks,
+	"observe":  app.ObserveCommand,
+	"observer": app.ObserverCommand,
 }
 
 func hooks(_ context.Context, options *app.CliOptions, io *app.IO) error {
@@ -38,11 +40,16 @@ func hooks(_ context.Context, options *app.CliOptions, io *app.IO) error {
 		return app.HookCommand(options, io)
 	}
 	harness, _ := options.Values.String("harness")
+	if event, ok := options.Values.String("event"); ok {
+		return app.RunHookEvent(options, io, harness, event)
+	}
+	stdin, forwarded := app.ForwardHookInput(options.Directory, harness, io.Stdin)
+	defer forwarded()
 	installation, err := app.ReadHookInstallation(options.Directory, harness)
 	if err != nil {
 		return err
 	}
-	if err := app.RunHook(installation, io.Stdin); err != nil {
+	if err := app.RunHook(installation, stdin); err != nil {
 		return err
 	}
 	if installation.Format == "cursor" {
@@ -100,18 +107,24 @@ func errorMessage(err error, localHook bool) string {
 
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer, isTTY func() bool) int {
 	localHook := len(args) >= 2 && args[0] == "hooks" && args[1] == "run"
-	if !localHook {
+	// Hooks and the observer handle captured content; they never initialize telemetry.
+	observe := len(args) >= 1 && args[0] == "observe"
+	if !localHook && !observe {
 		telemetry.Initialize()
 	}
 	streams := &app.IO{Stdin: stdin, Stdout: stdout, Stderr: stderr, IsTTY: isTTY}
 	err := telemetry.TraceCommand(func(ctx context.Context) error { return durin(ctx, args, streams) })
 	code := streams.ExitCode
+	if err != nil && app.IsCaptureHook(args) {
+		// A capture-only hook never blocks or fails the harness.
+		return 0
+	}
 	if err != nil {
 		fmt.Fprint(stderr, app.TerminalText(errorMessage(err, localHook))+"\n")
 		code = 1
 		if localHook {
 			code = 2
-		} else {
+		} else if !observe {
 			telemetry.ReportUnexpected(err)
 		}
 	}

@@ -45,7 +45,12 @@ func openCodePath(home string, env Env) string {
 func obj(members ...jsjson.Member) *jsjson.Object { return jsjson.Obj(members...) }
 
 // AgentKeys are the built-in harnesses, in the order setup offers them.
-var AgentKeys = []string{"claude", "codex", "cursor", "windsurf", "gemini", "copilot", "opencode"}
+var AgentKeys = []string{"claude", "codex", "cursor", "windsurf", "gemini", "copilot", "opencode", "pi", "kiro"}
+
+// piAgentDirectory is pi's agent directory: $PI_CODING_AGENT_DIR or ~/.pi/agent.
+func piAgentDirectory(home string, env Env) string {
+	return envTruthy(env, "PI_CODING_AGENT_DIR", filepath.Join(home, ".pi", "agent"))
+}
 
 var agentDefinitions = map[string]agentDefinition{
 	"claude": {contracts.AgentConfig{
@@ -92,6 +97,15 @@ var agentDefinitions = map[string]agentDefinition{
 		BridgeTransport: obj(jsjson.KV("type", jsjson.String("local")), jsjson.KV("enabled", jsjson.Bool(true))),
 		Authentication:  "Run `opencode mcp auth durin` to authenticate.",
 	}, openCodePath},
+	"pi": {contracts.AgentConfig{
+		Name: "pi", Format: "jsonc", ServerKey: "mcpServers", URLKey: "url",
+		Transport: obj(), Bridge: "arguments", BridgeTransport: obj(), Authentication: "",
+	}, func(home string, env Env) string { return filepath.Join(piAgentDirectory(home, env), "mcp.json") }},
+	"kiro": {contracts.AgentConfig{
+		Name: "Kiro", Format: "jsonc", ServerKey: "mcpServers", URLKey: "url",
+		Transport: obj(), Bridge: "arguments", BridgeTransport: obj(),
+		Authentication: "Open Kiro's MCP server panel to authenticate Durin.",
+	}, func(home string, _ Env) string { return filepath.Join(home, ".kiro", "settings", "mcp.json") }},
 }
 
 // AgentsFor is agentsFor(home, env): every built-in harness's configuration.
@@ -106,8 +120,11 @@ func AgentsFor(home string, env Env) map[string]contracts.AgentConfig {
 		root := harnessRoots(home, env)[key]
 		agent.ID = key
 		agent.SkillsDirectory = filepath.Join(root, "skills")
-		if key == "codex" {
+		switch key {
+		case "codex":
 			agent.SkillsDirectory = filepath.Join(home, ".agents", "skills")
+		case "kiro":
+			agent.SkillsDirectory = "" // Kiro has no documented user skills directory
 		}
 		agent.HookConfig = &contracts.HookConfig{Path: hookPath(key, root), Format: contracts.HookFormat(key)}
 		out[key] = agent
@@ -145,6 +162,8 @@ func harnessRoots(home string, env Env) map[string]string {
 		"gemini":   filepath.Join(home, ".gemini"),
 		"copilot":  envOr(env, "COPILOT_HOME", filepath.Join(home, ".copilot")),
 		"opencode": filepath.Join(envOr(env, "XDG_CONFIG_HOME", filepath.Join(home, ".config")), "opencode"),
+		"pi":       piAgentDirectory(home, env),
+		"kiro":     filepath.Join(home, ".kiro"),
 	}
 }
 
@@ -154,6 +173,8 @@ func hookPath(id, root string) string {
 		"gemini":   "settings.json",
 		"copilot":  filepath.Join("hooks", "durin.json"),
 		"opencode": filepath.Join("plugins", "durin.js"),
+		"pi":       filepath.Join("extensions", "durin.ts"),
+		"kiro":     filepath.Join("hooks", "durin.json"),
 	}
 	if name, ok := special[id]; ok {
 		return filepath.Join(root, name)

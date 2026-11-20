@@ -3,6 +3,8 @@ package app
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/json"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,10 +12,12 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf16"
 
 	"github.com/accessdurin/cli/internal/contracts"
 	"github.com/accessdurin/cli/internal/jsjson"
+	"github.com/accessdurin/cli/internal/observer"
 )
 
 type hookFixture struct {
@@ -66,25 +70,36 @@ func TestInstallHooksForEveryFormatAndRunARealChecker(t *testing.T) {
 				agent.HookConfig = &contracts.HookConfig{Path: filepath.Join(f.home, "custom-hooks.json"), Format: "custom"}
 			}
 			for range 2 {
-				if n, err := InstallSkills(agent); err != nil || n != 5 {
+				want := 5
+				if agent.SkillsDirectory == "" {
+					want = 0
+				}
+				if n, err := InstallSkills(agent); err != nil || n != want {
 					t.Fatalf("skills: %d %v", n, err)
 				}
 			}
 			target := agent.HookConfig.Path
-			if format != "opencode" {
+			managed := managedHookFormats[format]
+			if !managed {
 				writeFile(t, target, `{ // preserve this comment
 "theme":"keep","hooks":{}}`)
 			}
-			if err := InstallHooks(agent, f.bridge, f.checker); err != nil {
+			if err := InstallHooks(agent, f.bridge, &f.checker); err != nil {
 				t.Fatal(err)
 			}
 			saved := readFile(t, target)
-			if err := InstallHooks(agent, f.bridge, f.checker); err != nil || readFile(t, target) != saved {
+			if err := InstallHooks(agent, f.bridge, &f.checker); err != nil || readFile(t, target) != saved {
 				t.Fatalf("not idempotent: %v", err)
 			}
 			markers := []string{"preserve this comment", `"keep"`}
-			if format == "opencode" {
+			if managed {
 				markers = []string{"Managed by Durin CLI"}
+			}
+			// Every event the harness supports has a durin handler.
+			for _, event := range registeredEvents(format, true) {
+				if !strings.Contains(saved, event.Name) {
+					t.Errorf("no handler for %s", event.Name)
+				}
 			}
 			for _, marker := range markers {
 				if !strings.Contains(saved, marker) {
@@ -106,9 +121,46 @@ func TestInstallHooksForEveryFormatAndRunARealChecker(t *testing.T) {
 	}
 }
 
+// Without a checker every event, the pre-tool one included, only captures; Cursor's
+// permission hook, which needs an answer, is not registered at all. A later run without a
+// checker keeps the checker an earlier run configured.
+func TestCaptureOnlyHooks(t *testing.T) {
+	f := newHookFixture(t)
+	agents := AgentsFor(f.home, EnvMap{})
+	for _, format := range []string{"cursor", "claude", "kiro"} {
+		agent := agents[format]
+		if err := InstallHooks(agent, f.bridge, nil); err != nil {
+			t.Fatal(err)
+		}
+		saved := readFile(t, agent.HookConfig.Path)
+		installation, err := ReadHookInstallation(f.bridge.ConfigDirectory, format)
+		if err != nil || installation.Checker != nil || strings.Contains(saved, "failClosed") || strings.Contains(saved, "durin-local-check") {
+			t.Fatalf("%s: %+v %v\n%s", format, installation, err, saved)
+		}
+		if format == "cursor" && (strings.Contains(saved, `"preToolUse"`) || !strings.Contains(saved, `"beforeSubmitPrompt"`)) {
+			t.Fatalf("cursor events:\n%s", saved)
+		}
+		if format != "kiro" && installation.Handler != nil {
+			t.Fatalf("%s: a check handler was recorded without a checker", format)
+		}
+	}
+	if err := InstallHooks(agents["claude"], f.bridge, &f.checker); err != nil {
+		t.Fatal(err)
+	}
+	if err := InstallHooks(agents["claude"], f.bridge, nil); err != nil {
+		t.Fatal(err)
+	}
+	if installation, _ := ReadHookInstallation(f.bridge.ConfigDirectory, "claude"); installation.Checker == nil || installation.Handler == nil {
+		t.Fatal("the earlier checker was dropped")
+	}
+	codex := agents["codex"]
+	writeFile(t, codex.ConfigPath, "[features]\nhooks = false\n")
+	wantCliError(t, InstallHooks(codex, f.bridge, nil), "Hooks are disabled")
+}
+
 func TestCheckerOutcomesBlockTheToolCall(t *testing.T) {
 	f := newHookFixture(t)
-	if err := InstallHooks(AgentsFor(f.home, EnvMap{})["claude"], f.bridge, contracts.HookChecker{Command: f.checker.Command, Args: []string{}, TimeoutMs: 100}); err != nil {
+	if err := InstallHooks(AgentsFor(f.home, EnvMap{})["claude"], f.bridge, &contracts.HookChecker{Command: f.checker.Command, Args: []string{}, TimeoutMs: 100}); err != nil {
 		t.Fatal(err)
 	}
 	installation, _ := ReadHookInstallation(f.bridge.ConfigDirectory, "claude")
@@ -128,7 +180,7 @@ func TestCheckerOutcomesBlockTheToolCall(t *testing.T) {
 
 func TestHookConfigEdits(t *testing.T) {
 	bridge := BridgeConfiguration{ExecutablePath: "/opt/durin/runtime/durin", ConfigDirectory: "/home/u/.config/durin", ProfileID: testProfileID}
-	input := HookConfiguration{Format: "claude", Bridge: bridge, Harness: "claude", TimeoutMs: 1000}
+	input := HookConfiguration{Format: "claude", Bridge: bridge, Harness: "claude", TimeoutMs: 1000, Checker: true}
 	raw := `{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":/* keep inner handler comment */"existing-check"}]}],"PostToolUse":[{"matcher":".*","hooks":[]}]}}`
 	rendered, err := UpdatedHookConfig(raw, input)
 	if err != nil || !strings.Contains(rendered, "keep inner handler comment") || !strings.Contains(rendered, `"existing-check"`) {
@@ -138,14 +190,24 @@ func TestHookConfigEdits(t *testing.T) {
 	hooks, _ := config.GetObject("hooks")
 	pre, _ := hooks.GetArray("PreToolUse")
 	post, _ := hooks.GetArray("PostToolUse")
-	if len(pre) != 2 || jsjson.Stringify(post) != `[{"matcher":".*","hooks":[]}]` {
+	if len(pre) != 2 || len(post) != 2 || jsjson.Stringify(post[0]) != `{"matcher":".*","hooks":[]}` {
 		t.Fatalf("groups: %s", rendered)
 	}
 	added := pre[1].(*jsjson.Object)
 	handlers, _ := added.GetArray("hooks")
-	want := `{"type":"command","command":"'/opt/durin/runtime/durin' 'hooks' 'run' '--harness' 'claude' '--config-dir' '/home/u/.config/durin'","timeout":4}`
+	want := `{"type":"command","command":"'/opt/durin/runtime/durin' 'hooks' 'run' '--harness' 'claude' '--config-dir' '/home/u/.config/durin' '--event' 'PreToolUse'","timeout":4}`
 	if runtime.GOOS == "windows" || jsjson.Stringify(handlers[0]) != want {
 		t.Fatalf("handler %s", jsjson.Stringify(handlers[0]))
+	}
+	// Capture handlers: a short timeout, and no matcher outside tool events.
+	stop, _ := hooks.GetArray("Stop")
+	if got := jsjson.Stringify(stop); got != `[{"hooks":[{"type":"command","command":"'/opt/durin/runtime/durin' 'hooks' 'run' '--harness' 'claude' '--config-dir' '/home/u/.config/durin' '--event' 'Stop'","timeout":10}]}]` {
+		t.Fatalf("Stop: %s", got)
+	}
+	for _, excluded := range []string{"WorktreeCreate", "WorktreeRemove", "PreModelSwitch", "MessageDisplay"} {
+		if _, ok := hooks.Get(excluded); ok {
+			t.Errorf("registered %s", excluded)
+		}
 	}
 	for _, invalid := range []string{`{"disableAllHooks":true}`, `{"hooksConfig":{"enabled":false}}`, `{"hooks":{"PreToolUse":{}}}`, `{`} {
 		if _, err := UpdatedHookConfig(invalid, input); err == nil {
@@ -156,7 +218,7 @@ func TestHookConfigEdits(t *testing.T) {
 	windows := true
 	input.Windows = &windows
 	rendered, _ = UpdatedHookConfig("{}", input)
-	if !strings.Contains(rendered, `& '/opt/durin/runtime/durin' 'hooks' 'run' '--harness' 'claude' '--config-dir' '/home/u/.config/durin'; exit $LASTEXITCODE`) {
+	if !strings.Contains(rendered, `& '/opt/durin/runtime/durin' 'hooks' 'run' '--harness' 'claude' '--config-dir' '/home/u/.config/durin' '--event' 'PreToolUse'; exit $LASTEXITCODE`) {
 		t.Fatalf("claude on Windows:\n%s", rendered)
 	}
 	input.Format, input.Harness = "codex", "codex"
@@ -167,7 +229,7 @@ func TestHookConfigEdits(t *testing.T) {
 	for i := range units {
 		units[i] = uint16(data[2*i]) | uint16(data[2*i+1])<<8
 	}
-	if got := string(utf16.Decode(units)); got != `& '/opt/durin/runtime/durin' 'hooks' 'run' '--harness' 'codex' '--config-dir' '/home/u/.config/durin'; exit $LASTEXITCODE` {
+	if got := string(utf16.Decode(units)); got != `& '/opt/durin/runtime/durin' 'hooks' 'run' '--harness' 'codex' '--config-dir' '/home/u/.config/durin' '--event' 'PreToolUse'; exit $LASTEXITCODE` {
 		t.Fatalf("codex on Windows runs %q", got)
 	}
 	if !strings.Contains(rendered, `"command": "powershell.exe -NoProfile -NonInteractive -EncodedCommand `) {
@@ -190,11 +252,14 @@ func TestHooksReplaceTheTypeScriptHandler(t *testing.T) {
 		jsjson.KV("assetDigest", jsjson.String(textDigest(settings))),
 	)
 	writeFile(t, filepath.Join(f.bridge.ConfigDirectory, "hooks", "claude.json"), jsjson.StringifyIndent(record, 2)+"\n")
-	if err := InstallHooks(agent, f.bridge, f.checker); err != nil {
+	if err := InstallHooks(agent, f.bridge, &f.checker); err != nil {
 		t.Fatal(err)
 	}
 	saved := readFile(t, agent.HookConfig.Path)
-	if strings.Contains(saved, "cli.mjs") || !strings.Contains(saved, "// user settings") || strings.Count(saved, `"command"`) != 2 || !strings.Contains(saved, f.bridge.ExecutablePath) {
+	config, _ := ParseConfig(saved, "jsonc")
+	hooks, _ := config.GetObject("hooks")
+	pre, _ := hooks.GetArray("PreToolUse")
+	if strings.Contains(saved, "cli.mjs") || !strings.Contains(saved, "// user settings") || len(pre) != 1 || !strings.Contains(saved, f.bridge.ExecutablePath) {
 		t.Fatalf("legacy handler not replaced:\n%s", saved)
 	}
 
@@ -217,7 +282,7 @@ func TestShellHookCommandIsQuoted(t *testing.T) {
 	_ = os.Chmod(f.bridge.ExecutablePath, 0o700)
 	for _, format := range []string{"claude", "codex"} {
 		agent := AgentsFor(f.home, EnvMap{})[format]
-		if err := InstallHooks(agent, f.bridge, f.checker); err != nil {
+		if err := InstallHooks(agent, f.bridge, &f.checker); err != nil {
 			t.Fatal(err)
 		}
 		config, _ := ParseConfig(readFile(t, agent.HookConfig.Path), "jsonc")
@@ -246,7 +311,7 @@ func TestInterruptedSaveKeepsTheManifest(t *testing.T) {
 	if _, err := InstallSkills(agent); err != nil {
 		t.Fatal(err)
 	}
-	if err := InstallHooks(agent, f.bridge, f.checker); err != nil {
+	if err := InstallHooks(agent, f.bridge, &f.checker); err != nil {
 		t.Fatal(err)
 	}
 	cases := map[string]struct {
@@ -254,7 +319,7 @@ func TestInterruptedSaveKeepsTheManifest(t *testing.T) {
 		install          func() error
 	}{
 		"skills": {filepath.Join(agent.SkillsDirectory, "durin-hooks", ".durin-install.json"), filepath.Join(agent.SkillsDirectory, "durin-hooks", "SKILL.md"), func() error { _, err := InstallSkills(agent); return err }},
-		"hooks":  {filepath.Join(f.bridge.ConfigDirectory, "hooks", "claude.json"), agent.HookConfig.Path, func() error { return InstallHooks(agent, f.bridge, f.checker) }},
+		"hooks":  {filepath.Join(f.bridge.ConfigDirectory, "hooks", "claude.json"), agent.HookConfig.Path, func() error { return InstallHooks(agent, f.bridge, &f.checker) }},
 	}
 	defer func() { saveFileChange = SaveFileChange }()
 	for name, c := range cases {
@@ -283,7 +348,7 @@ func TestInterruptedSaveKeepsTheManifest(t *testing.T) {
 	// An edited OpenCode plugin is preserved.
 	opencode := AgentsFor(f.home, EnvMap{})["opencode"]
 	writeFile(t, opencode.HookConfig.Path, "// user plugin")
-	wantCliError(t, InstallHooks(opencode, f.bridge, f.checker), "Preserving")
+	wantCliError(t, InstallHooks(opencode, f.bridge, &f.checker), "Preserving")
 }
 
 func TestCustomHarnessDescriptor(t *testing.T) {
@@ -303,5 +368,94 @@ func TestCustomHarnessDescriptor(t *testing.T) {
 		writeFile(t, path, bad)
 		_, err := ReadCustomHarness(path)
 		wantCliError(t, err, "Invalid custom harness")
+	}
+}
+
+// `hooks run --event` forwards every payload to the observer; capture events print the
+// harness's continue answer, the pre-tool event still runs the checker with its exit codes,
+// and capture events never fail even without an installation or an observer.
+func TestHookEventsForwardAndContinue(t *testing.T) {
+	f := newHookFixture(t)
+	dir, err := os.MkdirTemp("", "hk") // short: Unix socket paths are limited
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	f.bridge.ConfigDirectory = dir
+	agents := AgentsFor(f.home, EnvMap{})
+	for _, format := range []string{"claude", "cursor"} {
+		if err := InstallHooks(agents[format], f.bridge, &f.checker); err != nil {
+			t.Fatal(err)
+		}
+	}
+	address := observer.Address(dir)
+	_ = os.MkdirAll(filepath.Dir(address), 0o700)
+	l, err := net.Listen("unix", address)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	received := make(chan observer.Message, 10)
+	go func() {
+		for {
+			conn, err := l.Accept()
+			if err != nil {
+				return
+			}
+			data, _ := observer.ReadFrame(conn)
+			conn.Close()
+			var m observer.Message
+			_ = json.Unmarshal(data, &m)
+			received <- m
+		}
+	}()
+	run := func(harness, event, input string) (string, error) {
+		var out bytes.Buffer
+		err := RunHookEvent(&CliOptions{Directory: dir}, &IO{Stdin: strings.NewReader(input), Stdout: &out}, harness, event)
+		return out.String(), err
+	}
+	for _, c := range []struct{ harness, event, input, output string }{
+		{"claude", "UserPromptSubmit", `{"prompt":"hi"}`, ""},
+		{"cursor", "beforeSubmitPrompt", `{"prompt":"hi"}`, `{"continue":true}` + "\n"},
+		{"cursor", "afterFileEdit", `not json`, "{}\n"},
+		{"cursor", "preToolUse", `{"conversation_id":"c","tool_use_id":"t","tool_name":"x","tool_input":{}}`, `{"permission":"allow"}` + "\n"},
+		{"claude", "PreToolUse", canonicalEvent, ""},
+	} {
+		out, err := run(c.harness, c.event, c.input)
+		if err != nil || out != c.output {
+			t.Fatalf("%s %s: %q %v", c.harness, c.event, out, err)
+		}
+		select {
+		case m := <-received:
+			if m.Type != observer.TypeEvent || m.Harness != c.harness || m.Event != c.event || m.PID != os.Getpid() || !strings.Contains(string(m.Payload), strings.Trim(c.input, "{}")[:5]) {
+				t.Fatalf("forwarded %+v", m)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatalf("%s %s was not forwarded", c.harness, c.event)
+		}
+	}
+	// The checker's denial and invalid input keep their errors on the pre-tool event.
+	_, err = run("claude", "PreToolUse", strings.Replace(canonicalEvent, `{"resource":"handbook"}`, `{"code":2}`, 1))
+	wantCliError(t, err, "denied")
+	if _, err = run("cursor", "preToolUse", `[]`); err == nil {
+		t.Fatal("accepted a non-object pre-tool event")
+	}
+	_, err = run("codex", "PreToolUse", canonicalEvent) // no installation: fail closed
+	wantCliError(t, err, "No local checker configured")
+	l.Close()
+	if out, err := run("codex", "Stop", `{}`); err != nil || out != "" {
+		t.Fatalf("capture without installation or observer: %q %v", out, err)
+	}
+	for args, capture := range map[string]bool{
+		"hooks run --harness claude --event Stop":           true,
+		"hooks run --harness claude --event=PreToolUse":     false,
+		"hooks run --harness cursor --event preToolUse":     false,
+		"hooks run --harness opencode --event session.idle": true,
+		"hooks run --harness claude":                        false,
+		"hooks status --event Stop":                         false,
+	} {
+		if got := IsCaptureHook(strings.Fields(args)); got != capture {
+			t.Errorf("%s: %v", args, got)
+		}
 	}
 }

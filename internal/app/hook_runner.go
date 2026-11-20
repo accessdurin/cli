@@ -15,18 +15,21 @@ import (
 )
 
 // HookFormats are the hook configuration dialects.
-var HookFormats = []string{"claude", "codex", "cursor", "windsurf", "opencode", "gemini", "copilot", "custom"}
+var HookFormats = []string{"claude", "codex", "cursor", "windsurf", "opencode", "gemini", "copilot", "pi", "kiro", "custom"}
 
 var harnessPattern = regexp.MustCompile(`^[a-z][a-z0-9-]{0,63}$`)
 
-// HookInstallationSchema is hookInstallationSchema: <config>/hooks/<harness>.json.
+// HookInstallationSchema is hookInstallationSchema: <config>/hooks/<harness>.json. The
+// checker is absent when hooks only capture; handlers maps each registered event to the
+// handler written for it.
 var HookInstallationSchema = zod.Object(
 	zod.F("format", zod.Enum(HookFormats...)),
 	zod.F("harness", zod.String().Regex(harnessPattern)),
-	zod.F("checker", CheckerSchema),
+	zod.F("checker", zod.Optional(CheckerSchema)),
 	zod.F("target", zod.String()),
 	zod.F("installedAt", zod.String()),
 	zod.F("handler", zod.Optional(recordSchema)),
+	zod.F("handlers", zod.Optional(zod.Record(recordSchema))),
 	zod.F("assetDigest", zod.String().Regex(regexp.MustCompile(`^[a-f0-9]{64}$`))),
 ).Strict()
 
@@ -34,10 +37,11 @@ var HookInstallationSchema = zod.Object(
 type HookInstallation struct {
 	Format      string
 	Harness     string
-	Checker     contracts.HookChecker
+	Checker     *contracts.HookChecker // nil when hooks only capture
 	Target      string
 	InstalledAt string
 	Handler     *jsjson.Object // nil when absent
+	Handlers    map[string]*jsjson.Object
 	AssetDigest string
 }
 
@@ -51,11 +55,20 @@ func ParseHookInstallation(value jsjson.Value) (HookInstallation, error) {
 	h := HookInstallation{}
 	h.Format, _ = o.GetString("format")
 	h.Harness, _ = o.GetString("harness")
-	checker, _ := o.GetObject("checker")
-	h.Checker = checkerFrom(checker)
+	if checker, ok := o.GetObject("checker"); ok {
+		c := checkerFrom(checker)
+		h.Checker = &c
+	}
 	h.Target, _ = o.GetString("target")
 	h.InstalledAt, _ = o.GetString("installedAt")
 	h.Handler, _ = o.GetObject("handler")
+	if handlers, ok := o.GetObject("handlers"); ok {
+		h.Handlers = map[string]*jsjson.Object{}
+		for _, key := range handlers.Keys() {
+			v, _ := handlers.GetObject(key)
+			h.Handlers[key] = v
+		}
+	}
 	h.AssetDigest, _ = o.GetString("assetDigest")
 	return h, nil
 }
@@ -95,6 +108,10 @@ func readHookInput(input io.Reader) (jsjson.Value, error) {
 	if err != nil {
 		return nil, err
 	}
+	return parseHookInput(data)
+}
+
+func parseHookInput(data []byte) (jsjson.Value, error) {
 	if len(data) > maxHookInput {
 		return nil, clierror.New("Local hook input exceeds 1 MiB.")
 	}
@@ -115,7 +132,10 @@ func RunHook(installation HookInstallation, input io.Reader) error {
 	if err != nil {
 		return err
 	}
-	checker, err := ValidateChecker(CheckerJSON(installation.Checker))
+	if installation.Checker == nil {
+		return clierror.New("No local checker configured. Run durin in an interactive terminal.")
+	}
+	checker, err := ValidateChecker(CheckerJSON(*installation.Checker))
 	if err != nil {
 		return err
 	}

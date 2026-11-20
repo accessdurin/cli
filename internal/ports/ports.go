@@ -119,9 +119,12 @@ type SetupAccountQuestions interface {
 
 // IntegrationsResult reports what setup installed besides the MCP bridge.
 type IntegrationsResult struct {
-	Skills int
-	Hooks  bool
-	Custom bool
+	Skills  int
+	Hooks   bool
+	Checker bool // a local pre-tool checker is configured
+	Custom  bool
+	// Observer describes the observer service setup installed (empty when not attempted).
+	Observer string
 }
 
 // SetupReady is the summary setup shows when it finishes.

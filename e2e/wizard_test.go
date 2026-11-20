@@ -210,6 +210,7 @@ func TestWizard(t *testing.T) {
 	e.Executable("claude", "exit 0\n")
 	opened := e.browser()
 	check := e.checker()
+	systemctl := e.fakeSystemctl()
 	descriptor := filepath.Join(e.Root, "checker.json")
 	e.WriteFile(descriptor, `{"command":"`+check+`","args":["--client","claude"],"timeoutMs":4000}`, 0o600)
 
@@ -250,6 +251,7 @@ func TestWizard(t *testing.T) {
 	e.noteFile("~/.claude.json", filepath.Join(e.Home, ".claude.json"))
 	e.noteFile("~/.claude/settings.json", filepath.Join(e.Home, ".claude", "settings.json"))
 	e.noteFile("hook installation", filepath.Join(e.Config, "hooks", "claude.json"))
+	e.Note("systemctl calls", ReadFile(systemctl))
 	e.Note("skills", e.Tree(filepath.Join(e.Home, ".claude", "skills")))
 	e.noteFile("durin-tools skill manifest", filepath.Join(e.Home, ".claude", "skills", "durin-tools", ".durin-install.json"))
 	e.Note("credentials", e.CredentialKeys("mcp:"+id))
