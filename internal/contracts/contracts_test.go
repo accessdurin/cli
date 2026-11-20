@@ -154,6 +154,10 @@ func TestHostFunctionsMatchNode(t *testing.T) {
 			}
 		case "canonicalIssuer":
 			got, err = CanonicalIssuer(CliHostRole(str(c.Args[0])), str(c.Args[1]), hostScope(c.Args[2]))
+		case "comparableIssuer":
+			got, err = ComparableIssuer(CliHostRole(str(c.Args[0])), str(c.Args[1]), hostScope(c.Args[2]))
+		case "roundTripCliUrl":
+			got = RoundTripCliURL(str(c.Args[0]))
 		case "deploymentHostAllowlist":
 			var list CliHostAllowlist
 			list, err = DeploymentHostAllowlist(hostScope(c.Args[0]))

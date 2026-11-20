@@ -110,24 +110,34 @@ func (p FileProfiles) load(selected string) (contracts.CliProfile, error) {
 
 var profileFileName = regexp.MustCompile(`^[a-f0-9]{64}\.json$`)
 
-// List loads every saved profile, in directory order.
-func (p FileProfiles) List() ([]contracts.CliProfile, error) {
+func refusalReason(err error) string {
+	if expected, ok := clierror.As(err); ok {
+		return expected.Message
+	}
+	return "Invalid Durin profile binding."
+}
+
+// List loads every saved profile, in directory order. A profile that no longer loads is
+// listed as refused, with its reason, rather than failing the whole list.
+func (p FileProfiles) List() (ports.ProfileList, error) {
 	entries, err := os.ReadDir(filepath.Join(p.Directory, "profiles"))
 	if err != nil && !missing(err) {
-		return nil, err
+		return ports.ProfileList{}, err
 	}
-	profiles := []contracts.CliProfile{}
+	list := ports.ProfileList{Profiles: []contracts.CliProfile{}, Refused: []ports.RefusedProfile{}}
 	for _, entry := range entries {
 		if !profileFileName.MatchString(entry.Name()) {
 			continue
 		}
-		profile, err := p.load(strings.TrimSuffix(entry.Name(), ".json"))
+		id := strings.TrimSuffix(entry.Name(), ".json")
+		profile, err := p.load(id)
 		if err != nil {
-			return nil, err
+			list.Refused = append(list.Refused, ports.RefusedProfile{ID: id, Reason: refusalReason(err)})
+			continue
 		}
-		profiles = append(profiles, profile)
+		list.Profiles = append(list.Profiles, profile)
 	}
-	return profiles, nil
+	return list, nil
 }
 
 // Activate makes id the active profile.
@@ -146,11 +156,19 @@ func (p FileProfiles) path(id string) (string, error) {
 	return filepath.Join(p.Directory, "profiles", id+".json"), nil
 }
 
-// ProfilesJSON is a list of profiles as printed.
-func ProfilesJSON(profiles []contracts.CliProfile) jsjson.Array {
+// ProfilesJSON is a list of profiles as printed. Accepted profiles keep their saved shape; a
+// refused one is in the same array as {id, refused: true, reason}.
+func ProfilesJSON(list ports.ProfileList) jsjson.Array {
 	out := jsjson.Array{}
-	for _, profile := range profiles {
+	for _, profile := range list.Profiles {
 		out = append(out, profile.JSON())
+	}
+	for _, refused := range list.Refused {
+		out = append(out, jsjson.Obj(
+			jsjson.KV("id", jsjson.String(refused.ID)),
+			jsjson.KV("refused", jsjson.Bool(true)),
+			jsjson.KV("reason", jsjson.String(refused.Reason)),
+		))
 	}
 	return out
 }

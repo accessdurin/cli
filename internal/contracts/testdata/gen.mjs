@@ -118,6 +118,30 @@ const scopes = [
   { ...selfHosted, resource: `https://other.example${personal}` },
   { ...selfHosted, mcpIssuer: 'https://user:pw@app.example.test/' },
   { ...selfHosted, mcpIssuer: 'https://app.example.test/?q' },
+  // #9: saved issuers are checked as written.
+  { ...production, accountIssuer: 'https://auth.getdurin.com' },
+  {
+    ...production,
+    accountIssuer: 'https://auth.getdurin.com',
+    mcpIssuer: 'https://auth.getdurin.com/',
+  },
+  { ...production, accountIssuer: ' https://auth.getdurin.com' },
+  { ...production, accountIssuer: 'https://auth.getdurin.com\t' },
+  { ...production, accountIssuer: 'https://auth.getdurin.com\\' },
+  { ...production, accountIssuer: 'https://auth.getdurin.com.' },
+  {
+    ...production,
+    accountIssuer: 'https://auth.getdurin.com',
+    mcpIssuer: 'https://auth.getdurin.com//',
+  },
+  { ...staging, accountIssuer: 'https://resilient-tiger-64-staging.authkit.app' },
+  { ...selfHosted, mcpIssuer: 'HTTPS://app.example.test/' },
+  { ...selfHosted, mcpIssuer: 'https://app.example.test:443/' },
+  { ...selfHosted, mcpIssuer: 'https://app.example.test//' },
+  { ...selfHosted, mcpIssuer: 'https://app.example.test/\u0000' },
+  { ...selfHosted, mcpIssuer: 'https://app.example.test' },
+  { ...selfHosted, accountIssuer: 'https://tenant-1.authkit.app:443' },
+  { ...selfHosted, accountIssuer: 'https://TENANT-1.AUTHKIT.APP/' },
 ];
 const json = (value) => JSON.stringify(value);
 const schemaCases = [
@@ -193,6 +217,18 @@ const schemaCases = [
   [
     'cliAuthConfigSchema',
     '{"clientId":"c","issuer":"https://i","providerOrigin":"https://p","appOrigin":"https://a","x":1}',
+  ],
+  [
+    'cliAuthConfigSchema',
+    '{"clientId":"c","issuer":" https://i ","providerOrigin":"https://p","appOrigin":"https://a"}',
+  ],
+  [
+    'cliAuthConfigSchema',
+    '{"clientId":"c","issuer":"","providerOrigin":"https://p","appOrigin":"https://a"}',
+  ],
+  [
+    'cliAuthConfigSchema',
+    '{"clientId":"c","issuer":"nope","providerOrigin":"https://p","appOrigin":"https://a"}',
   ],
   [
     'deviceChallengeSchema',
@@ -345,6 +381,16 @@ const hostUrls = [
   'https://evil.example/',
   'nope',
   'foo://a%zz/',
+  'HTTPS://app.example.test/',
+  'https://app.example.test//',
+  'https://app.example.test:443/',
+  'https://app.example.test/x/',
+  'https://app.example.test/\u0000',
+  'https://app.example.test\\',
+  'https://app.example.test /',
+  'https://t.authkit.app:443',
+  'https://T.AUTHKIT.APP/',
+  'https://t.authkit.app:8443',
 ];
 const functionCases = [];
 const record = (fn, args, call) => {
@@ -371,8 +417,15 @@ for (const scope of hostScopes) {
       record('canonicalIssuer', [role, value, scope], () =>
         host.canonicalIssuer(role, value, scope),
       );
+  for (const role of ['mcpIssuer', 'accountIssuer'])
+    for (const value of hostUrls)
+      record('comparableIssuer', [role, value, scope], () =>
+        host.comparableIssuer(role, value, scope),
+      );
   record('deploymentHostAllowlist', [scope], () => host.deploymentHostAllowlist(scope));
 }
+for (const value of [...hostUrls, ...urls, 'https://h', 'https://h/', 'https://h//x', 'https://h?'])
+  record('roundTripCliUrl', [value], () => url.roundTripCliUrl(value));
 for (const allowlist of allowlists)
   for (const value of [
     ...hostUrls,

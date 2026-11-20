@@ -114,15 +114,70 @@ exit: 0
 ]
 --- stderr
 ## durin profiles list --config-dir <TMP>/config
-exit: 1
+exit: 0
 --- stdout
+(sorted by principalId for comparison; keys sorted)
+[
+  {
+    "id": "<PROFILE:user_03>",
+    "reason": "Invalid Durin profile binding. Run durin to configure it again.",
+    "refused": true
+  },
+  {
+    "accountClientId": "client_account",
+    "accountIssuer": "<ORIGIN>",
+    "appOrigin": "<ORIGIN>",
+    "development": true,
+    "environment": "production",
+    "id": "<PROFILE:user_01>",
+    "mcpIssuer": "<ORIGIN>",
+    "organizationId": "org_1",
+    "principalId": "user_01",
+    "resource": "<ORIGIN>/mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "version": 1,
+    "workosOrganizationId": "org_wos_1"
+  },
+  {
+    "accountClientId": "client_account",
+    "accountIssuer": "<ORIGIN>",
+    "appOrigin": "<ORIGIN>",
+    "development": true,
+    "environment": "production",
+    "id": "<PROFILE:user_02>",
+    "mcpIssuer": "<ORIGIN>",
+    "organizationId": "org_1",
+    "principalId": "user_02",
+    "resource": "<ORIGIN>/mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "version": 1,
+    "workosOrganizationId": "org_wos_1"
+  }
+]
 --- stderr
-Invalid Durin profile binding. Run durin to configure it again.
 ## durin profiles use <PROFILE:user_03> --config-dir <TMP>/config
 exit: 1
 --- stdout
 --- stderr
 Invalid Durin profile binding. Run durin to configure it again.
+## durin logout --profile <PROFILE:user_03> --config-dir <TMP>/config
+exit: 0
+--- stdout
+{
+  "profile": "<PROFILE:user_03>",
+  "removed": true,
+  "reason": "Invalid Durin profile binding. Run durin to configure it again.",
+  "detail": "Removed local credentials for <PROFILE:user_03>. The server session was not revoked because its issuer isn't trusted; it will expire on its own."
+}
+--- stderr
+## requests
+## credentials
+
+## files after refused logout
+active file 0600
+locks dir 0700
+profiles dir 0700
+profiles/<PROFILE:user_01>.json file 0600
+profiles/<PROFILE:user_02>.json file 0600
+profiles/notes.txt file 0600
 ## durin profiles use <PROFILE:user_05> --config-dir <TMP>/config
 exit: 1
 --- stdout
@@ -141,14 +196,12 @@ exit: 1
 --- stderr
 The MCP sign-in server is on evil.example, but the durin app at app.getdurin.com uses auth.getdurin.com. Run durin to sign in again.
 ## durin profiles use <PROFILE:user_08> --config-dir <TMP>/config
-exit: 0
+exit: 1
 --- stdout
-{
-  "activeProfile": "<PROFILE:user_08>"
-}
 --- stderr
+The MCP sign-in server must be exactly auth.getdurin.com over HTTPS, in lowercase, with no port, path, query or user name. Run durin to sign in again.
 ## active
-<PROFILE:user_08>
+<PROFILE:user_06>
 ## durin mcp endpoint --profile bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb --config-dir <TMP>/config
 exit: 1
 --- stdout

@@ -67,9 +67,9 @@ func TestProfilesStayPinnedAndRejectTamperedBindings(t *testing.T) {
 func TestProfilesRefuseUnusedHostsEvenWithAnIntactBinding(t *testing.T) {
 	dir := tempDir(t)
 	scope := testScope
-	scope.AppOrigin, scope.AccountIssuer = "https://app.getdurin.com", "https://auth.getdurin.com/"
+	scope.AppOrigin, scope.AccountIssuer = "https://app.getdurin.com", "https://auth.getdurin.com"
 	scope.Resource = "https://evil-durin.com/mcp/u/" + strings.Repeat("a", 64)
-	scope.McpIssuer = "https://auth.getdurin.com/"
+	scope.McpIssuer = "https://auth.getdurin.com"
 	id := contracts.CliProfile{CliProfileScope: scope}.JSON()
 	id.Delete("version")
 	id.Delete("id")
@@ -79,8 +79,13 @@ func TestProfilesRefuseUnusedHostsEvenWithAnIntactBinding(t *testing.T) {
 	profiles := NewFileProfiles(dir)
 	_, err := profiles.Load("")
 	wantCliError(t, err, "The MCP endpoint is on evil-durin.com, but the durin app at app.getdurin.com uses mcp.getdurin.com or app.getdurin.com. Run durin to sign in again.")
-	_, err = profiles.List()
-	wantCliError(t, err, "evil-durin.com")
+	listed, err := profiles.List()
+	if err != nil || len(listed.Profiles) != 0 || len(listed.Refused) != 1 || listed.Refused[0].ID != sum {
+		t.Fatalf("list: %+v %v", listed, err)
+	}
+	if reason := listed.Refused[0].Reason; !strings.Contains(reason, "evil-durin.com") || !strings.Contains(reason, "Run durin to sign in again.") {
+		t.Fatalf("refusal reason: %q", reason)
+	}
 }
 
 func TestProfileLockSerializesAndReleases(t *testing.T) {
