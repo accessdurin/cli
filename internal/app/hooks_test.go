@@ -453,6 +453,17 @@ func TestHookEventsForwardAndContinue(t *testing.T) {
 		"hooks run --harness opencode --event session.idle": true,
 		"hooks run --harness claude":                        false,
 		"hooks status --event Stop":                         false,
+		// Decided by event names alone, every --event value counted.
+		"hooks run --harness custom-acme --event PreToolUse":               false,
+		"hooks run --harness claude --event Stop --event PreToolUse":       false,
+		"hooks run --harness claude --event=PreToolUse --event Stop":       false,
+		"hooks run --harness claude --event Stop --event SessionEnd":       true,
+		"hooks run --harness claude --app-url http://x --event Stop":       true,
+		"hooks run --harness claude --app-url http://x --event PreToolUse": false,
+		"hooks run --nope --event PreToolUse":                              false,
+		"hooks run --harness cursor --event preToolUse --nope":             false,
+		"hooks run --harness pi --event tool_call":                         false,
+		"hooks run --harness claude --event":                               false,
 	} {
 		if got := IsCaptureHook(strings.Fields(args)); got != capture {
 			t.Errorf("%s: %v", args, got)

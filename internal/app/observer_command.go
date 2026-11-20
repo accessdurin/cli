@@ -18,6 +18,7 @@ import (
 
 	"github.com/accessdurin/cli/internal/clierror"
 	"github.com/accessdurin/cli/internal/credentials"
+	"github.com/accessdurin/cli/internal/jsjson"
 	"github.com/accessdurin/cli/internal/observer"
 	"github.com/accessdurin/cli/internal/observer/service"
 	"github.com/accessdurin/cli/internal/version"
@@ -60,22 +61,29 @@ func ForwardHookInput(directory, harness string, stdin io.Reader) (io.Reader, fu
 }
 
 // IsCaptureHook reports whether args run a capture-only hook event: one that must never
-// fail or block the harness, whatever goes wrong.
+// fail or block the harness, whatever goes wrong. It decides from event names alone and never
+// reads a record (which may sit in a directory durin refused): a run is capture-only only
+// when it names an event and every --event value, however repeated, is an event no format
+// checks.
 func IsCaptureHook(args []string) bool {
 	if len(args) < 2 || args[0] != "hooks" || args[1] != "run" {
 		return false
 	}
-	harness, event := flagValue(args, "harness"), flagValue(args, "event")
-	if event == "" {
-		return false
+	decoded := make([]string, len(args))
+	for i, a := range args {
+		decoded[i] = jsjson.DecodeUTF8([]byte(a))
 	}
-	options, err := ParseCliOptions(args)
-	if err != nil {
-		// No directory, so no record: fail closed for any event some format checks.
-		return !isCheckEventName(event)
+	events := 0
+	for _, token := range argsToTokens(decoded) {
+		if token.positional || token.name != "event" {
+			continue
+		}
+		if token.value == nil || isCheckEventName(*token.value) {
+			return false
+		}
+		events++
 	}
-	e, known, _, _ := resolveHookEvent(options.Directory, harness, event)
-	return !known || !e.Check
+	return events > 0
 }
 
 func isCheckEventName(event string) bool {
@@ -89,30 +97,13 @@ func isCheckEventName(event string) bool {
 	return false
 }
 
-// resolveHookEvent looks event up under the format the harness's installation record names
-// (a custom harness may use a built-in format), or under the harness id without a record.
-// IsCaptureHook and RunHookEvent must both use it, so a check event is never treated as
-// capture-only.
-func resolveHookEvent(directory, harness, event string) (HookEvent, bool, HookInstallation, error) {
-	format := harness
-	record, recordErr := ReadHookInstallation(directory, harness)
-	if recordErr == nil {
-		format = record.Format
+// SingleHookFlags rejects a hooks run that repeats --harness or --event: the parser keeps
+// the last value, and durin's handlers never repeat them.
+func SingleHookFlags(options *CliOptions) error {
+	if options.Values.Count("harness") > 1 || options.Values.Count("event") > 1 {
+		return clierror.New("Give --harness and --event at most once.")
 	}
-	e, known := lookupHookEvent(format, event)
-	return e, known, record, recordErr
-}
-
-func flagValue(args []string, name string) string {
-	for i, a := range args {
-		if a == "--"+name && i+1 < len(args) {
-			return args[i+1]
-		}
-		if len(a) > len(name)+3 && a[:len(name)+3] == "--"+name+"=" {
-			return a[len(name)+3:]
-		}
-	}
-	return ""
+	return nil
 }
 
 // RunHookEvent is `durin hooks run --event <name>`: the payload is forwarded to the
@@ -120,10 +111,23 @@ func flagValue(args []string, name string) string {
 // (same exit codes and fail-closed errors), and every other event continues.
 func RunHookEvent(options *CliOptions, streams *IO, harness, event string) error {
 	data, _ := io.ReadAll(io.LimitReader(streams.Stdin, maxHookInput+1))
-	e, known, record, recordErr := resolveHookEvent(options.Directory, harness, event)
+	format := harness
+	record, recordErr := ReadHookInstallation(options.Directory, harness)
+	if recordErr == nil {
+		format = record.Format
+	}
 	valid := harnessPattern.MatchString(harness) && hookEventPattern.MatchString(event)
+	e, known := lookupHookEvent(format, event)
 	if valid {
 		defer forwardHookEvent(options.Directory, harness, event, data)()
+	}
+	if !known && isCheckEventName(event) {
+		// A check event without a usable record, or under a format that has no such check,
+		// fails closed instead of passing as capture.
+		if recordErr != nil {
+			return recordErr
+		}
+		return clierror.New("This hook installation has no check for this event. Run durin in an interactive terminal.")
 	}
 	output := ""
 	if known && e.Check {
