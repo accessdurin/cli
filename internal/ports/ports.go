@@ -137,6 +137,8 @@ type IntegrationsResult struct {
 	Custom  bool
 	// Observer describes the observer service setup installed (empty when not attempted).
 	Observer string
+	// Reporting is true when calls to local MCP servers are reported to the organization.
+	Reporting bool
 }
 
 // SetupReady is the summary setup shows when it finishes.
@@ -153,6 +155,9 @@ type SetupAgentQuestions interface {
 	Choose(ctx context.Context) (string, error)
 	Custom(ctx context.Context) (contracts.AgentConfig, error)
 	Checker(ctx context.Context, agent contracts.AgentConfig) (*contracts.HookChecker, error)
+	// Reporting asks whether to report calls to local MCP servers, with their arguments, to
+	// the organization. endpoint is true when Durin Endpoint's helper is installed.
+	Reporting(ctx context.Context, agent contracts.AgentConfig, endpoint bool) (bool, error)
 	Integrations(result IntegrationsResult)
 	Configured(path string)
 	Ready(result SetupReady)

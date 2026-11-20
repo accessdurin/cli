@@ -38,3 +38,12 @@ func hideWindow(cmd *exec.Cmd) {
 
 // getuid stands in for process.getuid, which Node does not have on Windows.
 var getuid = func() uint32 { return 0 }
+
+// detach is spawn's detached with windowsHide: the child gets its own process group and no
+// console window, so it outlives the hook.
+func detach(cmd *exec.Cmd) {
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		HideWindow:    true,
+		CreationFlags: windows.CREATE_NEW_PROCESS_GROUP | windows.DETACHED_PROCESS,
+	}
+}

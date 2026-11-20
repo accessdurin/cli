@@ -168,6 +168,21 @@ func (p *prompter) selectOne(ctx context.Context, message string, options []prom
 	return value, nil
 }
 
+// confirm is p.confirm: yes or no, starting on initial.
+func (p *prompter) confirm(ctx context.Context, message string, initial bool) (bool, error) {
+	value := initial
+	field := huh.NewConfirm().Title(message).Affirmative("Yes").Negative("No").Value(&value)
+	if err := p.run(ctx, field); err != nil {
+		return false, p.guard(message, err)
+	}
+	answer := "No"
+	if value {
+		answer = "Yes"
+	}
+	p.answered(message, answer)
+	return value, nil
+}
+
 // text is p.text: what the user typed, once validate (which returns an error message, or ""
 // to accept) accepts it.
 func (p *prompter) text(ctx context.Context, message string, validate func(string) string) (string, error) {

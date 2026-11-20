@@ -91,6 +91,11 @@ func TestHookInstallAllHarnesses(t *testing.T) {
 		term.Type(strings.Repeat(keyDown, i) + keyEnter)
 		term.Expect("Configure local pre-tool checks?")
 		term.Type(keyDown + keyEnter) // skip: capture-only hooks
+		// claude, codex, cursor and windsurf report local MCP tool calls.
+		if i < 4 {
+			term.Expect("Report local MCP tool calls to your organization?")
+			term.Type(keyEnter)
+		}
 		term.Expect("Durin observer: installed as a systemd-user service.")
 		term.Expect("Setup complete")
 		code := term.Wait()

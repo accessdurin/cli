@@ -16,7 +16,9 @@ PermissionRequest matcher=.* {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'c
 PostCompact {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'PostCompact'","timeout":10,"type":"command"}
 PostModelSwitch {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'PostModelSwitch'","timeout":10,"type":"command"}
 PostToolBatch {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'PostToolBatch'","timeout":10,"type":"command"}
+PostToolUse matcher=mcp__.* {"async":true,"command":"<LAUNCHER> 'hooks' 'report' '--harness' 'claude' '--config-dir' '<TMP>/config'","timeout":30,"type":"command"}
 PostToolUse matcher=.* {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'PostToolUse'","timeout":10,"type":"command"}
+PostToolUseFailure matcher=mcp__.* {"async":true,"command":"<LAUNCHER> 'hooks' 'report' '--harness' 'claude' '--config-dir' '<TMP>/config'","timeout":30,"type":"command"}
 PostToolUseFailure matcher=.* {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'PostToolUseFailure'","timeout":10,"type":"command"}
 PreCompact {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'PreCompact'","timeout":10,"type":"command"}
 PreToolUse matcher=.* {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config' '--event' 'PreToolUse'","timeout":10,"type":"command"}
@@ -41,6 +43,7 @@ Interrupt {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'codex' '--config-dir
 PermissionRequest matcher=.* {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'codex' '--config-dir' '<TMP>/config' '--event' 'PermissionRequest'","timeout":10,"type":"command"}
 PostCompact {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'codex' '--config-dir' '<TMP>/config' '--event' 'PostCompact'","timeout":10,"type":"command"}
 PostModelRequest {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'codex' '--config-dir' '<TMP>/config' '--event' 'PostModelRequest'","timeout":10,"type":"command"}
+PostToolUse matcher=mcp__.* {"async":true,"command":"<LAUNCHER> 'hooks' 'report' '--harness' 'codex' '--config-dir' '<TMP>/config'","timeout":30,"type":"command"}
 PostToolUse matcher=.* {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'codex' '--config-dir' '<TMP>/config' '--event' 'PostToolUse'","timeout":10,"type":"command"}
 PreCompact {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'codex' '--config-dir' '<TMP>/config' '--event' 'PreCompact'","timeout":10,"type":"command"}
 PreModelRequest {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'codex' '--config-dir' '<TMP>/config' '--event' 'PreModelRequest'","timeout":10,"type":"command"}
@@ -59,6 +62,7 @@ exit: 0
 afterAgentResponse {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'cursor' '--config-dir' '<TMP>/config' '--event' 'afterAgentResponse'","timeout":10}
 afterAgentThought {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'cursor' '--config-dir' '<TMP>/config' '--event' 'afterAgentThought'","timeout":10}
 afterFileEdit {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'cursor' '--config-dir' '<TMP>/config' '--event' 'afterFileEdit'","timeout":10}
+afterMCPExecution {"command":"<LAUNCHER> 'hooks' 'report' '--harness' 'cursor' '--config-dir' '<TMP>/config'","timeout":10}
 afterMCPExecution {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'cursor' '--config-dir' '<TMP>/config' '--event' 'afterMCPExecution'","timeout":10}
 afterShellExecution {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'cursor' '--config-dir' '<TMP>/config' '--event' 'afterShellExecution'","timeout":10}
 afterTabFileEdit {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'cursor' '--config-dir' '<TMP>/config' '--event' 'afterTabFileEdit'","timeout":10}
@@ -78,6 +82,7 @@ exit: 0
 ## windsurf hooks .codeium/windsurf/hooks.json
 post_cascade_response {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'windsurf' '--config-dir' '<TMP>/config' '--event' 'post_cascade_response'","show_output":false}
 post_cascade_response_with_transcript {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'windsurf' '--config-dir' '<TMP>/config' '--event' 'post_cascade_response_with_transcript'","show_output":false}
+post_mcp_tool_use {"command":"<LAUNCHER> 'hooks' 'report' '--harness' 'windsurf' '--config-dir' '<TMP>/config'","show_output":false}
 post_mcp_tool_use {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'windsurf' '--config-dir' '<TMP>/config' '--event' 'post_mcp_tool_use'","show_output":false}
 post_read_code {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'windsurf' '--config-dir' '<TMP>/config' '--event' 'post_read_code'","show_output":false}
 post_run_command {"command":"<LAUNCHER> 'hooks' 'run' '--harness' 'windsurf' '--config-dir' '<TMP>/config' '--event' 'post_run_command'","show_output":false}

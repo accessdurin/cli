@@ -21,6 +21,9 @@ Usage:
   durin hooks run --harness <id> Run a configured local pre-tool checker (JSON stdin)
   durin hooks run --harness <id> --event <name>
                                 Handle one harness hook event (JSON stdin)
+  durin hooks report --harness <id>
+                                Report a local MCP tool call from a post-tool hook (JSON stdin)
+  durin hooks flush             Send reported local MCP tool calls waiting on this computer
   durin observer status         Show the local observer service and capture status
   durin observer install | remove
                                 Install or remove the observer service
@@ -35,7 +38,7 @@ Options:
   --force                       logout: clear the local grant even if revocation fails
   --app-url <origin>            Durin app origin (default: https://app.getdurin.com)
   --dev                        Allow loopback hosts and HTTP for local development
-  --harness <id>                hooks run: selected built-in or custom harness
+  --harness <id>                hooks run/report: selected built-in or custom harness
   --event <name>                hooks run: the harness hook event being handled
   -h, --help                   Show this help
 
@@ -64,6 +67,9 @@ Usage:
   durin hooks run --harness <id> Run a configured local pre-tool checker (JSON stdin)
   durin hooks run --harness <id> --event <name>
                                 Handle one harness hook event (JSON stdin)
+  durin hooks report --harness <id>
+                                Report a local MCP tool call from a post-tool hook (JSON stdin)
+  durin hooks flush             Send reported local MCP tool calls waiting on this computer
   durin observer status         Show the local observer service and capture status
   durin observer install | remove
                                 Install or remove the observer service
@@ -78,7 +84,7 @@ Options:
   --force                       logout: clear the local grant even if revocation fails
   --app-url <origin>            Durin app origin (default: https://app.getdurin.com)
   --dev                        Allow loopback hosts and HTTP for local development
-  --harness <id>                hooks run: selected built-in or custom harness
+  --harness <id>                hooks run/report: selected built-in or custom harness
   --event <name>                hooks run: the harness hook event being handled
   -h, --help                   Show this help
 
@@ -107,6 +113,9 @@ Usage:
   durin hooks run --harness <id> Run a configured local pre-tool checker (JSON stdin)
   durin hooks run --harness <id> --event <name>
                                 Handle one harness hook event (JSON stdin)
+  durin hooks report --harness <id>
+                                Report a local MCP tool call from a post-tool hook (JSON stdin)
+  durin hooks flush             Send reported local MCP tool calls waiting on this computer
   durin observer status         Show the local observer service and capture status
   durin observer install | remove
                                 Install or remove the observer service
@@ -121,7 +130,7 @@ Options:
   --force                       logout: clear the local grant even if revocation fails
   --app-url <origin>            Durin app origin (default: https://app.getdurin.com)
   --dev                        Allow loopback hosts and HTTP for local development
-  --harness <id>                hooks run: selected built-in or custom harness
+  --harness <id>                hooks run/report: selected built-in or custom harness
   --event <name>                hooks run: the harness hook event being handled
   -h, --help                   Show this help
 
