@@ -459,3 +459,41 @@ func TestHookEventsForwardAndContinue(t *testing.T) {
 		}
 	}
 }
+
+func TestWindsurfConversationAndTurnIDs(t *testing.T) {
+	normalize := func(input string) *jsjson.Object {
+		t.Helper()
+		raw, err := jsjson.Parse([]byte(input))
+		if err != nil {
+			t.Fatal(err)
+		}
+		out, err := NormalizeHook(raw, "windsurf")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	const tool = `"agent_action_name":"pre_mcp_tool_use","tool_info":{"mcp_server_name":"sandbox","mcp_tool_name":"read","mcp_tool_arguments":{}}`
+	mapped := normalize(`{` + tool + `,"trajectory_id":"conversation","execution_id":"turn"}`)
+	if s, _ := mapped.GetString("session_id"); s != "conversation" {
+		t.Fatalf("session_id = %q, want the trajectory_id", s)
+	}
+	if s, _ := mapped.GetString("turn_id"); s != "turn" {
+		t.Fatalf("turn_id = %q, want the execution_id", s)
+	}
+	native := normalize(`{` + tool + `,"session_id":"native","trajectory_id":"other"}`)
+	if s, _ := native.GetString("session_id"); s != "native" {
+		t.Fatalf("session_id = %q, want the native session_id", s)
+	}
+	uuid := regexp.MustCompile(`^[0-9a-f-]{36}$`)
+	anonymous := `{` + tool + `,"trajectory_id":"","execution_id":""}`
+	first, second := normalize(anonymous), normalize(anonymous)
+	firstID, _ := first.GetString("session_id")
+	secondID, _ := second.GetString("session_id")
+	if !uuid.MatchString(firstID) || firstID == secondID {
+		t.Fatalf("calls without a conversation ID must get distinct opaque IDs: %q %q", firstID, secondID)
+	}
+	if _, ok := first.Get("turn_id"); ok {
+		t.Fatal("an empty execution_id must not become a turn_id")
+	}
+}

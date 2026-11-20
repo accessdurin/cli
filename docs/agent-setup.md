@@ -87,7 +87,7 @@ Sources for the native formats: [Claude skills](https://code.claude.com/docs/en/
 [Cursor skills](https://cursor.com/docs/skills),
 [Cursor hooks](https://cursor.com/docs/hooks),
 [Windsurf skills](https://docs.windsurf.com/de/windsurf/cascade/skills),
-[Windsurf hooks](https://docs.windsurf.com/de/windsurf/cascade/hooks),
+[Windsurf hooks](https://docs.windsurf.com/de/windsurf/cascade/hooks) (common input fields, including `trajectory_id` and `execution_id`),
 [OpenCode plugin APIs](https://opencode.ai/docs/build/plugins/migrate-v1/),
 [Gemini hooks](https://geminicli.com/docs/hooks/),
 [Gemini skills](https://geminicli.com/docs/cli/skills/),
@@ -137,10 +137,15 @@ The checker receives one JSON object on stdin:
 ```
 
 Optional normalized fields include `cwd`, `permission_mode`, `model`, and `turn_id`.
-Unrelated payload fields, including transcript paths, are dropped. Harnesses that
-do not provide a call identifier receive an opaque generated ID; Windsurf events
-without session IDs receive generated session IDs too, so those events cannot
-establish reliable session or transcript correlation.
+`durin_harness` is the installed harness ID (`claude`, `codex`, `cursor`, `windsurf`,
+`opencode`, `gemini`, `copilot`, `pi`, `kiro`, or a custom ID). Unrelated payload fields, including
+transcript paths, are dropped. Harnesses that do not provide a call identifier
+receive an opaque generated ID for each call.
+
+`session_id` is the harness's native session ID. Windsurf's is the Cascade
+`trajectory_id`, and its per-turn `execution_id` becomes `turn_id`. If a Windsurf
+event has no non-empty conversation ID, each call gets its own opaque ID, so calls
+are never linked to an unrelated conversation.
 
 Exit 0 continues; exit 2 denies. Other exits, startup errors, invalid input over
 1 MiB, and timeouts also return a hook failure with exit 2. The CLI does not print
