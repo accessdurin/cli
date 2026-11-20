@@ -1,0 +1,70 @@
+## durin logout --config-dir <TMP>/config
+exit: 1
+--- stdout
+{
+  "profile": "<PROFILE:user_01>",
+  "localMcpGrant": "retained",
+  "remoteMcpGrant": "failed",
+  "detail": "The authorization server could not confirm that access was revoked, so sign-out hasn’t finished. Until it does, MCP calls and durin tools are blocked for this profile. Run durin logout again to retry, or durin logout --force to sign out on this computer anyway and lift the block."
+}
+--- stderr
+## requests
+GET /.well-known/oauth-authorization-server [Mcp-Protocol-Version: 2025-11-25]
+POST /revoke [Content-Type: application/x-www-form-urlencoded] client_id=client-seeded&token=refresh-seeded&token_type_hint=refresh_token
+## revocations directory
+<PROFILE:user_01>.pending file 0600
+## credentials
+mcp:<PROFILE:user_01>:client (label keyring:mcp:<PROFILE:user_01>:client@com.getdurin.cli)
+mcp:<PROFILE:user_01>:tokens (label keyring:mcp:<PROFILE:user_01>:tokens@com.getdurin.cli)
+## durin tools list --config-dir <TMP>/config
+exit: 1
+--- stdout
+--- stderr
+Signing out of this durin profile hasn’t finished: the authorization server could not confirm that access was revoked, so MCP calls and durin tools are blocked for this profile. Run durin logout again to finish, or durin logout --force to sign out on this computer without the server.
+## durin verify --config-dir <TMP>/config
+exit: 1
+--- stdout
+--- stderr
+Signing out of this durin profile hasn’t finished: the authorization server could not confirm that access was revoked, so MCP calls and durin tools are blocked for this profile. Run durin logout again to finish, or durin logout --force to sign out on this computer without the server.
+## requests
+## durin logout --config-dir <TMP>/config
+exit: 1
+--- stdout
+{
+  "profile": "<PROFILE:user_01>",
+  "localMcpGrant": "retained",
+  "remoteMcpGrant": "failed",
+  "detail": "The authorization server could not confirm that access was revoked, so sign-out hasn’t finished. Until it does, MCP calls and durin tools are blocked for this profile. Run durin logout again to retry, or durin logout --force to sign out on this computer anyway and lift the block."
+}
+--- stderr
+## requests
+GET /.well-known/oauth-authorization-server [Mcp-Protocol-Version: 2025-11-25]
+POST /revoke [Content-Type: application/x-www-form-urlencoded] client_id=client-seeded&token=refresh-seeded&token_type_hint=refresh_token
+## durin logout --force --config-dir <TMP>/config
+exit: 1
+--- stdout
+{
+  "profile": "<PROFILE:user_01>",
+  "localMcpGrant": "cleared",
+  "remoteMcpGrant": "failed",
+  "detail": "Agent configuration is retained. Run durin to sign in again. Other organization MCP grants are unchanged."
+}
+--- stderr
+## requests
+GET /.well-known/oauth-authorization-server [Mcp-Protocol-Version: 2025-11-25]
+POST /revoke [Content-Type: application/x-www-form-urlencoded] client_id=client-seeded&token=refresh-seeded&token_type_hint=refresh_token
+## revocations directory
+
+## credentials
+
+## durin logout --config-dir <TMP>/config
+exit: 0
+--- stdout
+{
+  "profile": "<PROFILE:user_01>",
+  "localMcpGrant": "cleared",
+  "remoteMcpGrant": "unavailable",
+  "detail": "Agent configuration is retained. Run durin to sign in again. Other organization MCP grants are unchanged."
+}
+--- stderr
+## requests

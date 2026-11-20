@@ -1,0 +1,118 @@
+{
+ "tokens": [
+  {
+   "input": "{\"access_token\":\"a\",\"token_type\":\"Bearer\"}",
+   "ok": true,
+   "output": "{\"access_token\":\"a\",\"token_type\":\"Bearer\"}"
+  },
+  {
+   "input": "{\"token_type\":\"Bearer\",\"access_token\":\"a\",\"expires_in\":\"3600\",\"refresh_token\":\"r\",\"issuer\":\"https://i/\",\"extra\":1}",
+   "ok": true,
+   "output": "{\"access_token\":\"a\",\"token_type\":\"Bearer\",\"expires_in\":3600,\"refresh_token\":\"r\",\"issuer\":\"https://i/\"}"
+  },
+  {
+   "input": "{\"access_token\":\"a\",\"token_type\":\"Bearer\",\"expires_in\":\" 0x10 \"}",
+   "ok": true,
+   "output": "{\"access_token\":\"a\",\"token_type\":\"Bearer\",\"expires_in\":16}"
+  },
+  {
+   "input": "{\"access_token\":\"a\",\"token_type\":\"Bearer\",\"expires_in\":null}",
+   "ok": true,
+   "output": "{\"access_token\":\"a\",\"token_type\":\"Bearer\",\"expires_in\":0}"
+  },
+  {
+   "input": "{\"access_token\":\"a\",\"token_type\":\"Bearer\",\"expires_in\":true}",
+   "ok": true,
+   "output": "{\"access_token\":\"a\",\"token_type\":\"Bearer\",\"expires_in\":1}"
+  },
+  {
+   "input": "{\"access_token\":\"a\",\"token_type\":\"Bearer\",\"expires_in\":[7]}",
+   "ok": true,
+   "output": "{\"access_token\":\"a\",\"token_type\":\"Bearer\",\"expires_in\":7}"
+  },
+  {
+   "input": "{\"access_token\":\"a\",\"token_type\":\"Bearer\",\"expires_in\":\"abc\"}",
+   "ok": false,
+   "output": null
+  },
+  {
+   "input": "{\"access_token\":\"a\",\"token_type\":\"Bearer\",\"expires_in\":\"1e400\"}",
+   "ok": false,
+   "output": null
+  },
+  {
+   "input": "{\"access_token\":\"a\",\"token_type\":\"Bearer\",\"issuer\":5,\"scope\":\"s\",\"id_token\":\"i\"}",
+   "ok": true,
+   "output": "{\"access_token\":\"a\",\"id_token\":\"i\",\"token_type\":\"Bearer\",\"scope\":\"s\"}"
+  },
+  {
+   "input": "{\"access_token\":\"a\"}",
+   "ok": false,
+   "output": null
+  },
+  {
+   "input": "{\"access_token\":1,\"token_type\":\"Bearer\"}",
+   "ok": false,
+   "output": null
+  },
+  {
+   "input": "{\"access_token\":\"a\",\"token_type\":\"Bearer\",\"scope\":null}",
+   "ok": false,
+   "output": null
+  }
+ ],
+ "clients": [
+  {
+   "input": "{\"client_id\":\"c\"}",
+   "ok": true,
+   "output": "{\"client_id\":\"c\"}"
+  },
+  {
+   "input": "{\"client_id\":\"c\",\"client_secret\":\"s\",\"client_id_issued_at\":1,\"client_secret_expires_at\":0,\"issuer\":\"https://i/\",\"redirect_uris\":[\"http://127.0.0.1/cb\"],\"token_endpoint_auth_method\":\"none\"}",
+   "ok": true,
+   "output": "{\"client_id\":\"c\",\"client_secret\":\"s\",\"client_id_issued_at\":1,\"client_secret_expires_at\":0,\"issuer\":\"https://i/\"}"
+  },
+  {
+   "input": "{\"client_id\":\"c\",\"issuer\":[\"x\"]}",
+   "ok": true,
+   "output": "{\"client_id\":\"c\"}"
+  },
+  {
+   "input": "{\"client_id\":\"c\",\"client_id_issued_at\":\"1\"}",
+   "ok": false,
+   "output": null
+  },
+  {
+   "input": "{\"client_secret\":\"s\"}",
+   "ok": false,
+   "output": null
+  }
+ ],
+ "full": [
+  {
+   "input": "{\"client_id\":\"c\",\"redirect_uris\":[\" https://x/cb\\t\"],\"logo_uri\":\"\",\"jwks\":null,\"scope\":\"a b\",\"grant_types\":[],\"extra\":1}",
+   "ok": true,
+   "output": "{\"redirect_uris\":[\"https://x/cb\"],\"grant_types\":[],\"scope\":\"a b\",\"jwks\":null,\"client_id\":\"c\"}"
+  },
+  {
+   "input": "{\"client_id\":\"c\"}",
+   "ok": false,
+   "output": null
+  },
+  {
+   "input": "{\"client_id\":\"c\",\"redirect_uris\":[\"javascript:alert(1)\"]}",
+   "ok": false,
+   "output": null
+  },
+  {
+   "input": "{\"client_id\":\"c\",\"redirect_uris\":[\"http://127.0.0.1/cb\"],\"tos_uri\":\"not a url\"}",
+   "ok": false,
+   "output": null
+  },
+  {
+   "input": "{\"redirect_uris\":[\"http://a/\"],\"client_id\":\"c\",\"client_name\":\"n\",\"contacts\":[\"x\"],\"software_id\":\"id\",\"jwks\":{\"keys\":[]},\"application_type\":\"native\",\"issuer\":\"i\"}",
+   "ok": true,
+   "output": "{\"redirect_uris\":[\"http://a/\"],\"application_type\":\"native\",\"client_name\":\"n\",\"contacts\":[\"x\"],\"jwks\":{\"keys\":[]},\"software_id\":\"id\",\"client_id\":\"c\",\"issuer\":\"i\"}"
+  }
+ ]
+}

@@ -1,26 +1,30 @@
 # CLI distribution and releases
 
-The repository builds npm, Homebrew, Debian/Ubuntu, and Windows distributions.
-New setup features are in CLI 1.1.0. They become available through each channel
-only after that version's assets are published; npm publication is separate from
-a GitHub release. Until then, use a verified source build. Creating these packaging
+The repository builds npm, Homebrew, Debian/Ubuntu, Windows, and portable
+distributions of the native Go executable. New setup features are in CLI 1.1.0.
+They become available through each channel only after that version's assets are
+published; npm publication is separate from a GitHub release. Until then, use a verified source build. Creating these packaging
 files does not publish a release or an APT repository.
 
 ## npm and source
 
 Use `npx @accessdurin/cli` or `npm install --global @accessdurin/cli` after npm
-publication. The npm package requires Node 24.22.1 or later within Node 24 and an
-unlocked OS credential store. Source installation:
+publication. `@accessdurin/cli` is a small launcher (`bin/durin.js`) that runs the
+executable from the matching platform package, `@accessdurin/cli-<os>-<arch>`
+(`darwin-arm64`, `darwin-x64`, `linux-arm64`, `linux-x64`, or `win32-x64`), which
+npm installs as an optional dependency. The launcher needs Node 18 or later only to
+start the executable; installing with `--omit=optional` leaves it nothing to run.
+The CLI needs an unlocked OS credential store. Source installation, with the Go
+version in `go.mod`:
 
 ```sh
-pnpm install --frozen-lockfile
-pnpm verify
-node dist/cli.js
+go build -o durin ./cmd/durin
+./durin
 ```
 
-The npm archive includes the built executable and embedded skills. Onboarding
-copies its runtime and native credential/diagnostic dependencies out of the npm
-cache before writing absolute agent configuration paths.
+The executable embeds the bundled skills. Onboarding copies the executable out of
+the npm cache (or wherever it was installed) into the profile directory's runtime
+before writing absolute agent configuration paths.
 
 ## Homebrew
 
@@ -33,20 +37,22 @@ brew install accessdurin/cli/durin
 durin
 ```
 
-The generated formula pins the release's npm archive with SHA-256 and depends on
-`node@24`. It installs native dependencies on the target machine. The formula's
-`brew test` runs `durin --help`. Upgrades use `brew update` and
-`brew upgrade accessdurin/cli/durin` after the next formula/source release.
+The generated formula is a binary formula: it pins the release's macOS and Linux
+x64/ARM64 archives with SHA-256, installs the `durin` executable, and has no Node
+dependency. The formula's `brew test` runs `durin --help`. The committed
+`Formula/durin.rb` still describes the published TypeScript 1.1.0 release (an npm
+archive that depends on `node@24`) until the next release regenerates it.
+Upgrades use `brew update` and `brew upgrade accessdurin/cli/durin` after the next
+formula/source release.
 
 Alternatively, download `durin.rb` from a published release and put it in a tap you
 maintain. Do not substitute a development archive under a released version's URL.
 
 ## Ubuntu and Debian
 
-Releases produce native `amd64` and `arm64` `.deb` packages. They include the pinned
-Node runtime and locked production dependencies under `/opt/durin`; no separate
-Node installation is needed. Download the correct architecture's asset and
-`SHA256SUMS` from the same published release:
+Releases produce native `amd64` and `arm64` `.deb` packages. They install the
+executable as `/usr/bin/durin`; no Node installation is needed. Download the
+correct architecture's asset and `SHA256SUMS` from the same published release:
 
 ```sh
 sha256sum --ignore-missing --check SHA256SUMS
@@ -55,11 +61,11 @@ durin
 ```
 
 Use the `arm64` filename on ARM64. A Debian/Ubuntu desktop session must provide an
-unlocked Secret Service credential store (for example GNOME Keyring). The package
-declares `libsecret-1-0`, `dbus-user-session`, and runtime library dependencies.
-Headless machines without a credential service cannot complete interactive
-credential setup. The build matrix uses Ubuntu 24.04; installation on other
-Debian/Ubuntu releases requires validating their native libraries and credential
+unlocked Secret Service credential store (for example GNOME Keyring), which the CLI
+reaches over the D-Bus session bus. The package depends on `dbus-user-session` and
+suggests `gnome-keyring`. Headless machines without a credential service cannot
+complete interactive credential setup. The build matrix uses Ubuntu 24.04;
+installation on other Debian/Ubuntu releases requires validating their credential
 service. There is no plaintext credential fallback.
 
 Upgrade with `sudo apt install ./<new-package>.deb`; remove the executable with
@@ -74,18 +80,19 @@ repository updates are not configured by these changes.
 ## Windows
 
 Releases produce `durin-<version>-windows-x64.zip` and a per-user PowerShell
-installer. The archive includes Node and locked native dependencies. Download
-`install-windows.ps1` from the release, inspect it, then run:
+installer. The archive contains `durin.exe`, its license, and third-party notices.
+Download `install-windows.ps1` from the release, inspect it, then run:
 
 ```powershell
 .\install-windows.ps1 -Version 1.1.0
 ```
 
 The installer downloads that version's archive and `SHA256SUMS` over HTTPS,
-requires a matching SHA-256, extracts and starts `--help` before activation,
-retains previous versions under `%LOCALAPPDATA%\DurinCLI\versions`, and adds
-`%LOCALAPPDATA%\DurinCLI\bin` to your user PATH. Open a new terminal and run
-`durin`. No administrator rights, account answers, or MCP consent are supplied
+requires a matching SHA-256, extracts and starts `durin.exe --help` before
+activation, installs it under `%LOCALAPPDATA%\DurinCLI\versions\<version>`,
+retaining previous versions, points the `durin.cmd` shim in
+`%LOCALAPPDATA%\DurinCLI\bin` at it, and adds that directory to your user PATH.
+Open a new terminal and run `durin`. No administrator rights, account answers, or MCP consent are supplied
 by the installer. Windows Credential Manager stores MCP credentials.
 
 For offline installation, download the archive and checksums separately:
@@ -104,53 +111,72 @@ Authenticode signing are not supplied; the current artifact is x64.
 
 ## Portable archives
 
-macOS x64/ARM64 and Linux x64/ARM64 `.tar.gz` archives include Node, the CLI,
-and locked native dependencies. Verify the archive against `SHA256SUMS`, extract
-to a directory you own, and put its `bin` directory on PATH. Keep that directory
-available: saved bridges reference its Node executable. The archive is a CLI
-runtime, not the native Endpoint app. macOS notarization is not established by
-building an archive.
+macOS x64/ARM64 and Linux x64/ARM64 `.tar.gz` archives contain the `durin`
+executable, `LICENSE`, `README.md`, and `THIRD_PARTY_LICENSES.md`. Verify the
+archive against `SHA256SUMS`, extract it anywhere, and put the directory holding
+`durin` on PATH. Setup copies the executable into the profile directory's runtime
+before writing agent configurations, so the extracted files need not stay put.
+The archive is the CLI, not the native Endpoint app. macOS notarization is not
+established by building an archive.
 
 ## Build and release
 
-Use the exact Node version in `.node-version` and pnpm version in `package.json`:
+Use the Go version in `go.mod`. On each of the five release platforms (Linux
+x64/ARM64, macOS ARM64/x64, Windows x64), run:
 
 ```sh
-pnpm verify
-pnpm package:release
-node scripts/release-metadata.mjs release --write-formula
+go run ./tools/release package
 ```
 
-`package:release` builds packages for the current OS/architecture, freezes the
-production install to `pnpm-lock.yaml`, includes the running Node binary, and
-starts the packaged CLI before archiving it. Linux also builds `.deb` packages
-with `dpkg-deb`. Packages go in ignored `release/`; temporary staging is ignored.
-Packages include the CLI's MIT license, bundled dependency notices, native package
-licenses, and the exact Node version's full license at `runtime/LICENSE`. See
-[license provenance](../licenses/README.md) when updating dependencies or Node.
-The metadata script generates `SHA256SUMS`, `durin.rb`, and the Windows installer.
-Review and commit the regenerated `Formula/durin.rb` with the version change.
+`package` builds the executable for the current OS/architecture (with cgo on macOS,
+for the Keychain; pure Go elsewhere), starts it with `--help`, and writes
+`durin-<version>-<os>-<arch>.tar.gz` (`.zip` on Windows) containing the
+executable, `LICENSE`, `README.md`, and `THIRD_PARTY_LICENSES.md`. Linux also
+builds a `durin-cli_<version>_<arch>.deb` with `dpkg-deb`. Every platform also
+packs its npm platform package, `@accessdurin/cli-<os>-<arch>`, with `npm pack`.
+Packages go in ignored `release/`; temporary staging in `.release-stage/` is
+ignored. The version comes from `internal/version/version.go`.
+`THIRD_PARTY_LICENSES.md` is generated from the license files of the Go modules
+linked into that platform's executable plus the notices of code ported into this
+repository (`internal/*/LICENSE-*`). See [license provenance](../licenses/README.md)
+when updating dependencies.
 
-The [release workflow](../.github/workflows/release.yml) uses the existing full Linux
-verification for pull requests and runs `pnpm verify` itself for release builds.
-It builds on five native OS/architecture runners, runs the skill/hook and
-bridge integration tests there, starts packaged launchers, installs Debian
-packages, and exercises the Windows per-user installer. Manual dispatch builds
-Actions artifacts without creating a release. Hosted runner results are evidence
-only after those jobs actually pass; local Linux tests do not establish native
-macOS or Windows behavior.
+With every platform's packages in one `release/` directory, run:
 
-For a tagged release, the workflow requires the tag to match `package.json` and
-the commit to belong to `main`. Set up the `cli-release` GitHub environment with
-any desired maintainer review rules. After all packages pass, the final job
-checks the Homebrew checksum against the committed formula and creates a
-**draft** GitHub release containing all assets. It never publishes that draft or
-replaces existing release assets on a retry. Review the draft and publish it
-when ready. If the npm archive changes, regenerate the formula and make a new
-reviewed version rather than replacing published bytes.
+```sh
+go run ./tools/release metadata -write-formula
+```
 
-Publish the verified npm archive separately using the organization's npm
-publisher credentials or configured trusted-publisher workflow. The GitHub
-release workflow does not require or create an npm token. Confirm
+`metadata` writes the npm launcher package `@accessdurin/cli`, the Homebrew
+formula `durin.rb` (and, with `-write-formula`, `Formula/durin.rb`), copies
+`install-windows.ps1`, and generates `SHA256SUMS` over every asset. The formula
+pins each archive's SHA-256, so it must come from the same archives the release
+ships: after publishing a release, commit its `durin.rb` asset as
+`Formula/durin.rb` (or run `metadata -write-formula` on the downloaded assets).
+
+The [release workflow](../.github/workflows/release.yml) relies on the full
+verification in [verify.yml](../.github/workflows/verify.yml) for pull requests and
+runs vet, the tests, and the black-box parity harness itself for release builds.
+It builds on five native OS/architecture runners, runs the credential-store and
+agent integration tests there, packages and starts each executable, installs the
+Debian package, and exercises the Windows per-user installer. It then generates
+the metadata, installs the generated Homebrew formula from the built archives, and
+tries the npm launcher with the macOS ARM64 platform package. Manual dispatch
+builds Actions artifacts without creating a release. Hosted runner results are
+evidence only after those jobs actually pass; local Linux tests do not establish
+native macOS or Windows behavior.
+
+For a tagged release, the workflow requires the tag to match the version in
+`internal/version/version.go` and the commit to belong to `main`. Set up the
+`cli-release` GitHub environment with any desired maintainer review rules. After
+all packages pass, the final job creates a **draft** GitHub release containing all
+assets, including the generated `durin.rb`. It never publishes that draft or replaces existing release assets on a
+retry. Review the draft and publish it when ready, then update the tap's
+`Formula/durin.rb` from it. If an archive changes, make a new reviewed version
+rather than replacing published bytes.
+
+Publish the npm packages separately from the release assets, the five platform
+packages first and then the launcher; see [Publish to npm](../README.md#publish-to-npm).
+The GitHub release workflow does not require or create an npm token. Confirm
 `npx @accessdurin/cli --help`, `brew test`, an installed Debian package, and the
 Windows installer on their target systems before announcing availability.

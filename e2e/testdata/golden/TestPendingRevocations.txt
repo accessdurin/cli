@@ -1,0 +1,72 @@
+## durin verify --config-dir <TMP>/config
+exit: 0
+--- stdout
+{
+  "verified": true,
+  "availableTools": 0,
+  "detail": "Authenticated gateway catalog verified. This does not prove the agent harness has been opened."
+}
+--- stderr
+## requests
+GET /.well-known/oauth-authorization-server [Mcp-Protocol-Version: 2025-11-25]
+POST /revoke [Content-Type: application/x-www-form-urlencoded] client_id=client-old&token=old-refresh&token_type_hint=refresh_token
+POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-seeded] [Content-Type: application/json] {"id":0,"jsonrpc":"2.0","method":"initialize","params":{"capabilities":{},"clientInfo":{"name":"Durin CLI","version":"1.0.0"},"protocolVersion":"2025-11-25"}}
+POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-seeded] [Content-Type: application/json] [Mcp-Protocol-Version: 2025-11-25] [Mcp-Session-Id: session-1] {"id":1,"jsonrpc":"2.0","method":"tools/list"}
+(notification) POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-seeded] [Content-Type: application/json] [Mcp-Protocol-Version: 2025-11-25] [Mcp-Session-Id: session-1] {"jsonrpc":"2.0","method":"notifications/initialized"}
+## revocations directory
+<PROFILE:user_01>.unrevoked.json file 0600
+## credentials
+mcp:<PROFILE:user_01>:client (label keyring:mcp:<PROFILE:user_01>:client@com.getdurin.cli)
+mcp:<PROFILE:user_01>:tokens (label keyring:mcp:<PROFILE:user_01>:tokens@com.getdurin.cli)
+mcp:<PROFILE:user_01>:unrevoked:<UUID-1> (label keyring:mcp:<PROFILE:user_01>:unrevoked:<UUID-1>@com.getdurin.cli)
+## durin verify --config-dir <TMP>/config
+exit: 0
+--- stdout
+{
+  "verified": true,
+  "availableTools": 0,
+  "detail": "Authenticated gateway catalog verified. This does not prove the agent harness has been opened."
+}
+--- stderr
+## requests
+GET /.well-known/oauth-authorization-server [Mcp-Protocol-Version: 2025-11-25]
+POST /revoke [Content-Type: application/x-www-form-urlencoded] client_id=client-old&token=old-refresh&token_type_hint=refresh_token
+POST /revoke [Content-Type: application/x-www-form-urlencoded] client_id=client-old&token=old-access&token_type_hint=access_token
+POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-seeded] [Content-Type: application/json] {"id":0,"jsonrpc":"2.0","method":"initialize","params":{"capabilities":{},"clientInfo":{"name":"Durin CLI","version":"1.0.0"},"protocolVersion":"2025-11-25"}}
+POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-seeded] [Content-Type: application/json] [Mcp-Protocol-Version: 2025-11-25] [Mcp-Session-Id: session-1] {"id":1,"jsonrpc":"2.0","method":"tools/list"}
+(notification) POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-seeded] [Content-Type: application/json] [Mcp-Protocol-Version: 2025-11-25] [Mcp-Session-Id: session-1] {"jsonrpc":"2.0","method":"notifications/initialized"}
+## revocations directory
+
+## credentials
+mcp:<PROFILE:user_01>:client (label keyring:mcp:<PROFILE:user_01>:client@com.getdurin.cli)
+mcp:<PROFILE:user_01>:tokens (label keyring:mcp:<PROFILE:user_01>:tokens@com.getdurin.cli)
+## durin verify --config-dir <TMP>/config
+exit: 0
+--- stdout
+{
+  "verified": true,
+  "availableTools": 0,
+  "detail": "Authenticated gateway catalog verified. This does not prove the agent harness has been opened."
+}
+--- stderr
+## durin logout --config-dir <TMP>/config
+exit: 0
+--- stdout
+{
+  "profile": "<PROFILE:user_01>",
+  "localMcpGrant": "cleared",
+  "remoteMcpGrant": "revoked",
+  "detail": "Agent configuration is retained. Run durin to sign in again. Other organization MCP grants are unchanged."
+}
+--- stderr
+## requests
+POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-seeded] [Content-Type: application/json] {"id":0,"jsonrpc":"2.0","method":"initialize","params":{"capabilities":{},"clientInfo":{"name":"Durin CLI","version":"1.0.0"},"protocolVersion":"2025-11-25"}}
+POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-seeded] [Content-Type: application/json] [Mcp-Protocol-Version: 2025-11-25] [Mcp-Session-Id: session-1] {"id":1,"jsonrpc":"2.0","method":"tools/list"}
+GET /.well-known/oauth-authorization-server [Mcp-Protocol-Version: 2025-11-25]
+POST /revoke [Content-Type: application/x-www-form-urlencoded] client_id=client-seeded&token=refresh-seeded&token_type_hint=refresh_token
+POST /revoke [Content-Type: application/x-www-form-urlencoded] client_id=client-seeded&token=access-seeded&token_type_hint=access_token
+(notification) POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-seeded] [Content-Type: application/json] [Mcp-Protocol-Version: 2025-11-25] [Mcp-Session-Id: session-1] {"jsonrpc":"2.0","method":"notifications/initialized"}
+## revocations directory
+<PROFILE:user_01>.unrevoked.json file 0600
+## credentials
+

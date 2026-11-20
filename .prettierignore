@@ -1,7 +1,0 @@
-node_modules
-dist
-coverage
-pnpm-lock.yaml
-release
-.release-stage
-.deb-stage

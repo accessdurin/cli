@@ -1,7 +1,6 @@
 node_modules/
-dist/
-coverage/
-*.tsbuildinfo
+/durin
+/durin.exe
 *.tgz
 *.log
 .env
@@ -13,6 +12,6 @@ coverage/
 *.p12
 *.pfx
 .DS_Store
-release/
-.release-stage/
-.deb-stage/
+/release/
+/.release-stage/
+/.deb-stage/

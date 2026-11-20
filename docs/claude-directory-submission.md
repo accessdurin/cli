@@ -32,11 +32,14 @@ and the applicable Owner/Directory role on managed organizations.
 
 ## Validate the release
 
-Run with the Node version in `.node-version` and pnpm from `packageManager`:
+Run with the Go version in `go.mod`:
 
 ```sh
-pnpm install --frozen-lockfile
-pnpm verify
+gofmt -l .   # must print nothing
+go vet ./...
+go test ./internal/... ./cmd/... ./tools/...
+e2e/run.sh
+go run ./tools/checksecrets
 claude plugin validate --strict ./plugins/durin
 claude plugin validate --strict .
 ```
@@ -46,7 +49,7 @@ Its resources, README, and license are inside the plugin folder. It contains no
 hooks, MCP declaration, executable, package install hook, environment credential
 reference, or symlink. Onboarding delegates MCP registration and credential
 handling to the separately installed CLI, preserving its profile binding.
-Use the CLI version declared in `package.json` and follow the bundled
+Use the CLI version declared in `internal/version/version.go` and follow the bundled
 [installation reference](../plugins/durin/references/cli-installation.md). Before
 public launch, verify that the compatible version is published to the intended
 package channel, or explicitly retain the tested source installation. Repository
@@ -91,7 +94,7 @@ with the publisher before answering the portal:
   arguments/results during requested tasks; these can contain personal data.
 - CLI authentication and tool execution use the selected Durin deployment,
   discovered authorization services, the organization's gateway, and providers.
-  Source installation fetches GitHub code and registry dependencies. These are
+  Source installation fetches GitHub code and Go module dependencies. These are
   disclosed in the README, including services outside a declared connector.
 - OS credential storage and the local profile/call ledger are owned by the CLI.
   The plugin adds no telemetry or separate persistent data store. Uninstalling

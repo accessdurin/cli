@@ -1,0 +1,49 @@
+## durin profiles list --config-dir <TMP>/open
+exit: 1
+--- stdout
+--- stderr
+The Durin directory <TMP>/open must be a directory owned by you that only you can access. Run chmod 700 on it, or choose another --config-dir.
+## durin profiles list --config-dir <TMP>/file
+exit: 1
+--- stdout
+--- stderr
+The Durin directory <TMP>/file must be a directory owned by you that only you can access. Run chmod 700 on it, or choose another --config-dir.
+## durin profiles list --config-dir <TMP>/shared/durin
+exit: 1
+--- stdout
+--- stderr
+<TMP>/shared, on the path to the Durin configuration directory, is world-writable without the sticky bit, so another user could replace it. Choose another --config-dir.
+## durin profiles list --config-dir <TMP>/sticky/durin
+exit: 0
+--- stdout
+[]
+--- stderr
+## durin profiles list --config-dir <TMP>/missing
+exit: 0
+--- stdout
+[]
+--- stderr
+## missing directory created?
+absent
+## durin profiles list --config-dir <TMP>/link
+exit: 0
+--- stdout
+[]
+--- stderr
+## durin profiles list
+exit: 0
+--- stdout
+[]
+--- stderr
+## default directory created?
+absent
+## durin --config-dir <TMP>/config
+exit: 1
+--- stdout
+--- stderr
+Run durin in an interactive terminal to complete onboarding.
+## durin login --config-dir <TMP>/open
+exit: 1
+--- stdout
+--- stderr
+The Durin directory <TMP>/open must be a directory owned by you that only you can access. Run chmod 700 on it, or choose another --config-dir.

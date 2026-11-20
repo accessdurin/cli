@@ -31,7 +31,7 @@ Use these outcomes to choose the next step:
 | Authenticated, zero available tools | Ask the organization administrator to enable a connection and grant access                             |
 | Keychain/credential store locked    | Have the user unlock their OS credential store; do not suggest plaintext tokens                        |
 | Consent expired or revoked          | Have the user rerun `durin` in a terminal and complete this organization's MCP consent                 |
-| CLI works, Claude entry fails       | Check restart, exact profile/config directory, retained Node runtime, and scoped configuration errors  |
+| CLI works, Claude entry fails       | Check restart, exact profile/config directory, installed runtime, and scoped configuration errors      |
 | Conflicting or invalid config       | Explain the CLI error and have the user review the relevant entry; do not overwrite unrelated settings |
 | Abandoned profile lock              | Report the exact lock path; require stopping that profile's CLI and bridges before manual removal      |
 

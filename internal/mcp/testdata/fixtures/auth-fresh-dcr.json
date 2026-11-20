@@ -1,0 +1,205 @@
+{
+  "steps": [
+    {
+      "op": "auth",
+      "result": "REDIRECT",
+      "requests": [
+        {
+          "method": "GET",
+          "url": "https://app.example.test/.well-known/oauth-protected-resource/mcp/u/abc",
+          "headers": {
+            "mcp-protocol-version": "2025-11-25"
+          },
+          "body": null,
+          "redirect": "manual"
+        },
+        {
+          "method": "GET",
+          "url": "https://app.example.test/.well-known/oauth-protected-resource",
+          "headers": {
+            "mcp-protocol-version": "2025-11-25"
+          },
+          "body": null,
+          "redirect": "manual"
+        },
+        {
+          "method": "GET",
+          "url": "https://app.example.test/.well-known/oauth-authorization-server",
+          "headers": {
+            "accept": "application/json",
+            "mcp-protocol-version": "2025-11-25"
+          },
+          "body": null,
+          "redirect": "manual"
+        },
+        {
+          "method": "GET",
+          "url": "https://app.example.test/.well-known/openid-configuration",
+          "headers": {
+            "accept": "application/json",
+            "mcp-protocol-version": "2025-11-25"
+          },
+          "body": null,
+          "redirect": "manual"
+        },
+        {
+          "method": "POST",
+          "url": "https://app.example.test/register",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "body": "{\"client_name\":\"Durin CLI\",\"application_type\":\"native\",\"redirect_uris\":[\"http://127.0.0.1:5555/oauth/callback\"],\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\",\"scope\":\"mcp:tools offline_access\"}",
+          "redirect": "manual"
+        }
+      ],
+      "calls": [
+        [
+          "discoveryState"
+        ],
+        [
+          "saveDiscoveryState",
+          {
+            "authorizationServerMetadata": {
+              "authorization_endpoint": "https://app.example.test/authorize?tenant=a b",
+              "code_challenge_methods_supported": [
+                "S256"
+              ],
+              "id_token_signing_alg_values_supported": [
+                "RS256"
+              ],
+              "issuer": "https://app.example.test",
+              "jwks_uri": "https://app.example.test/jwks",
+              "registration_endpoint": "https://app.example.test/register",
+              "response_types_supported": [
+                "code"
+              ],
+              "scopes_supported": [
+                "openid",
+                "offline_access"
+              ],
+              "subject_types_supported": [
+                "public"
+              ],
+              "token_endpoint": "https://app.example.test/token",
+              "token_endpoint_auth_methods_supported": [
+                "none"
+              ]
+            },
+            "authorizationServerUrl": "https://app.example.test/",
+            "resourceMetadata": {
+              "authorization_servers": [
+                "https://app.example.test/"
+              ],
+              "extra": true,
+              "resource": "https://app.example.test/mcp/u/abc",
+              "scopes_supported": [
+                "mcp:tools"
+              ]
+            }
+          }
+        ],
+        [
+          "validateResourceURL",
+          "https://app.example.test/mcp/u/abc",
+          "https://app.example.test/mcp/u/abc"
+        ],
+        [
+          "clientInformation",
+          {
+            "issuer": "https://app.example.test"
+          }
+        ],
+        [
+          "saveClientInformation",
+          {
+            "client_id": "client-1",
+            "client_id_issued_at": 1700000000,
+            "issuer": "https://app.example.test",
+            "redirect_uris": [
+              "http://127.0.0.1:5555/oauth/callback"
+            ],
+            "token_endpoint_auth_method": "none"
+          },
+          {
+            "issuer": "https://app.example.test"
+          }
+        ],
+        [
+          "tokens",
+          {
+            "issuer": "https://app.example.test"
+          }
+        ],
+        [
+          "state"
+        ],
+        [
+          "saveCodeVerifier",
+          "<verifier>"
+        ],
+        [
+          "redirectToAuthorization",
+          "https://app.example.test/authorize?tenant=a+b&response_type=code&client_id=client-1&code_challenge=<challenge>&code_challenge_method=S256&redirect_uri=http%3A%2F%2F127.0.0.1%3A5555%2Foauth%2Fcallback&state=state-123&scope=mcp%3Atools+offline_access&prompt=consent&resource=https%3A%2F%2Fapp.example.test%2Fmcp%2Fu%2Fabc"
+        ]
+      ],
+      "warnings": []
+    },
+    {
+      "op": "auth",
+      "result": "AUTHORIZED",
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://app.example.test/token",
+          "headers": {
+            "accept": "application/json",
+            "content-type": "application/x-www-form-urlencoded"
+          },
+          "body": "grant_type=authorization_code&code=code-xyz&code_verifier=<verifier>&redirect_uri=http%3A%2F%2F127.0.0.1%3A5555%2Foauth%2Fcallback&resource=https%3A%2F%2Fapp.example.test%2Fmcp%2Fu%2Fabc&client_id=client-1",
+          "redirect": "manual"
+        }
+      ],
+      "calls": [
+        [
+          "discoveryState"
+        ],
+        [
+          "validateResourceURL",
+          "https://app.example.test/mcp/u/abc",
+          "https://app.example.test/mcp/u/abc"
+        ],
+        [
+          "clientInformation",
+          {
+            "issuer": "https://app.example.test"
+          }
+        ],
+        [
+          "clientInformation",
+          {
+            "issuer": "https://app.example.test"
+          }
+        ],
+        [
+          "codeVerifier"
+        ],
+        [
+          "saveTokens",
+          {
+            "access_token": "at-1",
+            "expires_in": 3600,
+            "issuer": "https://app.example.test",
+            "refresh_token": "rt-1",
+            "scope": "mcp:tools offline_access",
+            "token_type": "Bearer"
+          },
+          {
+            "issuer": "https://app.example.test"
+          }
+        ]
+      ],
+      "warnings": []
+    }
+  ],
+  "transportErrors": []
+}

@@ -1,0 +1,161 @@
+## durin profiles list --config-dir <TMP>/config
+exit: 0
+--- stdout
+[]
+--- stderr
+## files after empty list
+
+## durin profiles list --config-dir <TMP>/config
+exit: 0
+--- stdout
+(sorted by principalId for comparison; keys sorted)
+[
+  {
+    "accountClientId": "client_account",
+    "accountIssuer": "<ORIGIN>",
+    "appOrigin": "<ORIGIN>",
+    "development": true,
+    "environment": "production",
+    "id": "<PROFILE:user_01>",
+    "mcpIssuer": "<ORIGIN>",
+    "organizationId": "org_1",
+    "principalId": "user_01",
+    "resource": "<ORIGIN>/mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "version": 1,
+    "workosOrganizationId": "org_wos_1"
+  },
+  {
+    "accountClientId": "client_account",
+    "accountIssuer": "<ORIGIN>",
+    "appOrigin": "<ORIGIN>",
+    "development": true,
+    "environment": "production",
+    "id": "<PROFILE:user_02>",
+    "mcpIssuer": "<ORIGIN>",
+    "organizationId": "org_1",
+    "principalId": "user_02",
+    "resource": "<ORIGIN>/mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "version": 1,
+    "workosOrganizationId": "org_wos_1"
+  }
+]
+--- stderr
+## durin profiles use <PROFILE:user_02> --config-dir <TMP>/config
+exit: 0
+--- stdout
+{
+  "activeProfile": "<PROFILE:user_02>"
+}
+--- stderr
+## active
+<PROFILE:user_02>
+## files after use
+active file 0600
+profiles dir 0700
+profiles/<PROFILE:user_01>.json file 0600
+profiles/<PROFILE:user_02>.json file 0600
+## durin profiles use <PROFILE:user_01> --config-dir <TMP>/config
+exit: 0
+--- stdout
+{
+  "activeProfile": "<PROFILE:user_01>"
+}
+--- stderr
+## active
+<PROFILE:user_01>
+## durin profiles use not-an-id --config-dir <TMP>/config
+exit: 1
+--- stdout
+--- stderr
+Durin could not complete this request. Run durin in a terminal to verify your profile and authorization; retain the same idempotency key when retrying a tool call.
+## durin profiles use aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --config-dir <TMP>/config
+exit: 1
+--- stdout
+--- stderr
+Durin could not complete this request. Run durin in a terminal to verify your profile and authorization; retain the same idempotency key when retrying a tool call.
+## durin profiles use --config-dir <TMP>/config
+exit: 1
+--- stdout
+--- stderr
+Invalid arguments for this command. Run durin --help.
+## durin profiles list --config-dir <TMP>/config
+exit: 0
+--- stdout
+(sorted by principalId for comparison; keys sorted)
+[
+  {
+    "accountClientId": "client_account",
+    "accountIssuer": "<ORIGIN>",
+    "appOrigin": "<ORIGIN>",
+    "development": true,
+    "environment": "production",
+    "id": "<PROFILE:user_01>",
+    "mcpIssuer": "<ORIGIN>",
+    "organizationId": "org_1",
+    "principalId": "user_01",
+    "resource": "<ORIGIN>/mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "version": 1,
+    "workosOrganizationId": "org_wos_1"
+  },
+  {
+    "accountClientId": "client_account",
+    "accountIssuer": "<ORIGIN>",
+    "appOrigin": "<ORIGIN>",
+    "development": true,
+    "environment": "production",
+    "id": "<PROFILE:user_02>",
+    "mcpIssuer": "<ORIGIN>",
+    "organizationId": "org_1",
+    "principalId": "user_02",
+    "resource": "<ORIGIN>/mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "version": 1,
+    "workosOrganizationId": "org_wos_1"
+  }
+]
+--- stderr
+## durin profiles list --config-dir <TMP>/config
+exit: 1
+--- stdout
+--- stderr
+Invalid Durin profile binding. Run durin to configure it again.
+## durin profiles use <PROFILE:user_03> --config-dir <TMP>/config
+exit: 1
+--- stdout
+--- stderr
+Invalid Durin profile binding. Run durin to configure it again.
+## durin profiles use <PROFILE:user_05> --config-dir <TMP>/config
+exit: 1
+--- stdout
+--- stderr
+The MCP endpoint is on 127.0.0.1:<PORT>. Local addresses are only allowed with --dev. Run durin to sign in again.
+## durin profiles use <PROFILE:user_06> --config-dir <TMP>/config
+exit: 0
+--- stdout
+{
+  "activeProfile": "<PROFILE:user_06>"
+}
+--- stderr
+## durin profiles use <PROFILE:user_07> --config-dir <TMP>/config
+exit: 1
+--- stdout
+--- stderr
+The MCP sign-in server is on evil.example, but the durin app at app.getdurin.com uses auth.getdurin.com. Run durin to sign in again.
+## durin profiles use <PROFILE:user_08> --config-dir <TMP>/config
+exit: 0
+--- stdout
+{
+  "activeProfile": "<PROFILE:user_08>"
+}
+--- stderr
+## active
+<PROFILE:user_08>
+## durin mcp endpoint --profile bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb --config-dir <TMP>/config
+exit: 1
+--- stdout
+--- stderr
+No valid organization profile. Run durin in a terminal to complete setup.
+## durin mcp endpoint --config-dir <TMP>/config
+exit: 1
+--- stdout
+--- stderr
+No valid organization profile. Run durin in a terminal to complete setup.

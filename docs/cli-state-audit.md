@@ -1,5 +1,11 @@
 # CLI state and distribution audit
 
+> **Historical record.** This audit describes the TypeScript CLI before it was rewritten
+> in Go. The TypeScript sources, pnpm scripts, and Vitest suite it names were
+> removed; commit `3ab3415` is the last that contains them. See
+> [the Go port](go-port.md) for what changed and [CONTRIBUTING.md](../CONTRIBUTING.md)
+> for the current checks.
+
 Reviewed 11 November 2026 against the standalone CLI source, command entry points,
 contracts, adapters, tests, plugin documentation, and build/release scripts. This
 review concerns client control flow and distribution; it does not audit the
@@ -71,8 +77,9 @@ Regression checks cover post-start progress, stalled questions/completion,
 organization changes at each response boundary, a second account 401, reused MCP
 request IDs, interrupted artifact writes, preserved license files, and subprocess
 opt-out inheritance. Existing OAuth, host, logout, filesystem, bridge, and harness
-assertions remain in place. Run `pnpm verify` and `pnpm package:release`, then
-inspect the npm archive, OS archive, and Debian package's license inventory.
+assertions remain in place. The checks were `pnpm verify` and `pnpm package:release`
+(today: the checks in CONTRIBUTING.md and `go run ./tools/release package`),
+followed by inspecting the npm archive, OS archive, and Debian package's license inventory.
 The local Linux verification passes with 820 tests passed and two existing skips
 (822 total). The baseline had 806 passed and the same two skips (808 total);
 the additional cases cover the findings above. No test discovery or coverage

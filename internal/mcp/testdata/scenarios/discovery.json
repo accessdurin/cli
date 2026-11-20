@@ -1,0 +1,27 @@
+{
+  "description": "Direct discovery calls: AS metadata URL order for an issuer with a path, 4xx/502 skipping, 5xx failure, all-4xx returning undefined, issuer mismatch; PRM 502 fallback and 500 failure.",
+  "provider": {"redirectUrl": "http://127.0.0.1/cb", "clientMetadata": {"redirect_uris": ["http://127.0.0.1/cb"]}},
+  "routes": [
+    {"method": "GET", "host": "a.example.test", "path": "/.well-known/oauth-authorization-server/tenant", "responses": [{"status": 404}]},
+    {"method": "GET", "host": "a.example.test", "path": "/.well-known/openid-configuration/tenant", "responses": [{"status": 502}]},
+    {"method": "GET", "host": "a.example.test", "path": "/tenant/.well-known/openid-configuration", "responses": [{"status": 200, "json": {"issuer": "https://a.example.test/tenant", "authorization_endpoint": " https://a.example.test/authorize\t", "token_endpoint": "https://a.example.test/token", "jwks_uri": "https://a.example.test/jwks", "response_types_supported": ["code"], "subject_types_supported": ["public"], "id_token_signing_alg_values_supported": ["RS256"], "revocation_endpoint": "https://a.example.test/revoke", "authorization_response_iss_parameter_supported": "yes"}}]},
+    {"method": "GET", "host": "b.example.test", "path": "/.well-known/oauth-authorization-server", "responses": [{"status": 503}]},
+    {"method": "GET", "host": "c.example.test", "path": "/.well-known/oauth-authorization-server", "responses": [{"status": 403}]},
+    {"method": "GET", "host": "c.example.test", "path": "/.well-known/openid-configuration", "responses": [{"status": 404}]},
+    {"method": "GET", "host": "d.example.test", "path": "/.well-known/oauth-authorization-server", "responses": [{"status": 200, "json": {"issuer": "https://other.example.test", "authorization_endpoint": "https://d.example.test/a", "token_endpoint": "https://d.example.test/t", "response_types_supported": ["code"]}}]},
+    {"method": "GET", "host": "e.example.test", "path": "/.well-known/oauth-protected-resource/mcp", "responses": [{"status": 502}]},
+    {"method": "GET", "host": "e.example.test", "path": "/.well-known/oauth-protected-resource", "responses": [{"status": 200, "json": {"resource": "https://e.example.test/mcp", "authorization_servers": ["https://e.example.test/"]}}]},
+    {"method": "GET", "host": "f.example.test", "path": "/.well-known/oauth-protected-resource/mcp", "responses": [{"status": 500}]},
+    {"method": "GET", "host": "g.example.test", "path": "/.well-known/oauth-protected-resource/mcp", "responses": [{"status": 404}]},
+    {"method": "GET", "host": "g.example.test", "path": "/.well-known/oauth-protected-resource", "responses": [{"status": 404}]}
+  ],
+  "steps": [
+    {"op": "discoverAS", "url": "https://a.example.test/tenant/"},
+    {"op": "discoverAS", "url": "https://b.example.test"},
+    {"op": "discoverAS", "url": "https://c.example.test/"},
+    {"op": "discoverAS", "url": "https://d.example.test/"},
+    {"op": "discoverPRM", "url": "https://e.example.test/mcp?x=1"},
+    {"op": "discoverPRM", "url": "https://f.example.test/mcp"},
+    {"op": "discoverPRM", "url": "https://g.example.test/mcp"}
+  ]
+}

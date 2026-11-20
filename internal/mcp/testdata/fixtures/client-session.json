@@ -1,0 +1,244 @@
+{
+  "steps": [
+    {
+      "op": "connect",
+      "result": {
+        "sessionId": "sess-1",
+        "protocolVersion": "2025-06-18"
+      },
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://app.example.test/mcp/u/abc",
+          "headers": {
+            "accept": "application/json, text/event-stream",
+            "authorization": "Bearer at-1",
+            "content-type": "application/json"
+          },
+          "body": "{\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{},\"clientInfo\":{\"name\":\"Durin CLI\",\"version\":\"1.0.0\"}},\"jsonrpc\":\"2.0\",\"id\":0}",
+          "redirect": "error"
+        },
+        {
+          "method": "POST",
+          "url": "https://app.example.test/mcp/u/abc",
+          "headers": {
+            "accept": "application/json, text/event-stream",
+            "authorization": "Bearer at-1",
+            "content-type": "application/json",
+            "mcp-protocol-version": "2025-06-18",
+            "mcp-session-id": "sess-1"
+          },
+          "body": "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+          "redirect": "error"
+        },
+        {
+          "method": "GET",
+          "url": "https://app.example.test/mcp/u/abc",
+          "headers": {
+            "accept": "text/event-stream",
+            "authorization": "Bearer at-1",
+            "mcp-protocol-version": "2025-06-18",
+            "mcp-session-id": "sess-1"
+          },
+          "body": null,
+          "redirect": "error"
+        }
+      ],
+      "calls": [
+        [
+          "tokens",
+          null
+        ],
+        [
+          "tokens",
+          null
+        ],
+        [
+          "tokens",
+          null
+        ]
+      ],
+      "warnings": []
+    },
+    {
+      "op": "listTools",
+      "result": "{\"tools\":[{\"name\":\"echo\",\"inputSchema\":{\"type\":\"object\",\"x-extra\":1},\"outputSchema\":{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"number\"}},\"required\":[\"a\"]},\"annotations\":{\"readOnlyHint\":true}},{\"name\":\"two\",\"description\":\"d\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"q\":{\"type\":\"string\"}}}},{\"name\":\"three\",\"title\":\"Three\",\"inputSchema\":{\"type\":\"object\"},\"_meta\":{\"k\":\"v\"}}],\"ttlMs\":0,\"pageMeta\":\"kept\"}",
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://app.example.test/mcp/u/abc",
+          "headers": {
+            "accept": "application/json, text/event-stream",
+            "authorization": "Bearer at-1",
+            "content-type": "application/json",
+            "mcp-protocol-version": "2025-06-18",
+            "mcp-session-id": "sess-1"
+          },
+          "body": "{\"method\":\"tools/list\",\"jsonrpc\":\"2.0\",\"id\":1}",
+          "redirect": "error"
+        },
+        {
+          "method": "POST",
+          "url": "https://app.example.test/mcp/u/abc",
+          "headers": {
+            "accept": "application/json, text/event-stream",
+            "authorization": "Bearer at-1",
+            "content-type": "application/json",
+            "mcp-protocol-version": "2025-06-18",
+            "mcp-session-id": "sess-1"
+          },
+          "body": "{\"method\":\"tools/list\",\"params\":{\"cursor\":\"c1\"},\"jsonrpc\":\"2.0\",\"id\":2}",
+          "redirect": "error"
+        },
+        {
+          "method": "POST",
+          "url": "https://app.example.test/mcp/u/abc",
+          "headers": {
+            "accept": "application/json, text/event-stream",
+            "authorization": "Bearer at-1",
+            "content-type": "application/json",
+            "mcp-protocol-version": "2025-06-18",
+            "mcp-session-id": "sess-1"
+          },
+          "body": "{\"method\":\"tools/list\",\"params\":{\"cursor\":\"c2\"},\"jsonrpc\":\"2.0\",\"id\":3}",
+          "redirect": "error"
+        }
+      ],
+      "calls": [
+        [
+          "tokens",
+          null
+        ],
+        [
+          "tokens",
+          null
+        ],
+        [
+          "tokens",
+          null
+        ]
+      ],
+      "warnings": []
+    },
+    {
+      "op": "callTool",
+      "result": "{\"_meta\":{\"progressToken\":\"p\",\"z\":1},\"content\":[{\"type\":\"text\",\"text\":\"hi\"},{\"name\":\"n\",\"uri\":\"https://x.example/r\",\"annotations\":{\"priority\":0.5},\"type\":\"resource_link\"},{\"type\":\"resource\",\"resource\":{\"uri\":\"file:///a\",\"mimeType\":\"text/plain\",\"text\":\"t\"}}],\"structuredContent\":{\"a\":1},\"isError\":false,\"unknownTop\":1}",
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://app.example.test/mcp/u/abc",
+          "headers": {
+            "accept": "application/json, text/event-stream",
+            "authorization": "Bearer at-1",
+            "content-type": "application/json",
+            "mcp-protocol-version": "2025-06-18",
+            "mcp-session-id": "sess-1"
+          },
+          "body": "{\"method\":\"tools/call\",\"params\":{\"name\":\"echo\",\"arguments\":{\"x\":1},\"_meta\":{\"io.durin/control\":{\"idempotencyKey\":\"k1\"}}},\"jsonrpc\":\"2.0\",\"id\":4}",
+          "redirect": "error"
+        }
+      ],
+      "calls": [
+        [
+          "tokens",
+          null
+        ]
+      ],
+      "warnings": []
+    },
+    {
+      "op": "callTool",
+      "result": "{\"content\":[],\"structuredContent\":{\"b\":2},\"isError\":true}",
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://app.example.test/mcp/u/abc",
+          "headers": {
+            "accept": "application/json, text/event-stream",
+            "authorization": "Bearer at-1",
+            "content-type": "application/json",
+            "mcp-protocol-version": "2025-06-18",
+            "mcp-session-id": "sess-1"
+          },
+          "body": "{\"method\":\"tools/call\",\"params\":{\"name\":\"two\",\"arguments\":{}},\"jsonrpc\":\"2.0\",\"id\":5}",
+          "redirect": "error"
+        }
+      ],
+      "calls": [
+        [
+          "tokens",
+          null
+        ]
+      ],
+      "warnings": []
+    },
+    {
+      "op": "callTool",
+      "error": {
+        "name": "SdkError",
+        "message": "Invalid result for tools/call: [\n  {\n    \"code\": \"custom\",\n    \"path\": [\n      \"content\",\n      0,\n      \"data\"\n    ],\n    \"message\": \"Invalid Base64 string\"\n  }\n]",
+        "code": "INVALID_RESULT"
+      },
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://app.example.test/mcp/u/abc",
+          "headers": {
+            "accept": "application/json, text/event-stream",
+            "authorization": "Bearer at-1",
+            "content-type": "application/json",
+            "mcp-protocol-version": "2025-06-18",
+            "mcp-session-id": "sess-1"
+          },
+          "body": "{\"method\":\"tools/call\",\"params\":{\"name\":\"two\",\"arguments\":{}},\"jsonrpc\":\"2.0\",\"id\":6}",
+          "redirect": "error"
+        }
+      ],
+      "calls": [
+        [
+          "tokens",
+          null
+        ]
+      ],
+      "warnings": []
+    },
+    {
+      "op": "callTool",
+      "error": {
+        "name": "ProtocolError",
+        "message": "boom",
+        "code": -32000
+      },
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://app.example.test/mcp/u/abc",
+          "headers": {
+            "accept": "application/json, text/event-stream",
+            "authorization": "Bearer at-1",
+            "content-type": "application/json",
+            "mcp-protocol-version": "2025-06-18",
+            "mcp-session-id": "sess-1"
+          },
+          "body": "{\"method\":\"tools/call\",\"params\":{\"name\":\"two\",\"arguments\":{}},\"jsonrpc\":\"2.0\",\"id\":7}",
+          "redirect": "error"
+        }
+      ],
+      "calls": [
+        [
+          "tokens",
+          null
+        ]
+      ],
+      "warnings": []
+    },
+    {
+      "op": "close",
+      "result": null,
+      "requests": [],
+      "calls": [],
+      "warnings": []
+    }
+  ],
+  "transportErrors": []
+}

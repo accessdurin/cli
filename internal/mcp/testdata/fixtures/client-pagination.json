@@ -1,0 +1,194 @@
+{
+  "steps": [
+    {
+      "op": "connect",
+      "result": {
+        "sessionId": null,
+        "protocolVersion": "2025-03-26"
+      },
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://app.example.test/mcp",
+          "headers": {
+            "accept": "application/json, text/event-stream",
+            "authorization": "Bearer at",
+            "content-type": "application/json"
+          },
+          "body": "{\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{},\"clientInfo\":{\"name\":\"Durin CLI\",\"version\":\"1.0.0\"}},\"jsonrpc\":\"2.0\",\"id\":0}",
+          "redirect": "error"
+        },
+        {
+          "method": "POST",
+          "url": "https://app.example.test/mcp",
+          "headers": {
+            "accept": "application/json, text/event-stream",
+            "authorization": "Bearer at",
+            "content-type": "application/json",
+            "mcp-protocol-version": "2025-03-26"
+          },
+          "body": "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+          "redirect": "error"
+        }
+      ],
+      "calls": [
+        [
+          "tokens",
+          null
+        ],
+        [
+          "tokens",
+          null
+        ]
+      ],
+      "warnings": []
+    },
+    {
+      "op": "listTools",
+      "error": {
+        "name": "SdkError",
+        "message": "tools/list: exceeded listMaxPages (3); server pagination did not terminate",
+        "code": "LIST_PAGINATION_EXCEEDED"
+      },
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://app.example.test/mcp",
+          "headers": {
+            "accept": "application/json, text/event-stream",
+            "authorization": "Bearer at",
+            "content-type": "application/json",
+            "mcp-protocol-version": "2025-03-26"
+          },
+          "body": "{\"method\":\"tools/list\",\"jsonrpc\":\"2.0\",\"id\":1}",
+          "redirect": "error"
+        },
+        {
+          "method": "POST",
+          "url": "https://app.example.test/mcp",
+          "headers": {
+            "accept": "application/json, text/event-stream",
+            "authorization": "Bearer at",
+            "content-type": "application/json",
+            "mcp-protocol-version": "2025-03-26"
+          },
+          "body": "{\"method\":\"tools/list\",\"params\":{\"cursor\":\"1\"},\"jsonrpc\":\"2.0\",\"id\":2}",
+          "redirect": "error"
+        },
+        {
+          "method": "POST",
+          "url": "https://app.example.test/mcp",
+          "headers": {
+            "accept": "application/json, text/event-stream",
+            "authorization": "Bearer at",
+            "content-type": "application/json",
+            "mcp-protocol-version": "2025-03-26"
+          },
+          "body": "{\"method\":\"tools/list\",\"params\":{\"cursor\":\"2\"},\"jsonrpc\":\"2.0\",\"id\":3}",
+          "redirect": "error"
+        }
+      ],
+      "calls": [
+        [
+          "tokens",
+          null
+        ],
+        [
+          "tokens",
+          null
+        ],
+        [
+          "tokens",
+          null
+        ]
+      ],
+      "warnings": []
+    },
+    {
+      "op": "listTools",
+      "result": "{\"tools\":[{\"name\":\"a\",\"inputSchema\":{\"type\":\"object\"}},{\"name\":\"b\",\"inputSchema\":{\"type\":\"object\"}}]}",
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://app.example.test/mcp",
+          "headers": {
+            "accept": "application/json, text/event-stream",
+            "authorization": "Bearer at",
+            "content-type": "application/json",
+            "mcp-protocol-version": "2025-03-26"
+          },
+          "body": "{\"method\":\"tools/list\",\"jsonrpc\":\"2.0\",\"id\":4}",
+          "redirect": "error"
+        },
+        {
+          "method": "POST",
+          "url": "https://app.example.test/mcp",
+          "headers": {
+            "accept": "application/json, text/event-stream",
+            "authorization": "Bearer at",
+            "content-type": "application/json",
+            "mcp-protocol-version": "2025-03-26"
+          },
+          "body": "{\"method\":\"tools/list\",\"params\":{\"cursor\":\"x\"},\"jsonrpc\":\"2.0\",\"id\":5}",
+          "redirect": "error"
+        },
+        {
+          "method": "POST",
+          "url": "https://app.example.test/mcp",
+          "headers": {
+            "accept": "application/json, text/event-stream",
+            "authorization": "Bearer at",
+            "content-type": "application/json",
+            "mcp-protocol-version": "2025-03-26"
+          },
+          "body": "{\"method\":\"tools/list\",\"params\":{\"cursor\":\"x\"},\"jsonrpc\":\"2.0\",\"id\":6}",
+          "redirect": "error"
+        }
+      ],
+      "calls": [
+        [
+          "tokens",
+          null
+        ],
+        [
+          "tokens",
+          null
+        ],
+        [
+          "tokens",
+          null
+        ]
+      ],
+      "warnings": []
+    },
+    {
+      "op": "listTools",
+      "error": {
+        "name": "InsufficientScopeError",
+        "message": "Insufficient scope: required \"mcp:admin\""
+      },
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://app.example.test/mcp",
+          "headers": {
+            "accept": "application/json, text/event-stream",
+            "authorization": "Bearer at",
+            "content-type": "application/json",
+            "mcp-protocol-version": "2025-03-26"
+          },
+          "body": "{\"method\":\"tools/list\",\"jsonrpc\":\"2.0\",\"id\":7}",
+          "redirect": "error"
+        }
+      ],
+      "calls": [
+        [
+          "tokens",
+          null
+        ]
+      ],
+      "warnings": []
+    }
+  ],
+  "transportErrors": []
+}

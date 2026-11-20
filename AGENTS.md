@@ -14,4 +14,6 @@
   discovery or coverage scope.
 - For test-suite optimizations, compare before/after test counts, coverage where
   available and runtimes under comparable conditions. Distinguish measurements
-  from estimates, and run `pnpm verify` before handing off changes.
+  from estimates, and run the checks in CONTRIBUTING.md (`gofmt -l .`, `go vet ./...`,
+  `go test ./internal/... ./cmd/... ./tools/...`, `e2e/run.sh`, `go run ./tools/checksecrets`)
+  before handing off changes.

@@ -1,0 +1,200 @@
+## durin login --dev --app-url <ORIGIN> --config-dir <TMP>/config (interactive)
+exit: 0
+--- stdout
+--- stderr
+## requests
+GET /auth/cli/config
+POST /user_management/authorize/device [Content-Type: application/x-www-form-urlencoded] client_id=client_account
+POST /user_management/authenticate [Content-Type: application/x-www-form-urlencoded] client_id=client_account&device_code=device-1&grant_type=urn:ietf:params:oauth:grant-type:device_code
+POST /user_management/authenticate [Content-Type: application/x-www-form-urlencoded] client_id=client_account&device_code=device-1&grant_type=urn:ietf:params:oauth:grant-type:device_code
+GET /api/v1/session [Authorization: Bearer account-access] [Content-Type: application/json] [Origin: <ORIGIN>] [X-Requested-With: durin]
+POST /user_management/authenticate [Content-Type: application/x-www-form-urlencoded] client_id=client_account&grant_type=refresh_token&organization_id=org_wos_1&refresh_token=account-refresh
+GET /api/v1/session [Authorization: Bearer account-access] [Content-Type: application/json] [Origin: <ORIGIN>] [X-Requested-With: durin]
+GET /api/v1/onboarding [Authorization: Bearer account-access] [Content-Type: application/json] [Origin: <ORIGIN>] [X-Requested-With: durin]
+GET /api/v1/me/bootstrap [Authorization: Bearer account-access] [Content-Type: application/json] [Origin: <ORIGIN>] [X-Requested-With: durin]
+GET /.well-known/oauth-protected-resource/mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Mcp-Protocol-Version: 2025-11-25]
+GET /.well-known/oauth-protected-resource/mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Mcp-Protocol-Version: 2025-11-25]
+GET /.well-known/oauth-authorization-server [Mcp-Protocol-Version: 2025-11-25]
+POST /register [Content-Type: application/json] {"application_type":"native","client_name":"Durin CLI","grant_types":["authorization_code","refresh_token"],"redirect_uris":["http://127.0.0.1:<PORT>/oauth/callback"],"response_types":["code"],"token_endpoint_auth_method":"none"}
+GET /authorize?response_type=code&client_id=client-1&code_challenge=<RANDOM>&code_challenge_method=S256&redirect_uri=http%3A%2F%2F127.0.0.1%3A<PORT>%2Foauth%2Fcallback&state=<RANDOM>&resource=http%3A%2F%2F127.0.0.1%3A<PORT>%2Fmcp%2Fu%2F0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+POST /token [Content-Type: application/x-www-form-urlencoded] client_id=client-1&code=code-1&code_verifier=<RANDOM>&grant_type=authorization_code&redirect_uri=http://127.0.0.1:<PORT>/oauth/callback&resource=<ORIGIN>/mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-1] [Content-Type: application/json] {"id":0,"jsonrpc":"2.0","method":"initialize","params":{"capabilities":{},"clientInfo":{"name":"Durin CLI","version":"1.0.0"},"protocolVersion":"2025-11-25"}}
+POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-1] [Content-Type: application/json] [Mcp-Protocol-Version: 2025-11-25] [Mcp-Session-Id: session-1] {"id":1,"jsonrpc":"2.0","method":"tools/list"}
+POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-1] [Content-Type: application/json] {"id":0,"jsonrpc":"2.0","method":"initialize","params":{"capabilities":{},"clientInfo":{"name":"Durin setup verification","version":"1.0.0"},"protocolVersion":"2025-11-25"}}
+POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-1] [Content-Type: application/json] [Mcp-Protocol-Version: 2025-11-25] [Mcp-Session-Id: session-1] {"id":1,"jsonrpc":"2.0","method":"tools/list"}
+(notification) POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-1] [Content-Type: application/json] [Mcp-Protocol-Version: 2025-11-25] [Mcp-Session-Id: session-1] {"jsonrpc":"2.0","method":"notifications/initialized"}
+## opened in the browser
+<ORIGIN>/device?user_code=WXYZ-1234
+<ORIGIN>/authorize?response_type=code&client_id=client-1&code_challenge=<RANDOM>&code_challenge_method=S256&redirect_uri=http%3A%2F%2F127.0.0.1%3A<PORT>%2Foauth%2Fcallback&state=<RANDOM>&resource=http%3A%2F%2F127.0.0.1%3A<PORT>%2Fmcp%2Fu%2F0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+## config directory (without runtime)
+active file 0600
+hooks dir 0700
+hooks/claude.json file 0600
+locks dir 0700
+profiles dir 0700
+profiles/<PROFILE>.json file 0600
+## profile
+{
+  "appOrigin": "<ORIGIN>",
+  "accountIssuer": "<ORIGIN>",
+  "accountClientId": "client_account",
+  "principalId": "user_01",
+  "workosOrganizationId": "org_wos_1",
+  "organizationId": "org_1",
+  "environment": "production",
+  "resource": "<ORIGIN>/mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "mcpIssuer": "<ORIGIN>",
+  "development": true,
+  "version": 1,
+  "id": "<PROFILE>"
+}
+## active
+<PROFILE>
+## ~/.claude.json
+{
+  "mcpServers": {
+    "durin-<PROFILE12>": {
+      "type": "stdio",
+      "command": "<LAUNCHER>",
+      "args": [
+        "mcp",
+        "serve",
+        "--profile",
+        "<PROFILE>",
+        "--config-dir",
+        "<TMP>/config"
+      ]
+    }
+  }
+}
+⏎ (no trailing newline)
+## ~/.claude/settings.json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config'",
+            "timeout": 7
+          }
+        ]
+      }
+    ]
+  }
+}
+⏎ (no trailing newline)
+## hook installation
+{
+  "format": "claude",
+  "harness": "claude",
+  "checker": {
+    "command": "<TMP>/checker/check.sh",
+    "args": [
+      "--client",
+      "claude"
+    ],
+    "timeoutMs": 4000
+  },
+  "target": "<TMP>/home/.claude/settings.json",
+  "installedAt": "<DATE>",
+  "handler": {
+    "type": "command",
+    "command": "<LAUNCHER> 'hooks' 'run' '--harness' 'claude' '--config-dir' '<TMP>/config'",
+    "timeout": 7
+  },
+  "assetDigest": "<DIGEST>"
+}
+## skills
+durin-hooks dir 0700
+durin-hooks/.durin-install.json file 0600
+durin-hooks/LICENSE file 0600
+durin-hooks/SKILL.md file 0600
+durin-profiles dir 0700
+durin-profiles/.durin-install.json file 0600
+durin-profiles/LICENSE file 0600
+durin-profiles/SKILL.md file 0600
+durin-setup dir 0700
+durin-setup/.durin-install.json file 0600
+durin-setup/LICENSE file 0600
+durin-setup/SKILL.md file 0600
+durin-tools dir 0700
+durin-tools/.durin-install.json file 0600
+durin-tools/LICENSE file 0600
+durin-tools/SKILL.md file 0600
+durin-verify dir 0700
+durin-verify/.durin-install.json file 0600
+durin-verify/LICENSE file 0600
+durin-verify/SKILL.md file 0600
+## durin-tools skill manifest
+{
+  "repository": "https://github.com/accessdurin/skills",
+  "revision": "a28e6b9905fea11deb5b1b66ce4be608fc0255ef",
+  "sha256": "7145ee44b93b463c78286d6ff9105f8fcaf2556cfc5455693b6f9f2777e29ce5"
+}
+## credentials
+mcp:<PROFILE>:client (label keyring:mcp:<PROFILE>:client@com.getdurin.cli)
+mcp:<PROFILE>:tokens (label keyring:mcp:<PROFILE>:tokens@com.getdurin.cli)
+## tokens
+{"access_token":"access-1","token_type":"Bearer","expires_in":3600,"refresh_token":"refresh-1","issuer":"<ORIGIN>"}
+⏎ (no trailing newline)
+## client
+{"client_id":"client-1","client_id_issued_at":1700000000,"issuer":"<ORIGIN>","redirect_uris":["http://127.0.0.1:<PORT>/oauth/callback"],"token_endpoint_auth_method":"none"}
+⏎ (no trailing newline)
+## bridge arguments after the launcher
+mcp serve --profile <PROFILE> --config-dir <TMP>/config
+## durin hooks status --config-dir <TMP>/config
+exit: 0
+--- stdout
+[
+  {
+    "harness": "claude",
+    "target": "<TMP>/home/.claude/settings.json",
+    "checker": "available",
+    "configuration": "installed",
+    "execution": "not-verified"
+  }
+]
+--- stderr
+## durin verify --config-dir <TMP>/config
+exit: 0
+--- stdout
+{
+  "verified": true,
+  "availableTools": 1,
+  "detail": "Authenticated gateway catalog verified. This does not prove the agent harness has been opened."
+}
+--- stderr
+## durin login (second run, interactive)
+exit: 0
+--- stdout
+--- stderr
+## requests
+GET /auth/cli/config
+POST /user_management/authorize/device [Content-Type: application/x-www-form-urlencoded] client_id=client_account
+POST /user_management/authenticate [Content-Type: application/x-www-form-urlencoded] client_id=client_account&device_code=device-1&grant_type=urn:ietf:params:oauth:grant-type:device_code
+GET /api/v1/session [Authorization: Bearer account-access] [Content-Type: application/json] [Origin: <ORIGIN>] [X-Requested-With: durin]
+POST /user_management/authenticate [Content-Type: application/x-www-form-urlencoded] client_id=client_account&grant_type=refresh_token&organization_id=org_wos_1&refresh_token=account-refresh
+GET /api/v1/session [Authorization: Bearer account-access] [Content-Type: application/json] [Origin: <ORIGIN>] [X-Requested-With: durin]
+GET /api/v1/onboarding [Authorization: Bearer account-access] [Content-Type: application/json] [Origin: <ORIGIN>] [X-Requested-With: durin]
+GET /api/v1/me/bootstrap [Authorization: Bearer account-access] [Content-Type: application/json] [Origin: <ORIGIN>] [X-Requested-With: durin]
+GET /.well-known/oauth-protected-resource/mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Mcp-Protocol-Version: 2025-11-25]
+GET /.well-known/oauth-protected-resource/mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Mcp-Protocol-Version: 2025-11-25]
+GET /.well-known/oauth-authorization-server [Mcp-Protocol-Version: 2025-11-25]
+POST /token [Content-Type: application/x-www-form-urlencoded] client_id=client-1&grant_type=refresh_token&refresh_token=refresh-1&resource=<ORIGIN>/mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-2] [Content-Type: application/json] {"id":0,"jsonrpc":"2.0","method":"initialize","params":{"capabilities":{},"clientInfo":{"name":"Durin CLI","version":"1.0.0"},"protocolVersion":"2025-11-25"}}
+POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-2] [Content-Type: application/json] [Mcp-Protocol-Version: 2025-11-25] [Mcp-Session-Id: session-1] {"id":1,"jsonrpc":"2.0","method":"tools/list"}
+POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-2] [Content-Type: application/json] {"id":0,"jsonrpc":"2.0","method":"initialize","params":{"capabilities":{},"clientInfo":{"name":"Durin setup verification","version":"1.0.0"},"protocolVersion":"2025-11-25"}}
+POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-2] [Content-Type: application/json] [Mcp-Protocol-Version: 2025-11-25] [Mcp-Session-Id: session-1] {"id":1,"jsonrpc":"2.0","method":"tools/list"}
+(notification) POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-2] [Content-Type: application/json] [Mcp-Protocol-Version: 2025-11-25] [Mcp-Session-Id: session-1] {"jsonrpc":"2.0","method":"notifications/initialized"}
+## config directory after second run (without runtime)
+active file 0600
+hooks dir 0700
+hooks/claude.json file 0600
+locks dir 0700
+profiles dir 0700
+profiles/<PROFILE>.json file 0600
+## backups in home
+
