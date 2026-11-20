@@ -172,6 +172,15 @@ func exactIssuer(url, host string) bool {
 	return url == "https://"+host || url == "https://"+host+"/"
 }
 
+func issuerRole(role CliHostRole) bool { return role == RoleMcpIssuer || role == RoleAccountIssuer }
+
+func hostAllowed(role CliHostRole, url string, scope CliHostScope) bool {
+	return contains(expectedHosts(role, scope), hostOf(url)) ||
+		(allowsWorkosIssuer(role, scope) && workosIssuer(url))
+}
+
+// allowedRemote: a known app's issuer must be exactly https://<host>; any other issuer must be
+// its own URL form (RoundTripCliURL) on an expected host.
 func allowedRemote(role CliHostRole, url string, scope CliHostScope) bool {
 	if pinnedIssuer(role, scope) {
 		for _, expected := range expectedHosts(role, scope) {
@@ -181,8 +190,10 @@ func allowedRemote(role CliHostRole, url string, scope CliHostScope) bool {
 		}
 		return false
 	}
-	return contains(expectedHosts(role, scope), hostOf(url)) ||
-		(allowsWorkosIssuer(role, scope) && workosIssuer(url))
+	if issuerRole(role) && !RoundTripCliURL(url) {
+		return false
+	}
+	return hostAllowed(role, url, scope)
 }
 
 func allowedHost(role CliHostRole, url string, scope CliHostScope) bool {
@@ -221,10 +232,52 @@ func describeProblem(role CliHostRole, host string, scope CliHostScope) string {
 	return "The " + roleNames[role] + " is on " + host + describeExpected(role, scope) + "." + local + workosProviderHint(role, host, scope)
 }
 
+func looseSelfHostedIssuer(role CliHostRole, url string, scope CliHostScope) bool {
+	return issuerRole(role) && !pinnedIssuer(role, scope) && !RoundTripCliURL(url)
+}
+
+func workosHostname(url string) string {
+	parsed, err := weburl.Parse(url)
+	if err != nil || parsed.Protocol() != "https:" || !workosIssuerHost.MatchString(parsed.Hostname()) {
+		return ""
+	}
+	return parsed.Hostname()
+}
+
+// exactSpellingHost is the host the exact-spelling message should name, or "" when a
+// different message applies.
+func exactSpellingHost(role CliHostRole, url string, scope CliHostScope, host string) string {
+	if contains(expectedHosts(role, scope), host) {
+		return host
+	}
+	// A non-default port is a different host (:8443), so it keeps the ordinary host message.
+	if !allowsWorkosIssuer(role, scope) {
+		return ""
+	}
+	if named := workosHostname(url); named == host {
+		return named
+	}
+	return ""
+}
+
+func spellingProblem(role CliHostRole, url string, scope CliHostScope, host string) string {
+	if !looseSelfHostedIssuer(role, url, scope) {
+		return ""
+	}
+	named := exactSpellingHost(role, url, scope, host)
+	if named == "" {
+		return ""
+	}
+	return "The " + roleNames[role] + " must be written exactly as https://" + named + ": lowercase, with no :443, //, spaces, NUL or backslash."
+}
+
 func untrustedCliHost(role CliHostRole, url string, scope CliHostScope) string {
 	host := hostOf(url)
 	if host == "" {
 		return "The " + roleNames[role] + " is not a valid web address."
+	}
+	if problem := spellingProblem(role, url, scope, host); problem != "" {
+		return problem
 	}
 	if allowedHost(role, url, scope) {
 		return ""
@@ -255,6 +308,55 @@ func CanonicalIssuer(role CliHostRole, url string, scope CliHostScope) (issuer s
 		}
 	}
 	return url, nil
+}
+
+// rootSlash is true only for the single slash of an empty path, as in https://host/.
+func rootSlash(url string) bool {
+	scheme := strings.Index(url, "://")
+	if scheme < 0 || !strings.HasSuffix(url, "/") {
+		return false
+	}
+	rest := url[scheme+3:]
+	return strings.Index(rest, "/") == len(rest)-1
+}
+
+// ComparableIssuer is the form used to compare issuers. A pinned issuer is https://<host>.
+// Every issuer drops one root trailing slash, and nothing else: case, port, //, a path, and
+// another host stay different. Saving still uses CanonicalIssuer, so a self-hosted issuer is
+// stored as written.
+func ComparableIssuer(role CliHostRole, url string, scope CliHostScope) (issuer string, err error) {
+	canonical, err := CanonicalIssuer(role, url, scope)
+	if err != nil {
+		return "", err
+	}
+	if rootSlash(canonical) {
+		return canonical[:len(canonical)-1], nil
+	}
+	return canonical, nil
+}
+
+// profileIssuerProblem: a saved profile keeps a known app's issuer as the canonical
+// https://<host> string. Live setup may accept the trailing-slash spelling and save this form.
+// Loading any other spelling, including one that only parses to the same host, refuses it
+// instead of rewriting it.
+func profileIssuerProblem(role CliHostRole, url string, scope CliHostScope) string {
+	if problem := untrustedCliHost(role, url, scope); problem != "" {
+		return problem
+	}
+	canonical, _ := CanonicalIssuer(role, url, scope)
+	if url == canonical {
+		return ""
+	}
+	return "The " + roleNames[role] + " must be exactly " + hostOf(canonical) + " over HTTPS, in lowercase, with no port, path, query or user name."
+}
+
+// untrustedProfileHost is untrustedProfileHost (src/contracts/cli-host.ts) for one of
+// CliProfileHostRoles.
+func untrustedProfileHost(role CliHostRole, url string, scope CliHostScope) string {
+	if role == RoleResource {
+		return untrustedCliHost(role, url, scope)
+	}
+	return profileIssuerProblem(role, url, scope)
 }
 
 // CliHostAllowlist is the hosts a request may reach. Loopback hosts are reachable only in

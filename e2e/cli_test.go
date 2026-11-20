@@ -132,16 +132,22 @@ func TestProfiles(t *testing.T) {
 	e.WriteFile(filepath.Join(e.Config, "profiles", "notes.txt"), "x", 0o600)
 	e.RunSortedList("principalId", "profiles", "list", "--config-dir", e.Config)
 
-	// A tampered binding (id no longer matches its scope) is refused everywhere.
+	// A tampered binding (id no longer matches its scope) is refused everywhere; the list names
+	// it as refused, without failing, and logout deletes it and its credentials locally. It is
+	// not a production profile, so logout makes no request.
 	tampered := e.DefaultProfile()
 	tampered.PrincipalID = "user_03"
 	tamperedID := e.SaveProfile(tampered)
 	path := filepath.Join(e.Config, "profiles", tamperedID+".json")
 	data, _ := os.ReadFile(path)
 	e.WriteFile(path, string(replaceOnce(data, "user_03", "user_04")), 0o600)
-	e.Run("", "profiles", "list", "--config-dir", e.Config)
+	e.RunSortedList("principalId", "profiles", "list", "--config-dir", e.Config)
 	e.Run("", "profiles", "use", tamperedID, "--config-dir", e.Config)
-	_ = os.Remove(path)
+	e.SeedGrant(tamperedID, "access-tampered", "refresh-tampered")
+	e.Run("", "logout", "--profile", tamperedID, "--config-dir", e.Config)
+	e.NoteRequests()
+	e.Note("credentials", e.CredentialKeys("mcp:"+tamperedID))
+	e.Note("files after refused logout", e.Tree(e.Config))
 
 	// A production profile on a loopback HTTP host is not a valid binding.
 	insecure := e.DefaultProfile()

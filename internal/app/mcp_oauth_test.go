@@ -62,11 +62,15 @@ func TestMcpOAuthProviderKeepsIssuerBoundCredentialsInTheStore(t *testing.T) {
 	}
 	err := provider.SaveDiscoveryState(ctx, oauth.DiscoveryState{AuthorizationServerURL: "https://other.example.test/"})
 	wantCliError(t, err, "MCP authorization issuer does not match the selected profile.")
-	// Only a known app's pinned issuer is canonicalized; a self-hosted issuer must match as written.
-	err = provider.SaveDiscoveryState(ctx, oauth.DiscoveryState{AuthorizationServerURL: "https://app.example.test"})
-	wantCliError(t, err, "MCP authorization issuer does not match the selected profile.")
-	if err := provider.SaveDiscoveryState(ctx, oauth.DiscoveryState{AuthorizationServerURL: profile.McpIssuer}); err != nil {
-		t.Errorf("refused the profile's own issuer: %v", err)
+	// One root trailing slash is the same issuer, a self-hosted one included. Nothing else is.
+	for _, discovered := range []string{"https://app.example.test//", "https://app.example.test/x", "HTTPS://app.example.test/", "https://app.example.test:443", "https://other.example.test/"} {
+		err = provider.SaveDiscoveryState(ctx, oauth.DiscoveryState{AuthorizationServerURL: discovered})
+		wantCliError(t, err, "MCP authorization issuer does not match the selected profile.")
+	}
+	for _, discovered := range []string{"https://app.example.test", profile.McpIssuer} {
+		if err := provider.SaveDiscoveryState(ctx, oauth.DiscoveryState{AuthorizationServerURL: discovered}); err != nil {
+			t.Errorf("refused %s as the profile's own issuer: %v", discovered, err)
+		}
 	}
 	for _, resource := range []*string{nil, ptrTo("https://app.example.test/mcp/u/" + strings.Repeat("b", 64))} {
 		server, _ := weburl.Parse(profile.Resource)

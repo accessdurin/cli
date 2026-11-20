@@ -19,10 +19,22 @@ type CredentialStore interface {
 	Remove(key string) error
 }
 
+// RefusedProfile is a saved profile that no longer loads, with the reason it was refused.
+type RefusedProfile struct {
+	ID     string
+	Reason string
+}
+
+// ProfileList is every saved profile: those that load, and those refused.
+type ProfileList struct {
+	Profiles []contracts.CliProfile
+	Refused  []RefusedProfile
+}
+
 // CliProfiles stores organization profiles (src/ports/cli-profiles.ts). Load("") loads the
 // active profile.
 type CliProfiles interface {
-	List() ([]contracts.CliProfile, error)
+	List() (ProfileList, error)
 	Save(profile contracts.CliProfile) error
 	Load(id string) (contracts.CliProfile, error)
 	Activate(id string) error

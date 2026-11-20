@@ -14,6 +14,11 @@ import (
 func ConnectionProfile(options *CliOptions) (contracts.CliProfile, error) {
 	profile, err := LoadSelectedProfile(options)
 	if err != nil {
+		// A refused profile already explains itself (for example, an issuer that isn't spelled
+		// exactly), so its message is kept.
+		if _, expected := clierror.As(err); expected {
+			return contracts.CliProfile{}, err
+		}
 		return contracts.CliProfile{}, clierror.Wrap("No valid organization profile. Run durin in a terminal to complete setup.", err)
 	}
 	return profile, nil

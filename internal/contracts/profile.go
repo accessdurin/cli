@@ -34,14 +34,15 @@ func scopeHosts(o *jsjson.Object) CliHostScope {
 // CliProfileScopeSchema is cliProfileScopeSchema.
 var CliProfileScopeSchema = zod.Object(
 	zod.F("appOrigin", URL()),
-	zod.F("accountIssuer", URL()),
+	// Plain strings, checked as written. z.url() trims, which would accept a padded issuer.
+	zod.F("accountIssuer", zod.String().Min(1)),
 	zod.F("accountClientId", zod.String().Min(1)),
 	zod.F("principalId", zod.String().Min(1)),
 	zod.F("workosOrganizationId", zod.String().Min(1)),
 	zod.F("organizationId", zod.String().Min(1)),
 	zod.F("environment", zod.Enum("sandbox", "production")),
 	zod.F("resource", URL()),
-	zod.F("mcpIssuer", URL()),
+	zod.F("mcpIssuer", zod.String().Min(1)),
 	zod.F("development", zod.Boolean()),
 ).Strict().Refine(func(o *jsjson.Object) bool {
 	dev, _ := o.GetBool("development")
@@ -63,7 +64,7 @@ var CliProfileScopeSchema = zod.Object(
 	scope := scopeHosts(o)
 	for _, role := range CliProfileHostRoles {
 		url, _ := o.GetString(string(role))
-		if problem := untrustedCliHost(role, url, scope); problem != "" {
+		if problem := untrustedProfileHost(role, url, scope); problem != "" {
 			ctx.AddIssue(problem, string(role))
 		}
 	}

@@ -17,7 +17,8 @@ var (
 // CliAuthConfigSchema is cliAuthConfigSchema (GET /auth/cli/config).
 var CliAuthConfigSchema = zod.Object(
 	zod.F("clientId", zod.String().Min(1)),
-	zod.F("issuer", URL()),
+	// Plain string, checked as written. z.url() trims, which would accept a padded issuer.
+	zod.F("issuer", zod.String().Min(1)),
 	zod.F("providerOrigin", URL()),
 	zod.F("appOrigin", URL()),
 ).Strict()

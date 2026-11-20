@@ -1,9 +1,13 @@
 package app
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"io"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/accessdurin/cli/internal/clierror"
 	"github.com/accessdurin/cli/internal/contracts"
@@ -23,7 +27,8 @@ func mcpIssuer(ctx context.Context, resource string, request *http.Client, scope
 	if err := assertExpectedHost(contracts.RoleResource, resource, scope); err != nil {
 		return "", err
 	}
-	metadata, err := oauth.DiscoverOAuthProtectedResourceMetadata(ctx, resource, nil, HTTPFetch(request))
+	noted := &notedIssuers{}
+	metadata, err := oauth.DiscoverOAuthProtectedResourceMetadata(ctx, resource, nil, observingProtectedResource(resource, HTTPFetch(request), noted))
 	if err != nil {
 		return "", err
 	}
@@ -31,7 +36,10 @@ func mcpIssuer(ctx context.Context, resource string, request *http.Client, scope
 	if metadata.Resource != resource || len(issuers) != 1 {
 		return "", clierror.New("MCP discovery must identify the exact personal resource and one trusted issuer.")
 	}
-	issuer := issuers[0]
+	issuer, err := agreedIssuer(noted, issuers[0], scope)
+	if err != nil {
+		return "", err
+	}
 	if issuer == "" || !contracts.SafeCliURL(issuer, scope.Development) {
 		return "", clierror.New("Unsafe MCP authorization issuer.")
 	}
@@ -39,6 +47,97 @@ func mcpIssuer(ctx context.Context, resource string, request *http.Client, scope
 		return "", err
 	}
 	return contracts.CanonicalIssuer(contracts.RoleMcpIssuer, issuer, scope)
+}
+
+// notedIssuers are the issuers named by the protected-resource documents discovery read: the
+// last 2xx document on the resource's origin is the one durin pins; earlier ones are others.
+type notedIssuers struct {
+	pinned string
+	others []string
+}
+
+const issuersDisagree = "MCP discovery found protected-resource documents that name different sign-in servers. Nothing was saved."
+
+// sameIssuer: one root trailing slash does not make a different issuer. Nothing else is folded in.
+func sameIssuer(left, right string, scope contracts.CliHostScope) bool {
+	l, lerr := contracts.ComparableIssuer(contracts.RoleMcpIssuer, left, scope)
+	r, rerr := contracts.ComparableIssuer(contracts.RoleMcpIssuer, right, scope)
+	return lerr == nil && rerr == nil && l == r
+}
+
+// agreedIssuer is the SDK's issuer only when it is the one the pinned document named and every
+// other document agreed. A pinned issuer on an unexpected host is reported as that.
+func agreedIssuer(noted *notedIssuers, sdkIssuer string, scope contracts.CliHostScope) (string, error) {
+	if noted.pinned == "" || !sameIssuer(noted.pinned, sdkIssuer, scope) {
+		if noted.pinned != "" {
+			if err := assertExpectedHost(contracts.RoleMcpIssuer, noted.pinned, scope); err != nil {
+				return "", err
+			}
+		}
+		return "", clierror.New(issuersDisagree)
+	}
+	for _, other := range noted.others {
+		if !sameIssuer(other, sdkIssuer, scope) {
+			return "", clierror.New(issuersDisagree)
+		}
+	}
+	return sdkIssuer, nil
+}
+
+// documentIssuer is the first of a document's authorization_servers, "" when it has none.
+func documentIssuer(body []byte) string {
+	var document struct {
+		AuthorizationServers []any `json:"authorization_servers"`
+	}
+	if json.Unmarshal(body, &document) != nil || len(document.AuthorizationServers) == 0 {
+		return ""
+	}
+	for _, server := range document.AuthorizationServers {
+		if _, ok := server.(string); !ok {
+			return ""
+		}
+	}
+	return document.AuthorizationServers[0].(string)
+}
+
+func sameOrigin(target, origin string) bool {
+	u, err := weburl.Parse(target)
+	return err == nil && u.Origin() == origin
+}
+
+// pinnedDocument: only a 2xx protected-resource document served on the resource's origin, from
+// the address requested (secure fetch refuses redirects), is the issuer durin will pin.
+func pinnedDocument(target string, resp *http.Response, origin string) bool {
+	return strings.Contains(target, "oauth-protected-resource") && httpx.OK(resp) &&
+		(resp.Request == nil || resp.Request.URL.String() == target) && sameOrigin(target, origin)
+}
+
+// observingProtectedResource notes the issuer each pinned protected-resource document names,
+// leaving the response for discovery to read.
+func observingProtectedResource(resource string, fetch httpx.Fetch, noted *notedIssuers) httpx.Fetch {
+	origin := ""
+	if u, err := weburl.Parse(resource); err == nil {
+		origin = u.Origin()
+	}
+	return func(ctx context.Context, target string, init *httpx.RequestInit) (*http.Response, error) {
+		resp, err := fetch(ctx, target, init)
+		if err != nil || !pinnedDocument(target, resp, origin) {
+			return resp, err
+		}
+		body, err := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if err != nil {
+			return nil, err
+		}
+		resp.Body = io.NopCloser(bytes.NewReader(body))
+		if issuer := documentIssuer(body); issuer != "" {
+			if noted.pinned != "" {
+				noted.others = append(noted.others, noted.pinned)
+			}
+			noted.pinned = issuer
+		}
+		return resp, nil
+	}
 }
 
 func assertExpectedHost(role contracts.CliHostRole, url string, scope contracts.CliHostScope) error {

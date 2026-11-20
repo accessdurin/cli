@@ -275,17 +275,17 @@ func (p *McpOAuthProvider) ValidateResourceURL(_ context.Context, serverURL *web
 	return weburl.Parse(own)
 }
 
-// SaveDiscoveryState accepts only the profile's MCP issuer. The SDK names the sign-in server
-// as the MCP server's metadata spells it, so a known app's https://<host>/ is the same issuer
-// as https://<host>. Nothing else is.
+// SaveDiscoveryState accepts only the profile's MCP issuer, compared with ComparableIssuer.
 func (p *McpOAuthProvider) SaveDiscoveryState(_ context.Context, state oauth.DiscoveryState) error {
 	profile := p.options.Profile
 	scope := contracts.CliHostScope{AppOrigin: profile.AppOrigin, Development: profile.Development, AccountIssuer: profile.AccountIssuer}
-	discovered, err := contracts.CanonicalIssuer(contracts.RoleMcpIssuer, state.AuthorizationServerURL, scope)
+	// The SDK names the sign-in server as the metadata spells it. One root trailing slash is the
+	// same issuer, including for a self-hosted app; case, port, //, a path and another host are not.
+	discovered, err := contracts.ComparableIssuer(contracts.RoleMcpIssuer, state.AuthorizationServerURL, scope)
 	if err != nil {
 		return err
 	}
-	expected, err := contracts.CanonicalIssuer(contracts.RoleMcpIssuer, profile.McpIssuer, scope)
+	expected, err := contracts.ComparableIssuer(contracts.RoleMcpIssuer, profile.McpIssuer, scope)
 	if err != nil {
 		return err
 	}

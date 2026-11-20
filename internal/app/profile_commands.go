@@ -37,6 +37,11 @@ func ProfileCommand(options *CliOptions, io *IO) error {
 func LogoutCommand(ctx context.Context, options *CliOptions, io *IO) error {
 	profile, err := LoadSelectedProfile(options)
 	if err != nil {
+		// A saved profile that is refused (for example, an issuer not spelled exactly) can still
+		// be logged out: its local credentials are deleted.
+		if refused, ok := clierror.As(err); ok {
+			return logoutRefusedProfile(ctx, options, io, refused.Message, NewNativeCredentialStore(), nil)
+		}
 		return err
 	}
 	store := NewNativeCredentialStore()
