@@ -69,8 +69,38 @@ func IsCaptureHook(args []string) bool {
 	if event == "" {
 		return false
 	}
-	e, known := lookupHookEvent(harness, event)
+	options, err := ParseCliOptions(args)
+	if err != nil {
+		// No directory, so no record: fail closed for any event some format checks.
+		return !isCheckEventName(event)
+	}
+	e, known, _, _ := resolveHookEvent(options.Directory, harness, event)
 	return !known || !e.Check
+}
+
+func isCheckEventName(event string) bool {
+	for _, events := range HarnessEvents {
+		for _, e := range events {
+			if e.Check && e.Name == event {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// resolveHookEvent looks event up under the format the harness's installation record names
+// (a custom harness may use a built-in format), or under the harness id without a record.
+// IsCaptureHook and RunHookEvent must both use it, so a check event is never treated as
+// capture-only.
+func resolveHookEvent(directory, harness, event string) (HookEvent, bool, HookInstallation, error) {
+	format := harness
+	record, recordErr := ReadHookInstallation(directory, harness)
+	if recordErr == nil {
+		format = record.Format
+	}
+	e, known := lookupHookEvent(format, event)
+	return e, known, record, recordErr
 }
 
 func flagValue(args []string, name string) string {
@@ -90,13 +120,8 @@ func flagValue(args []string, name string) string {
 // (same exit codes and fail-closed errors), and every other event continues.
 func RunHookEvent(options *CliOptions, streams *IO, harness, event string) error {
 	data, _ := io.ReadAll(io.LimitReader(streams.Stdin, maxHookInput+1))
-	format := harness
-	record, recordErr := ReadHookInstallation(options.Directory, harness)
-	if recordErr == nil {
-		format = record.Format
-	}
+	e, known, record, recordErr := resolveHookEvent(options.Directory, harness, event)
 	valid := harnessPattern.MatchString(harness) && hookEventPattern.MatchString(event)
-	e, known := lookupHookEvent(format, event)
 	if valid {
 		defer forwardHookEvent(options.Directory, harness, event, data)()
 	}
