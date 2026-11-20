@@ -1,0 +1,33 @@
+## durin hooks report --harness claude --config-dir <TMP>/config
+exit: 0
+--- stdout
+--- stderr
+## requests
+POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-seeded] [Content-Type: application/json] {"id":0,"jsonrpc":"2.0","method":"initialize","params":{"capabilities":{},"clientInfo":{"name":"Durin CLI","version":"1.0.0"},"protocolVersion":"2025-11-25"}}
+POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-seeded] [Content-Type: application/json] [Mcp-Protocol-Version: 2025-11-25] [Mcp-Session-Id: session-1] {"id":1,"jsonrpc":"2.0","method":"tools/call","params":{"_meta":{"io.durin/control":{"idempotencyKey":"<UUID-1>"}},"arguments":{"call":{"agent":"claude","argumentsJson":"{\"path\":\"/work/notes.md\"}","argumentsTruncated":false,"mcpServer":"fs","observedAt":"<DATE>","outcome":"succeeded","reportId":"<UUID-1>","reporter":"cli","sessionId":"s1","tool":"read_file","toolCallId":"t-mcp__fs__read_file","transport":"stdio","turnId":"p1"}},"name":"durin_report_local_tool_call"}}
+(notification) POST /mcp/u/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef [Authorization: Bearer access-seeded] [Content-Type: application/json] [Mcp-Protocol-Version: 2025-11-25] [Mcp-Session-Id: session-1] {"jsonrpc":"2.0","method":"notifications/initialized"}
+## durin hooks report --harness claude --config-dir <TMP>/config
+exit: 0
+--- stdout
+--- stderr
+## durin hooks report --harness claude --config-dir <TMP>/config
+exit: 0
+--- stdout
+--- stderr
+## durin hooks report --harness claude --config-dir <TMP>/config
+exit: 0
+--- stdout
+--- stderr
+## durin hooks report --harness codex --config-dir <TMP>/config
+exit: 0
+--- stdout
+--- stderr
+## spool after ignored calls
+claude.json file 0600
+spool dir 0700
+spool/<SPOOL> dir 0700
+## durin hooks flush --config-dir <TMP>/config
+exit: 0
+--- stdout
+--- stderr
+## requests

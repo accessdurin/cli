@@ -23,3 +23,8 @@ func hideWindow(*exec.Cmd) {}
 
 // getuid is process.getuid; tests replace it.
 var getuid = func() uint32 { return uint32(os.Getuid()) }
+
+// detach is spawn's detached: the child gets its own session, so it outlives the hook.
+func detach(cmd *exec.Cmd) {
+	cmd.SysProcAttr = &unix.SysProcAttr{Setsid: true}
+}

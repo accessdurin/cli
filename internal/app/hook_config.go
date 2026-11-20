@@ -76,10 +76,15 @@ func (input HookConfiguration) forEvent(event HookEvent) HookConfiguration {
 }
 
 func commandLine(input HookConfiguration) string {
-	args := input.arguments()
+	return harnessCommandLine(input.arguments(), input.Format, input.Windows)
+}
+
+// harnessCommandLine quotes an argv for the shell the harness uses to run a hook command.
+// windows nil means this platform.
+func harnessCommandLine(args []string, format string, windowsOverride *bool) string {
 	windows := runtime.GOOS == "windows"
-	if input.Windows != nil {
-		windows = *input.Windows
+	if windowsOverride != nil {
+		windows = *windowsOverride
 	}
 	quoted := make([]string, len(args))
 	if !windows {
@@ -94,7 +99,7 @@ func commandLine(input HookConfiguration) string {
 	script := "& " + strings.Join(quoted, " ") + "; exit $LASTEXITCODE"
 	// These harnesses already launch PowerShell. Exit that shell explicitly so a denial stays
 	// exit 2 rather than PowerShell -Command normalizing it to 1.
-	if input.Format == "claude" || input.Format == "cursor" {
+	if format == "claude" || format == "cursor" {
 		return script
 	}
 	return "powershell.exe -NoProfile -NonInteractive -EncodedCommand " + base64.StdEncoding.EncodeToString(utf16le(script))

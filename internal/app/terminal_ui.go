@@ -206,7 +206,26 @@ func (q agentQuestions) Checker(ctx context.Context, agent contracts.AgentConfig
 	return nil, nil
 }
 
+// Reporting explains what reporting local MCP tool calls sends and asks whether to turn it on
+// (the default is yes).
+func (q agentQuestions) Reporting(ctx context.Context, agent contracts.AgentConfig, endpoint bool) (bool, error) {
+	takeover := "If you later install Durin Endpoint, it takes over and this hook stays quiet."
+	if endpoint {
+		takeover = "When Durin Endpoint’s helper runs for this agent, Endpoint reports these calls and this hook stays quiet."
+	}
+	q.p.note(strings.Join([]string{
+		"When " + TerminalText(agent.Name) + " calls an MCP server running on this computer (a local command or a localhost URL),",
+		"Durin sends the server, tool, outcome and tool arguments to your organization.",
+		"Your organization’s capture policy decides whether the arguments are kept. Results are never sent.",
+		takeover,
+	}, "\n"), "Local MCP tool calls")
+	return q.p.confirm(ctx, "Report local MCP tool calls to your organization?", true)
+}
+
 func (q agentQuestions) Integrations(result ports.IntegrationsResult) {
+	if result.Reporting {
+		q.p.info("Local MCP tool calls: reporting configured; reopen the agent to activate.")
+	}
 	hooks := "not configured in this run; existing hooks retained"
 	if result.Hooks {
 		hooks = "configured; reopen the agent to activate"

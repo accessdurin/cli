@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // checker installs a fake local checker that records its stdin and exits with the code in
@@ -102,4 +103,65 @@ func TestHooks(t *testing.T) {
 	e.WriteFile(filepath.Join(e.Config, "hooks", "zzz.json"), `{"format":"nope"}`, 0o600)
 	e.Run("", "hooks", "status", "--config-dir", e.Config)
 	e.runHook("zzz", standard)
+}
+
+// waitForEmptySpool waits until the background flush the report hook started has delivered
+// every spooled call and released its lock.
+func (e *Env) waitForEmptySpool(spool string) {
+	e.t.Helper()
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		entries, _ := os.ReadDir(spool)
+		busy := false
+		for _, entry := range entries {
+			name := entry.Name()
+			if name == ".flush.lock" || (strings.HasSuffix(name, ".json") && !strings.HasPrefix(name, ".")) {
+				busy = true
+			}
+		}
+		if !busy {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	e.t.Fatalf("the background flush did not empty %s", spool)
+}
+
+// Local MCP tool calls: the post-tool hook spools a call to a local server and a detached
+// flush delivers it through durin_report_local_tool_call. Other calls and invalid input are
+// ignored, silently.
+func TestLocalToolCallReporting(t *testing.T) {
+	e, id := signedIn(t)
+	claude := filepath.Join(e.Home, ".claude.json")
+	e.WriteFile(claude, `{"mcpServers":{"fs":{"command":"npx","args":["-y","server-filesystem"]},"remote":{"url":"https://mcp.example.com/mcp"}}}`, 0o600)
+	settings := filepath.Join(e.Home, ".claude", "settings.json")
+	e.WriteFile(settings, "{}\n", 0o600)
+	record := map[string]any{
+		"harness": "claude", "format": "claude", "profileId": id, "target": settings,
+		"command":     "durin hooks report",
+		"mcpConfig":   map[string]any{"configPath": claude, "format": "jsonc", "serverKey": "mcpServers"},
+		"installedAt": "2026-01-01T00:00:00.000Z",
+	}
+	data, _ := json.MarshalIndent(record, "", "  ")
+	e.WriteFile(filepath.Join(e.Config, "reporting", "claude.json"), string(data)+"\n", 0o600)
+	sum := sha256.Sum256([]byte(id))
+	spool := filepath.Join(e.Config, "reporting", "spool", hex.EncodeToString(sum[:]))
+	e.normalizer.Add(hex.EncodeToString(sum[:]), "<SPOOL>")
+
+	event := func(tool string) string {
+		return `{"hook_event_name":"PostToolUse","session_id":"s1","prompt_id":"p1","tool_use_id":"t-` + tool + `","tool_name":"` + tool + `",` +
+			`"tool_input":{"path":"/work/notes.md"},"tool_response":{"content":[{"type":"text","text":"PRIVATE RESULT"}]},"cwd":"/work"}`
+	}
+	e.Server.ResetLog()
+	e.Run(event("mcp__fs__read_file"), "hooks", "report", "--harness", "claude", "--config-dir", e.Config)
+	e.waitForEmptySpool(spool)
+	e.NoteRequests()
+
+	e.Run(event("mcp__remote__search"), "hooks", "report", "--harness", "claude", "--config-dir", e.Config)
+	e.Run(event("Read"), "hooks", "report", "--harness", "claude", "--config-dir", e.Config)
+	e.Run(`not json`, "hooks", "report", "--harness", "claude", "--config-dir", e.Config)
+	e.Run(event("mcp__fs__read_file"), "hooks", "report", "--harness", "codex", "--config-dir", e.Config)
+	e.Note("spool after ignored calls", e.Tree(filepath.Join(e.Config, "reporting")))
+	e.Run("", "hooks", "flush", "--config-dir", e.Config)
+	e.NoteRequests()
 }

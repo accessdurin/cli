@@ -32,6 +32,8 @@ var argumentRules = map[string]argumentRule{
 	"profiles use":     {3, []string{"config-dir"}},
 	"hooks status":     {2, []string{"config-dir"}},
 	"hooks run":        {2, []string{"config-dir", "harness", "event"}},
+	"hooks report":     {2, []string{"config-dir", "harness"}},
+	"hooks flush":      {2, profileFlags},
 	"observe":          {1, []string{"config-dir", "supervise"}},
 	"observer status":  {2, []string{"config-dir"}},
 	"observer install": {2, []string{"config-dir"}},

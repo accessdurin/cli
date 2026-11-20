@@ -35,8 +35,18 @@ var commands = map[string]command{
 	"observer": app.ObserverCommand,
 }
 
-func hooks(_ context.Context, options *app.CliOptions, io *app.IO) error {
-	if len(options.Positionals) < 2 || options.Positionals[1] != "run" {
+func hooks(ctx context.Context, options *app.CliOptions, io *app.IO) error {
+	action := ""
+	if len(options.Positionals) >= 2 {
+		action = options.Positionals[1]
+	}
+	switch action {
+	case "report":
+		return app.ReportCommand(options, io)
+	case "flush":
+		return app.FlushCommand(ctx, options, io)
+	case "run":
+	default:
 		return app.HookCommand(options, io)
 	}
 	harness, _ := options.Values.String("harness")
@@ -107,14 +117,19 @@ func errorMessage(err error, localHook bool) string {
 
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer, isTTY func() bool) int {
 	localHook := len(args) >= 2 && args[0] == "hooks" && args[1] == "run"
+	// Reporting runs beside the agent: it stays silent and never fails a tool call.
+	reportingHook := len(args) >= 2 && args[0] == "hooks" && (args[1] == "report" || args[1] == "flush")
 	// Hooks and the observer handle captured content; they never initialize telemetry.
 	observe := len(args) >= 1 && args[0] == "observe"
-	if !localHook && !observe {
+	if !localHook && !observe && !reportingHook {
 		telemetry.Initialize()
 	}
 	streams := &app.IO{Stdin: stdin, Stdout: stdout, Stderr: stderr, IsTTY: isTTY}
 	err := telemetry.TraceCommand(func(ctx context.Context) error { return durin(ctx, args, streams) })
 	code := streams.ExitCode
+	if reportingHook {
+		return 0
+	}
 	if err != nil && app.IsCaptureHook(args) {
 		// A capture-only hook never blocks or fails the harness.
 		return 0

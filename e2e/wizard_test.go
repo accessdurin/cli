@@ -230,6 +230,8 @@ func TestWizard(t *testing.T) {
 	term.Type(keyEnter) // the first option is the custom checker; there is no Endpoint helper here
 	term.Expect("Path to your local checker descriptor JSON")
 	term.Type(descriptor + keyEnter)
+	term.Expect("Report local MCP tool calls to your organization?")
+	term.Type(keyEnter) // yes, the default
 	term.Expect("Setup complete")
 	term.Expect("Available tools: 1")
 	code := term.Wait()
@@ -251,6 +253,7 @@ func TestWizard(t *testing.T) {
 	e.noteFile("~/.claude.json", filepath.Join(e.Home, ".claude.json"))
 	e.noteFile("~/.claude/settings.json", filepath.Join(e.Home, ".claude", "settings.json"))
 	e.noteFile("hook installation", filepath.Join(e.Config, "hooks", "claude.json"))
+	e.noteFile("reporting installation", filepath.Join(e.Config, "reporting", "claude.json"))
 	e.Note("systemctl calls", ReadFile(systemctl))
 	e.Note("skills", e.Tree(filepath.Join(e.Home, ".claude", "skills")))
 	e.noteFile("durin-tools skill manifest", filepath.Join(e.Home, ".claude", "skills", "durin-tools", ".durin-install.json"))
@@ -291,6 +294,8 @@ func TestWizard(t *testing.T) {
 	term.Type(keyEnter)
 	term.Expect("Configure local pre-tool checks?")
 	term.Type(keyDown + keyEnter) // skip
+	term.Expect("Report local MCP tool calls to your organization?")
+	term.Type(keyEnter)
 	term.Expect("Setup complete")
 	code = term.Wait()
 	e.Record([]string{"login (second run, interactive)"}, Result{Code: code})

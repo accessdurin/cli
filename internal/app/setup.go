@@ -263,6 +263,19 @@ func (c *setupContext) setupIntegrations(ctx context.Context, agent contracts.Ag
 			return err
 		}
 	}
+	reporting := false
+	if ReportingAvailable(agent) {
+		if reporting, err = c.UI.Agent.Reporting(ctx, agent, EndpointChecker(agent.ID) != nil); err != nil {
+			return err
+		}
+	}
+	// Reporting is installed before the hooks, so the hook installation's digest covers the
+	// report handler in the shared hook file.
+	if reporting {
+		if err := InstallReporting(agent, bridge); err != nil {
+			return err
+		}
+	}
 	custom := strings.HasPrefix(agent.ID, "custom")
 	// Built-in harnesses get capture hooks for every event even without a checker; a custom
 	// descriptor only describes the pre-tool check.
@@ -276,7 +289,7 @@ func (c *setupContext) setupIntegrations(ctx context.Context, agent contracts.Ag
 	if hooks {
 		observer = InstallObserverService(ctx, c.Directory, bridge.ExecutablePath)
 	}
-	c.UI.Agent.Integrations(ports.IntegrationsResult{Skills: skills, Hooks: hooks, Checker: checker != nil, Custom: custom, Observer: observer})
+	c.UI.Agent.Integrations(ports.IntegrationsResult{Skills: skills, Hooks: hooks, Checker: checker != nil, Custom: custom, Observer: observer, Reporting: reporting})
 	return nil
 }
 
