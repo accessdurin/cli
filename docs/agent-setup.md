@@ -176,7 +176,7 @@ overwritten. Backups can contain existing settings; keep them private.
 Agents also call MCP servers that run on your computer: a local command, or an HTTP
 server on `localhost`/`127.0.0.0/8`/`::1`. Those calls do not pass through the Durin
 gateway. Setup asks whether to report them to your organization (the default is
-yes) and, if you agree, adds a post-tool hook. Setup does not ask when the harness
+no) and, if you agree, adds a post-tool hook. Setup does not ask when the harness
 has hooks turned off. Re-running setup after the CLI path changes replaces the
 earlier handler instead of adding a second one.
 
@@ -208,8 +208,9 @@ local or loopback transport, the outcome (success or failure; `unknown` for Wind
 whose payload does not say), and the tool arguments as JSON of at most 16 KiB.
 Larger arguments are replaced with `{}` and marked truncated. Tool results are never
 sent; hook events up to 16 MiB are read so a large result does not hide the call.
-Your organization's capture policy decides whether the arguments are kept (metadata
-only, or a redacted copy).
+The CLI does not know your organization's capture policy, so it always sends the
+arguments; the policy decides on Durin's side whether they are kept (metadata only, or
+a redacted copy).
 
 If Durin Endpoint covers the harness, Endpoint reports these calls and the CLI hook
 stays quiet, so each call is reported once. Endpoint covers it when all three hold:

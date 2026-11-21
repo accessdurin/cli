@@ -207,7 +207,7 @@ func (q agentQuestions) Checker(ctx context.Context, agent contracts.AgentConfig
 }
 
 // Reporting explains what reporting local MCP tool calls sends and asks whether to turn it on
-// (the default is yes).
+// (the default is no: the tool arguments leave this computer).
 func (q agentQuestions) Reporting(ctx context.Context, agent contracts.AgentConfig, endpoint bool) (bool, error) {
 	takeover := "If you later install Durin Endpoint, it takes over and this hook stays quiet."
 	if endpoint {
@@ -216,10 +216,10 @@ func (q agentQuestions) Reporting(ctx context.Context, agent contracts.AgentConf
 	q.p.note(strings.Join([]string{
 		"When " + TerminalText(agent.Name) + " calls an MCP server running on this computer (a local command or a localhost URL),",
 		"Durin sends the server, tool, outcome and tool arguments to your organization.",
-		"Your organization’s capture policy decides whether the arguments are kept. Results are never sent.",
+		"The arguments are sent in full (up to 16 KiB); your organization’s capture policy decides on Durin’s side whether they are kept. Results are never sent.",
 		takeover,
 	}, "\n"), "Local MCP tool calls")
-	return q.p.confirm(ctx, "Report local MCP tool calls to your organization?", true)
+	return q.p.confirm(ctx, "Report local MCP tool calls to your organization?", false)
 }
 
 // Observer explains what the observer service keeps and asks whether to install it (the

@@ -94,7 +94,7 @@ func TestHookInstallAllHarnesses(t *testing.T) {
 		// claude, codex, cursor and windsurf report local MCP tool calls.
 		if i < 4 {
 			term.Expect("Report local MCP tool calls to your organization?")
-			term.Type(keyEnter)
+			term.Type("y")
 		}
 		term.Expect("Install the Durin observer?")
 		term.Type("y")

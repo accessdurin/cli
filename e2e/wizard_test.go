@@ -231,7 +231,7 @@ func TestWizard(t *testing.T) {
 	term.Expect("Path to your local checker descriptor JSON")
 	term.Type(descriptor + keyEnter)
 	term.Expect("Report local MCP tool calls to your organization?")
-	term.Type(keyEnter) // yes, the default
+	term.Type("y") // the default is no
 	term.Expect("Install the Durin observer?")
 	term.Type("y")
 	term.Expect("Setup complete")
@@ -298,7 +298,7 @@ func TestWizard(t *testing.T) {
 	term.Expect("Configure local pre-tool checks?")
 	term.Type(keyDown + keyEnter) // skip
 	term.Expect("Report local MCP tool calls to your organization?")
-	term.Type(keyEnter)
+	term.Type("y")
 	term.Expect("Install the Durin observer?")
 	term.Type(keyEnter) // no, the default
 	term.Expect("Durin observer: not installed; turn it on later with durin observer install.")
