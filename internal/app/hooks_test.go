@@ -219,7 +219,7 @@ func TestHookConfigEdits(t *testing.T) {
 	windows := true
 	input.Windows = &windows
 	rendered, _ = UpdatedHookConfig("{}", input)
-	if !strings.Contains(rendered, `& '/opt/durin/runtime/durin' 'hooks' 'run' '--harness' 'claude' '--config-dir' '/home/u/.config/durin' '--event' 'PreToolUse'; exit $LASTEXITCODE`) {
+	if !strings.Contains(rendered, `& '/opt/durin/runtime/durin' 'hooks' 'run' '--harness' 'claude' '--config-dir' '/home/u/.config/durin' '--event' 'PreToolUse'; exit $LASTEXITCODE`) || !strings.Contains(rendered, `"shell": "powershell"`) {
 		t.Fatalf("claude on Windows:\n%s", rendered)
 	}
 	input.Format, input.Harness = "codex", "codex"
