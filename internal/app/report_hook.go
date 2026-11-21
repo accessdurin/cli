@@ -195,6 +195,7 @@ type ReportDependencies struct {
 	Home            string
 	Flush           func(directory, profileID string)
 	Now             func() time.Time
+	LookupEnv       func(name string) (string, bool)
 }
 
 const endpointHelper = "observer-preflight"
@@ -249,7 +250,38 @@ func (d ReportDependencies) resolved() ReportDependencies {
 	if d.Flush == nil {
 		d.Flush = launchFlush
 	}
+	if d.LookupEnv == nil {
+		d.LookupEnv = os.LookupEnv
+	}
 	return d
+}
+
+// importerMarkers are payload keys that name the harness that made the call, and
+// importerVariables are variables set when another harness runs Claude Code's hooks. They
+// match Endpoint's detection (apps/osx/Hook/HookEnvelope.swift).
+var (
+	importerMarkers   = []struct{ key, harness string }{{"hookEventName", "grok"}, {"cursor_version", "cursor"}}
+	importerVariables = []struct{ name, harness string }{{"DEVIN_PROJECT_DIR", "devin"}}
+)
+
+// callingHarness is the harness that made the call, which differs from the configured one
+// when another harness imports its hooks.
+func callingHarness(configured string, event jsjson.Value, lookupEnv func(string) (string, bool)) string {
+	fields, _ := event.(*jsjson.Object)
+	for _, marker := range importerMarkers {
+		if fields != nil && fields.Has(marker.key) {
+			return marker.harness
+		}
+	}
+	if configured != "claude" {
+		return configured
+	}
+	for _, variable := range importerVariables {
+		if _, found := lookupEnv(variable.name); found {
+			return variable.harness
+		}
+	}
+	return configured
 }
 
 // Report hook outcomes.
@@ -257,14 +289,16 @@ const (
 	ReportDisabled  = "disabled"
 	ReportEndpoint  = "endpoint"
 	ReportIgnored   = "ignored"
+	ReportImported  = "imported"
 	ReportNotLocal  = "not_local"
 	ReportQueued    = "queued"
 	ReportSignedOut = "signed_out"
 )
 
-// ReportHook handles one post-tool hook event: when Endpoint does not cover the harness and
-// the call went to a local MCP server, it spools the call and starts a background flush. The
-// caller never lets it block or fail the agent.
+// ReportHook handles one post-tool hook event: when Endpoint does not cover the harness, the
+// configured harness made the call and it went to a local MCP server, it spools the call and
+// starts a background flush. A call from a harness that imports these hooks is not reported,
+// as Endpoint does not report it. The caller never lets it block or fail the agent.
 func ReportHook(directory, harness string, stdin io.Reader, deps ReportDependencies) (string, error) {
 	deps = deps.resolved()
 	installation, err := ReadReporting(directory, harness)
@@ -283,6 +317,9 @@ func ReportHook(directory, harness string, stdin io.Reader, deps ReportDependenc
 	}
 	if event == nil {
 		return ReportIgnored, nil
+	}
+	if callingHarness(installation.Harness, event, deps.LookupEnv) != installation.Harness {
+		return ReportImported, nil
 	}
 	call, err := ObservedMcpCall(installation.Format, event)
 	if err != nil {

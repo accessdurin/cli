@@ -316,6 +316,36 @@ func TestReportHookDefersToEndpointOnlyWhileWiredAndSignedIn(t *testing.T) {
 	}
 }
 
+func TestReportHookSkipsCallsFromHarnessesThatImportClaudeHooks(t *testing.T) {
+	cases := []struct {
+		name, changes string
+		environment   map[string]string
+	}{
+		{"cursor", `"cursor_version":"2.9.0","conversation_id":"cursor-conversation"`, nil},
+		{"grok", `"hookEventName":"post_tool_use","sessionId":"session-1"`, nil},
+		{"devin", "", map[string]string{"DEVIN_PROJECT_DIR": "/home/dev/project"}},
+	}
+	endpoint := map[string]func(string, ReportingInstallation) bool{
+		"without endpoint": noEndpoint,
+		"with endpoint":    func(string, ReportingInstallation) bool { return true },
+	}
+	for _, c := range cases {
+		for coverage, present := range endpoint {
+			f := newReportingFixture(t)
+			lookup := func(name string) (string, bool) { value, found := c.environment[name]; return value, found }
+			got := f.run(t, claudeEvent(c.changes), ReportDependencies{EndpointPresent: present, LookupEnv: lookup})
+			if got == ReportQueued || len(spooled(t, f.spool)) != 0 || len(f.flushed) != 0 {
+				t.Errorf("%s %s: outcome %s, spool %v, flushes %v", c.name, coverage, got, spooled(t, f.spool), f.flushed)
+			}
+		}
+	}
+	f := newReportingFixture(t)
+	absent := func(string) (string, bool) { return "", false }
+	if got := f.run(t, claudeEvent(""), ReportDependencies{EndpointPresent: noEndpoint, LookupEnv: absent}); got != ReportQueued {
+		t.Fatalf("Claude Code's own call: %s", got)
+	}
+}
+
 func TestReportHookDoesNothingUntilInstalled(t *testing.T) {
 	outcome, err := ReportHook(tempDir(t), "codex", strings.NewReader("{}"), ReportDependencies{EndpointPresent: noEndpoint, Flush: func(string, string) {}})
 	if err != nil || outcome != ReportDisabled {
