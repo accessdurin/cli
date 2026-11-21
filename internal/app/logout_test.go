@@ -113,16 +113,24 @@ func TestSignOutKeepsTheGrantUntilTheServerConfirms(t *testing.T) {
 		profile := mustProfile(t, testScope)
 		store := signedInStore(t, profile)
 		marker := &memoryMarker{}
-		options := SignOutOptions{Profile: profile, Store: store, Marker: marker, Fetch: &http.Client{Transport: server}}
+		spool := filepath.Join(tempDir(t), "spool")
+		writeFile(t, filepath.Join(spool, "call.json"), "{}")
+		options := SignOutOptions{Profile: profile, Store: store, Marker: marker, Fetch: &http.Client{Transport: server}, Spool: spool}
 		result, err := SignOutMcp(context.Background(), options)
 		if err != nil || result != (SignOutResult{RevocationFailed, "retained"}) || len(store.values) != 2 || !marker.pending {
 			t.Errorf("%s: %v, %v, %d entries, marker %v", name, result, err, len(store.values), marker.pending)
 		}
-		// Forced, it signs out on this computer anyway.
+		if _, err := os.Stat(spool); err != nil {
+			t.Errorf("%s: an unfinished sign-out keeps the spool: %v", name, err)
+		}
+		// Forced, it signs out on this computer anyway, and calls queued for the profile go too.
 		options.Force = true
 		result, err = SignOutMcp(context.Background(), options)
 		if err != nil || result != (SignOutResult{RevocationFailed, "cleared"}) || len(store.values) != 0 || marker.pending {
 			t.Errorf("%s forced: %v, %v, %v, marker %v", name, result, err, store.values, marker.pending)
+		}
+		if _, err := os.Stat(spool); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("%s forced: spool left: %v", name, err)
 		}
 	}
 }

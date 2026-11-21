@@ -176,7 +176,7 @@ overwritten. Backups can contain existing settings; keep them private.
 Agents also call MCP servers that run on your computer: a local command, or an HTTP
 server on `localhost`/`127.0.0.0/8`/`::1`. Those calls do not pass through the Durin
 gateway. Setup asks whether to report them to your organization (the default is
-yes) and, if you agree, adds a post-tool hook. Setup does not ask when the harness
+no) and, if you agree, adds a post-tool hook. Setup does not ask when the harness
 has hooks turned off. Re-running setup after the CLI path changes replaces the
 earlier handler instead of adding a second one.
 
@@ -208,8 +208,9 @@ local or loopback transport, the outcome (success or failure; `unknown` for Wind
 whose payload does not say), and the tool arguments as JSON of at most 16 KiB.
 Larger arguments are replaced with `{}` and marked truncated. Tool results are never
 sent; hook events up to 16 MiB are read so a large result does not hide the call.
-Your organization's capture policy decides whether the arguments are kept (metadata
-only, or a redacted copy).
+The CLI does not know your organization's capture policy, so it always sends the
+arguments; the policy decides on Durin's side whether they are kept (metadata only, or
+a redacted copy).
 
 If Durin Endpoint covers the harness, Endpoint reports these calls and the CLI hook
 stays quiet, so each call is reported once. Endpoint covers it when all three hold:
@@ -221,7 +222,10 @@ hourly; the CLI treats a file older than two hours as signed out. Otherwise the 
 hook reports. The marker does not name the organization, so the CLI cannot tell
 whether Endpoint and the CLI profile use the same one.
 
-The hook never blocks or fails a tool call and prints nothing. It writes the call to
+The hook never blocks or fails a tool call and prints nothing. It writes nothing
+while the profile is signed out: the profile is removed, a sign-out is unfinished,
+or the OS credential store does not confirm the profile's MCP tokens within two
+seconds (missing, unreadable or not answering). Otherwise it writes the call to
 `reporting/spool/` under the Durin configuration directory (private files, at most
 200 calls, kept up to 7 days) and starts `durin hooks flush` in the background. The
 flush sends waiting calls with `durin_report_local_tool_call`, opening a connection

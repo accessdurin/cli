@@ -3,7 +3,10 @@ package app
 import (
 	"context"
 	"io"
+	"os"
 	"time"
+
+	"github.com/accessdurin/cli/internal/ports"
 )
 
 // ReportCommand is durin hooks report: it runs from a harness post-tool hook, prints nothing
@@ -17,8 +20,20 @@ func ReportCommand(options *CliOptions, streams *IO) error {
 // FlushCommand is durin hooks flush: it delivers spooled calls for the selected (or active)
 // profile. The report hook starts it detached; it prints nothing.
 func FlushCommand(ctx context.Context, options *CliOptions, _ *IO) error {
+	return flushProfile(ctx, options, NewNativeCredentialStore())
+}
+
+// flushProfile delivers the profile's spool, or deletes it when the profile holds no MCP
+// tokens, so calls observed while signed out are never sent after the next sign-in. A store
+// that cannot be read keeps the spool.
+func flushProfile(ctx context.Context, options *CliOptions, store ports.CredentialStore) error {
 	profile, err := LoadSelectedProfile(options)
 	if err != nil {
+		return nil
+	}
+	spool := SpoolDirectory(options.Directory, profile.ID)
+	if _, found, err := store.Read("mcp:" + profile.ID + ":tokens"); err == nil && !found {
+		_ = os.RemoveAll(spool)
 		return nil
 	}
 	scoped := withProfileOption(options, profile.ID)
@@ -28,7 +43,7 @@ func FlushCommand(ctx context.Context, options *CliOptions, _ *IO) error {
 		})
 		return err
 	}
-	_, _ = FlushSpool(ctx, SpoolDirectory(options.Directory, profile.ID), connect, time.Now)
+	_, _ = FlushSpool(ctx, spool, connect, time.Now)
 	return nil
 }
 

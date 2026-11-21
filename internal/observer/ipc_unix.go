@@ -14,9 +14,45 @@ import (
 
 const isWindows = false
 
+// dial connects only to an observer running as this user, through a socket this user owns in
+// a directory no other user can enter. The temporary-directory fallback address is in a
+// shared directory where another user could create it first. Unlike listen, dial never
+// changes a mode.
 func dial(ctx context.Context, address string) (net.Conn, error) {
+	if err := privateToUser(filepath.Dir(address), true); err != nil {
+		return nil, err
+	}
+	if err := privateToUser(address, false); err != nil {
+		return nil, err
+	}
 	var d net.Dialer
-	return d.DialContext(ctx, "unix", address)
+	conn, err := d.DialContext(ctx, "unix", address)
+	if err != nil {
+		return nil, err
+	}
+	if uid, ok := peerUID(conn); ok && uid != os.Getuid() {
+		conn.Close()
+		return nil, errors.New("observer: the socket is served by another user")
+	}
+	return conn, nil
+}
+
+// privateToUser refuses anything but this user's own socket, or this user's own directory
+// without group or other permissions. Symlinks are refused.
+func privateToUser(path string, dir bool) error {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return err
+	}
+	st, ok := info.Sys().(*syscall.Stat_t)
+	kind := info.Mode().Type() == os.ModeSocket
+	if dir {
+		kind = info.IsDir() && info.Mode().Perm()&0o077 == 0
+	}
+	if !kind || !ok || int(st.Uid) != os.Getuid() {
+		return fmt.Errorf("observer: %s is not private to this user", path)
+	}
+	return nil
 }
 
 // listen creates the socket in an owner-only directory and makes the socket itself

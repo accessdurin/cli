@@ -251,6 +251,9 @@ func (c *setupContext) standardAgent(key string) (contracts.AgentConfig, error) 
 	return agent, nil
 }
 
+// installObserverService is InstallObserverService; tests replace it.
+var installObserverService = InstallObserverService
+
 func (c *setupContext) setupIntegrations(ctx context.Context, agent contracts.AgentConfig, bridge BridgeConfiguration) error {
 	c.UI.Stage("Install Durin agent skills and local hooks")
 	skills, err := InstallSkills(agent)
@@ -285,9 +288,18 @@ func (c *setupContext) setupIntegrations(ctx context.Context, agent contracts.Ag
 			return err
 		}
 	}
+	// The observer keeps full hook payloads on this machine, so it is installed only when the
+	// user agrees. Hooks work without it.
 	observer := ""
 	if hooks {
-		observer = InstallObserverService(ctx, c.Directory, bridge.ExecutablePath)
+		install, err := c.UI.Agent.Observer(ctx)
+		if err != nil {
+			return err
+		}
+		observer = "not installed; turn it on later with durin observer install"
+		if install {
+			observer = installObserverService(ctx, c.Directory, bridge.ExecutablePath)
+		}
 	}
 	c.UI.Agent.Integrations(ports.IntegrationsResult{Skills: skills, Hooks: hooks, Checker: checker != nil, Custom: custom, Observer: observer, Reporting: reporting})
 	return nil

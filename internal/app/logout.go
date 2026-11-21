@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/accessdurin/cli/internal/clierror"
@@ -44,6 +45,8 @@ type SignOutOptions struct {
 	Marker  ports.RevocationMarker
 	Fetch   *http.Client
 	Force   bool
+	// Spool is the profile's report spool, deleted once sign-out finishes on this computer.
+	Spool string
 }
 
 // RetireOptions configure RetireKeptGrant. Fetch is as in SignOutOptions.
@@ -126,6 +129,11 @@ func SignOutMcp(ctx context.Context, options SignOutOptions) (SignOutResult, err
 	}
 	if err := options.Marker.Clear(); err != nil {
 		return SignOutResult{}, err
+	}
+	if options.Spool != "" {
+		if err := os.RemoveAll(options.Spool); err != nil {
+			return SignOutResult{}, err
+		}
 	}
 	if outcome == revocationRetry {
 		outcome = RevocationFailed
