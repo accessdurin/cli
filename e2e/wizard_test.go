@@ -232,6 +232,8 @@ func TestWizard(t *testing.T) {
 	term.Type(descriptor + keyEnter)
 	term.Expect("Report local MCP tool calls to your organization?")
 	term.Type(keyEnter) // yes, the default
+	term.Expect("Install the Durin observer?")
+	term.Type("y")
 	term.Expect("Setup complete")
 	term.Expect("Available tools: 1")
 	code := term.Wait()
@@ -287,6 +289,7 @@ func TestWizard(t *testing.T) {
 
 	// Running setup again changes nothing and needs no browser: the grant is refreshed.
 	before := ReadFile(filepath.Join(e.Home, ".claude.json"))
+	serviceCalls := ReadFile(systemctl)
 	term = e.StartTerminal("login", "--dev", "--app-url", e.Server.Origin(), "--config-dir", e.Config)
 	term.Expect("Which organization should this agent use?")
 	term.Type(keyEnter)
@@ -296,9 +299,15 @@ func TestWizard(t *testing.T) {
 	term.Type(keyDown + keyEnter) // skip
 	term.Expect("Report local MCP tool calls to your organization?")
 	term.Type(keyEnter)
+	term.Expect("Install the Durin observer?")
+	term.Type(keyEnter) // no, the default
+	term.Expect("Durin observer: not installed; turn it on later with durin observer install.")
 	term.Expect("Setup complete")
 	code = term.Wait()
 	e.Record([]string{"login (second run, interactive)"}, Result{Code: code})
+	if ReadFile(systemctl) != serviceCalls {
+		t.Error("declining the observer still called the service manager")
+	}
 	e.NoteRequests()
 	if after := ReadFile(filepath.Join(e.Home, ".claude.json")); after != before {
 		e.Note("~/.claude.json changed on the second run", normalizeLaunchers(after))

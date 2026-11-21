@@ -158,6 +158,9 @@ type SetupAgentQuestions interface {
 	// Reporting asks whether to report calls to local MCP servers, with their arguments, to
 	// the organization. endpoint is true when Durin Endpoint's helper is installed.
 	Reporting(ctx context.Context, agent contracts.AgentConfig, endpoint bool) (bool, error)
+	// Observer asks whether to install the observer service, which keeps a local capture of
+	// full hook payloads (prompts, tool inputs and outputs). The default is no.
+	Observer(ctx context.Context) (bool, error)
 	Integrations(result IntegrationsResult)
 	Configured(path string)
 	Ready(result SetupReady)

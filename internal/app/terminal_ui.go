@@ -222,6 +222,18 @@ func (q agentQuestions) Reporting(ctx context.Context, agent contracts.AgentConf
 	return q.p.confirm(ctx, "Report local MCP tool calls to your organization?", true)
 }
 
+// Observer explains what the observer service keeps and asks whether to install it (the
+// default is no).
+func (q agentQuestions) Observer(ctx context.Context) (bool, error) {
+	q.p.note(strings.Join([]string{
+		"The Durin observer is a background service that starts when you log in. It records the hook",
+		"events your agents send, including prompts, tool inputs and outputs, which may contain secrets",
+		"and source code, and connections to AI providers. The capture stays on this computer, encrypted,",
+		"for up to 7 days or 512 MiB. Hooks work without it; durin observer install adds it later.",
+	}, "\n"), "Durin observer")
+	return q.p.confirm(ctx, "Install the Durin observer?", false)
+}
+
 func (q agentQuestions) Integrations(result ports.IntegrationsResult) {
 	if result.Reporting {
 		q.p.info("Local MCP tool calls: reporting configured; reopen the agent to activate.")
