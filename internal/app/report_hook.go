@@ -15,6 +15,7 @@ import (
 
 	"github.com/accessdurin/cli/internal/contracts"
 	"github.com/accessdurin/cli/internal/jsjson"
+	"github.com/accessdurin/cli/internal/ports"
 	"github.com/accessdurin/cli/internal/zod"
 )
 
@@ -196,6 +197,8 @@ type ReportDependencies struct {
 	Flush           func(directory, profileID string)
 	Now             func() time.Time
 	LookupEnv       func(name string) (string, bool)
+	// Store is the OS credential store the hook checks for the profile's MCP tokens.
+	Store ports.CredentialStore
 }
 
 const endpointHelper = "observer-preflight"
@@ -252,6 +255,9 @@ func (d ReportDependencies) resolved() ReportDependencies {
 	}
 	if d.LookupEnv == nil {
 		d.LookupEnv = os.LookupEnv
+	}
+	if d.Store == nil {
+		d.Store = NewNativeCredentialStore()
 	}
 	return d
 }
@@ -336,7 +342,7 @@ func ReportHook(directory, harness string, stdin io.Reader, deps ReportDependenc
 	if report == nil {
 		return ReportIgnored, nil
 	}
-	if !profileMayReport(directory, installation.ProfileID) {
+	if !profileMayReport(directory, installation.ProfileID) || !profileSignedIn(deps.Store, installation.ProfileID) {
 		return ReportSignedOut, nil
 	}
 	if err := spoolCall(SpoolDirectory(directory, installation.ProfileID), report, deps.Now); err != nil {
@@ -347,8 +353,6 @@ func ReportHook(directory, harness string, stdin io.Reader, deps ReportDependenc
 }
 
 // profileMayReport reports whether the profile is still saved and has no unfinished sign-out.
-// It checks only files, so the hook never waits on the OS credential store; the flush discards
-// the spool of a profile that holds no MCP tokens.
 func profileMayReport(directory, profileID string) bool {
 	path, err := NewFileProfiles(directory).path(profileID)
 	if err != nil {
@@ -363,6 +367,27 @@ func profileMayReport(directory, profileID string) bool {
 	}
 	pending, _ := marker.Pending()
 	return !pending
+}
+
+// reportCredentialDeadline bounds the hook's credential-store read, so a locked or hung store
+// costs the agent at most this long; tests shorten it.
+var reportCredentialDeadline = 2 * time.Second
+
+// profileSignedIn reports whether the store confirms, within reportCredentialDeadline, that it
+// holds the profile's MCP tokens. A missing entry, a failed read or no answer in time means
+// signed out, so the call's arguments are never written to disk.
+func profileSignedIn(store ports.CredentialStore, profileID string) bool {
+	found := make(chan bool, 1)
+	go func() {
+		_, ok, err := store.Read("mcp:" + profileID + ":tokens")
+		found <- err == nil && ok
+	}()
+	select {
+	case ok := <-found:
+		return ok
+	case <-time.After(reportCredentialDeadline):
+		return false
+	}
 }
 
 var reportFileName = regexp.MustCompile(`^([0-9a-f-]{36})(?:\.(\d))?\.json$`)

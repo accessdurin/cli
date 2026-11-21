@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -186,29 +187,41 @@ type reportingFixture struct {
 	agent   contracts.AgentConfig
 	flushed []string
 	spool   string
+	store   *memoryStore
 }
 
 func newReportingFixture(t *testing.T) *reportingFixture {
+	t.Helper()
+	return newReportingFixtureFor(t, reportProfile)
+}
+
+// newReportingFixtureFor installs reporting for profileID, signed in: its store holds MCP tokens.
+func newReportingFixtureFor(t *testing.T, profileID string) *reportingFixture {
 	t.Helper()
 	root := tempDir(t)
 	agent := AgentsFor(root, EnvMap{})["claude"]
 	f := &reportingFixture{
 		root:   root,
 		agent:  agent,
-		bridge: BridgeConfiguration{ExecutablePath: filepath.Join(root, "runtime", "durin"), ConfigDirectory: filepath.Join(root, "durin"), ProfileID: reportProfile},
+		bridge: BridgeConfiguration{ExecutablePath: filepath.Join(root, "runtime", "durin"), ConfigDirectory: filepath.Join(root, "durin"), ProfileID: profileID},
+		store:  newMemoryStore(),
 	}
+	f.store.values["mcp:"+profileID+":tokens"] = `{"access_token":"synthetic-access","token_type":"Bearer"}`
 	writeFile(t, agent.ConfigPath, `{"mcpServers":{"filesystem":{"command":"npx"}}}`)
-	writeFile(t, filepath.Join(f.bridge.ConfigDirectory, "profiles", reportProfile+".json"), "{}")
+	writeFile(t, filepath.Join(f.bridge.ConfigDirectory, "profiles", profileID+".json"), "{}")
 	if err := InstallReporting(agent, f.bridge); err != nil {
 		t.Fatal(err)
 	}
-	f.spool = SpoolDirectory(f.bridge.ConfigDirectory, reportProfile)
+	f.spool = SpoolDirectory(f.bridge.ConfigDirectory, profileID)
 	return f
 }
 
 func (f *reportingFixture) run(t *testing.T, event string, deps ReportDependencies) string {
 	t.Helper()
 	deps.Flush = func(directory, profile string) { f.flushed = append(f.flushed, directory+" "+profile) }
+	if deps.Store == nil {
+		deps.Store = f.store
+	}
 	outcome, err := ReportHook(f.bridge.ConfigDirectory, "claude", strings.NewReader(event), deps)
 	if err != nil {
 		t.Fatal(err)
@@ -280,6 +293,70 @@ func TestReportHookStaysQuiet(t *testing.T) {
 	}
 	if files := spooled(t, f.spool); len(files) != 0 || len(f.flushed) != 0 {
 		t.Fatalf("nothing is queued or flushed: %v %v", files, f.flushed)
+	}
+}
+
+// failingStore answers every read with err; blocked, when set, makes reads wait for it instead.
+type failingStore struct {
+	*memoryStore
+	err     error
+	blocked chan struct{}
+}
+
+func (s failingStore) Read(key string) (string, bool, error) {
+	if s.blocked != nil {
+		<-s.blocked
+	}
+	return "", false, s.err
+}
+
+func TestReportHookSpoolsNothingAfterACompletedLogoutEvenIfTheFlushCannotStart(t *testing.T) {
+	profile := mustProfile(t, testScope)
+	f := newReportingFixtureFor(t, profile.ID)
+	f.store = signedInStore(t, profile)
+	deps := ReportDependencies{EndpointPresent: noEndpoint}
+	if got := f.run(t, claudeEvent(""), deps); got != ReportQueued {
+		t.Fatalf("signed in: %s", got)
+	}
+	marker, err := NewFileRevocationMarker(f.bridge.ConfigDirectory, profile.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := newAuthorizationServer(answer(200, ""))
+	result, err := SignOutMcp(context.Background(), SignOutOptions{Profile: profile, Store: f.store, Marker: marker, Fetch: &http.Client{Transport: server}, Spool: f.spool})
+	if err != nil || result.Local != "cleared" {
+		t.Fatalf("logout: %v %v", result, err)
+	}
+	// The profile file stays and no revocation is pending; the flush the hook asks for never runs.
+	f.flushed = nil
+	if got := f.run(t, claudeEvent(`"tool_use_id":"after-logout"`), deps); got != ReportSignedOut {
+		t.Errorf("after logout: %s", got)
+	}
+	if files := spooled(t, f.spool); len(files) != 0 || len(f.flushed) != 0 {
+		t.Fatalf("a signed-out call reached the spool: %v, flushes %v", files, f.flushed)
+	}
+}
+
+func TestReportHookSpoolsNothingWhenTheCredentialStoreFailsOrHangs(t *testing.T) {
+	previous := reportCredentialDeadline
+	reportCredentialDeadline = 50 * time.Millisecond
+	t.Cleanup(func() { reportCredentialDeadline = previous })
+	hung := make(chan struct{})
+	t.Cleanup(func() { close(hung) })
+	stores := map[string]failingStore{
+		"a failed read": {memoryStore: newMemoryStore(), err: errors.New("keychain locked")},
+		"a hung read":   {memoryStore: newMemoryStore(), blocked: hung},
+	}
+	for name, store := range stores {
+		f := newReportingFixture(t)
+		started := time.Now()
+		got := f.run(t, claudeEvent(""), ReportDependencies{EndpointPresent: noEndpoint, Store: store})
+		if got != ReportSignedOut || len(spooled(t, f.spool)) != 0 || len(f.flushed) != 0 {
+			t.Errorf("%s: outcome %s, spool %v, flushes %v", name, got, spooled(t, f.spool), f.flushed)
+		}
+		if waited := time.Since(started); waited > 2*time.Second {
+			t.Errorf("%s: the hook waited %s", name, waited)
+		}
 	}
 }
 

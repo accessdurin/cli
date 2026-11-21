@@ -222,7 +222,10 @@ hourly; the CLI treats a file older than two hours as signed out. Otherwise the 
 hook reports. The marker does not name the organization, so the CLI cannot tell
 whether Endpoint and the CLI profile use the same one.
 
-The hook never blocks or fails a tool call and prints nothing. It writes the call to
+The hook never blocks or fails a tool call and prints nothing. It writes nothing
+while the profile is signed out: the profile is removed, a sign-out is unfinished,
+or the OS credential store does not confirm the profile's MCP tokens within two
+seconds (missing, unreadable or not answering). Otherwise it writes the call to
 `reporting/spool/` under the Durin configuration directory (private files, at most
 200 calls, kept up to 7 days) and starts `durin hooks flush` in the background. The
 flush sends waiting calls with `durin_report_local_tool_call`, opening a connection
