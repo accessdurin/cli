@@ -78,7 +78,7 @@ func IsCaptureHook(args []string) bool {
 		if token.positional || token.name != "event" {
 			continue
 		}
-		if token.value == nil || isCheckEventName(*token.value) {
+		if token.value == nil || !hookEventPattern.MatchString(*token.value) || isCheckEventName(*token.value) {
 			return false
 		}
 		events++

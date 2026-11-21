@@ -132,6 +132,7 @@ func TestHookRunFailsClosed(t *testing.T) {
 		// not make the refusal a swallowed capture.
 		{"planted custom record in non-private dir", 0o755, [][2]string{{"claude", "custom"}}, []string{"--harness", "claude", "--event", "PreToolUse"}, 2},
 		// MAR-1877: the parser keeps the last value of a repeated flag.
+		{"event flag consumed as missing value", 0o700, [][2]string{{"claude", "claude"}}, []string{"--harness", "claude", "--event", "--event", "PreToolUse"}, 2},
 		{"repeated event, check last", 0o700, [][2]string{{"claude", "claude"}}, []string{"--harness", "claude", "--event", "Stop", "--event", "PreToolUse"}, 2},
 		{"repeated event, check first", 0o700, [][2]string{{"claude", "claude"}}, []string{"--harness", "claude", "--event", "PreToolUse", "--event=Stop"}, 2},
 		{"repeated harness", 0o700, [][2]string{{"claude", "claude"}}, []string{"--harness", "custom-acme", "--harness", "claude", "--event", "PreToolUse"}, 2},

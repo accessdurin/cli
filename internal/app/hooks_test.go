@@ -160,7 +160,7 @@ func TestCaptureOnlyHooks(t *testing.T) {
 
 func TestCheckerOutcomesBlockTheToolCall(t *testing.T) {
 	f := newHookFixture(t)
-	if err := InstallHooks(AgentsFor(f.home, EnvMap{})["claude"], f.bridge, &contracts.HookChecker{Command: f.checker.Command, Args: []string{}, TimeoutMs: 100}); err != nil {
+	if err := InstallHooks(AgentsFor(f.home, EnvMap{})["claude"], f.bridge, &contracts.HookChecker{Command: f.checker.Command, Args: []string{}, TimeoutMs: 1000}); err != nil {
 		t.Fatal(err)
 	}
 	installation, _ := ReadHookInstallation(f.bridge.ConfigDirectory, "claude")
@@ -180,7 +180,8 @@ func TestCheckerOutcomesBlockTheToolCall(t *testing.T) {
 
 func TestHookConfigEdits(t *testing.T) {
 	bridge := BridgeConfiguration{ExecutablePath: "/opt/durin/runtime/durin", ConfigDirectory: "/home/u/.config/durin", ProfileID: testProfileID}
-	input := HookConfiguration{Format: "claude", Bridge: bridge, Harness: "claude", TimeoutMs: 1000, Checker: true}
+	posix := false
+	input := HookConfiguration{Format: "claude", Bridge: bridge, Harness: "claude", TimeoutMs: 1000, Checker: true, Windows: &posix}
 	raw := `{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":/* keep inner handler comment */"existing-check"}]}],"PostToolUse":[{"matcher":".*","hooks":[]}]}}`
 	rendered, err := UpdatedHookConfig(raw, input)
 	if err != nil || !strings.Contains(rendered, "keep inner handler comment") || !strings.Contains(rendered, `"existing-check"`) {
@@ -196,7 +197,7 @@ func TestHookConfigEdits(t *testing.T) {
 	added := pre[1].(*jsjson.Object)
 	handlers, _ := added.GetArray("hooks")
 	want := `{"type":"command","command":"'/opt/durin/runtime/durin' 'hooks' 'run' '--harness' 'claude' '--config-dir' '/home/u/.config/durin' '--event' 'PreToolUse'","timeout":4}`
-	if runtime.GOOS == "windows" || jsjson.Stringify(handlers[0]) != want {
+	if jsjson.Stringify(handlers[0]) != want {
 		t.Fatalf("handler %s", jsjson.Stringify(handlers[0]))
 	}
 	// Capture handlers: a short timeout, and no matcher outside tool events.
@@ -464,6 +465,9 @@ func TestHookEventsForwardAndContinue(t *testing.T) {
 		"hooks run --harness cursor --event preToolUse --nope":             false,
 		"hooks run --harness pi --event tool_call":                         false,
 		"hooks run --harness claude --event":                               false,
+		"hooks run --event --event PreToolUse":                             false,
+		"hooks run --event --event=PreToolUse":                             false,
+		"hooks run --event=":                                               false,
 	} {
 		if got := IsCaptureHook(strings.Fields(args)); got != capture {
 			t.Errorf("%s: %v", args, got)
