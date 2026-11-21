@@ -20,7 +20,11 @@ func grouped(format string) bool {
 
 func shellQuote(value string) string { return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'" }
 
-func powershellQuote(value string) string { return "'" + strings.ReplaceAll(value, "'", "''") + "'" }
+// powershellQuotes doubles each character PowerShell ends a single-quoted string at: ' and
+// U+2018–U+201B. A doubled one stands for itself.
+var powershellQuotes = strings.NewReplacer("'", "''", "\u2018", "\u2018\u2018", "\u2019", "\u2019\u2019", "\u201a", "\u201a\u201a", "\u201b", "\u201b\u201b")
+
+func powershellQuote(value string) string { return "'" + powershellQuotes.Replace(value) + "'" }
 
 // HookArguments is the command a harness runs before each tool call:
 // <executable> hooks run --harness <harness> --config-dir <directory>.
