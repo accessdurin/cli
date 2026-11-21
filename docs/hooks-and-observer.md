@@ -46,7 +46,14 @@ How a hook sends to the observer:
 
 Without a checker (setup's "Skip local pre-tool checks"):
 
-- The check event also only captures.
+- The check event also only captures, as long as durin can read the installation
+  record. Its handler runs the same command as a checking one, so durin learns
+  that no checker is configured only from `<config>/hooks/<harness>.json`.
+- If that record is missing, unreadable or invalid, or the configuration directory
+  is not private (owned by you, mode `0700`), the check event fails closed: it
+  exits 2 and the harness blocks the tool call. durin cannot tell a checker-less
+  installation from one whose checker it can no longer read. To recover, run
+  `chmod 700` on the directory or run setup again.
 - Cursor's `preToolUse` is not registered at all, because a passive handler cannot
   answer it without overriding Cursor's own approval.
 - A later setup run that skips the question keeps the checker an earlier run
