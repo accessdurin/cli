@@ -18,6 +18,7 @@ import (
 
 	"github.com/accessdurin/cli/internal/clierror"
 	"github.com/accessdurin/cli/internal/credentials"
+	"github.com/accessdurin/cli/internal/jsjson"
 	"github.com/accessdurin/cli/internal/observer"
 	"github.com/accessdurin/cli/internal/observer/service"
 	"github.com/accessdurin/cli/internal/version"
@@ -60,29 +61,49 @@ func ForwardHookInput(directory, harness string, stdin io.Reader) (io.Reader, fu
 }
 
 // IsCaptureHook reports whether args run a capture-only hook event: one that must never
-// fail or block the harness, whatever goes wrong.
+// fail or block the harness, whatever goes wrong. It decides from event names alone and never
+// reads a record (which may sit in a directory durin refused): a run is capture-only only
+// when it names an event and every --event value, however repeated, is an event no format
+// checks.
 func IsCaptureHook(args []string) bool {
 	if len(args) < 2 || args[0] != "hooks" || args[1] != "run" {
 		return false
 	}
-	harness, event := flagValue(args, "harness"), flagValue(args, "event")
-	if event == "" {
-		return false
+	decoded := make([]string, len(args))
+	for i, a := range args {
+		decoded[i] = jsjson.DecodeUTF8([]byte(a))
 	}
-	e, known := lookupHookEvent(harness, event)
-	return !known || !e.Check
+	events := 0
+	for _, token := range argsToTokens(decoded) {
+		if token.positional || token.name != "event" {
+			continue
+		}
+		if token.value == nil || !hookEventPattern.MatchString(*token.value) || isCheckEventName(*token.value) {
+			return false
+		}
+		events++
+	}
+	return events > 0
 }
 
-func flagValue(args []string, name string) string {
-	for i, a := range args {
-		if a == "--"+name && i+1 < len(args) {
-			return args[i+1]
-		}
-		if len(a) > len(name)+3 && a[:len(name)+3] == "--"+name+"=" {
-			return a[len(name)+3:]
+func isCheckEventName(event string) bool {
+	for _, events := range HarnessEvents {
+		for _, e := range events {
+			if e.Check && e.Name == event {
+				return true
+			}
 		}
 	}
-	return ""
+	return false
+}
+
+// SingleHookFlags rejects a hooks run that repeats --harness or --event: the parser keeps
+// the last value, and durin's handlers never repeat them.
+func SingleHookFlags(options *CliOptions) error {
+	if options.Values.Count("harness") > 1 || options.Values.Count("event") > 1 {
+		return clierror.New("Give --harness and --event at most once.")
+	}
+	return nil
 }
 
 // RunHookEvent is `durin hooks run --event <name>`: the payload is forwarded to the
@@ -99,6 +120,14 @@ func RunHookEvent(options *CliOptions, streams *IO, harness, event string) error
 	e, known := lookupHookEvent(format, event)
 	if valid {
 		defer forwardHookEvent(options.Directory, harness, event, data)()
+	}
+	if !known && isCheckEventName(event) {
+		// A check event without a usable record, or under a format that has no such check,
+		// fails closed instead of passing as capture.
+		if recordErr != nil {
+			return recordErr
+		}
+		return clierror.New("This hook installation has no check for this event. Run durin in an interactive terminal.")
 	}
 	output := ""
 	if known && e.Check {

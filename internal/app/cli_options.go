@@ -101,6 +101,7 @@ type CliValues struct {
 	Keys    []string
 	strings map[string]string
 	flags   map[string]bool
+	counts  map[string]int
 }
 
 // String returns a string option's value and whether it was given.
@@ -109,7 +110,14 @@ func (v CliValues) String(name string) (string, bool) { s, ok := v.strings[name]
 // Flag returns a boolean option's value (false when absent).
 func (v CliValues) Flag(name string) bool { return v.flags[name] }
 
+// Count returns how many times an option was given.
+func (v CliValues) Count(name string) int { return v.counts[name] }
+
 func (v *CliValues) store(name string, value *string) {
+	if v.counts == nil {
+		v.counts = map[string]int{}
+	}
+	v.counts[name]++
 	if _, seen := v.strings[name]; !seen {
 		if _, seen := v.flags[name]; !seen {
 			v.Keys = append(v.Keys, name)

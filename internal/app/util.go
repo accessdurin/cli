@@ -50,7 +50,7 @@ func textDigest(value string) string {
 
 // missing reports a Node ENOENT: the path, or a directory on it, does not exist.
 func missing(err error) bool {
-	return errors.Is(err, fs.ErrNotExist) && !errors.Is(err, syscall.ENOTDIR)
+	return errors.Is(err, fs.ErrNotExist) && (runtime.GOOS == "windows" || !errors.Is(err, syscall.ENOTDIR))
 }
 
 // readText is readFile(path, 'utf8'): invalid UTF-8 becomes U+FFFD.

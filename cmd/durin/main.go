@@ -46,6 +46,9 @@ func hooks(ctx context.Context, options *app.CliOptions, io *app.IO) error {
 	case "flush":
 		return app.FlushCommand(ctx, options, io)
 	case "run":
+		if err := app.SingleHookFlags(options); err != nil {
+			return err
+		}
 	default:
 		return app.HookCommand(options, io)
 	}

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -114,7 +115,7 @@ func TestClaudePrecedenceFromASubfolder(t *testing.T) {
 	agent := AgentsFor(root, EnvMap{})["claude"]
 	writeFile(t, agent.ConfigPath, `{"mcpServers":{"filesystem":{"command":"npx"},"shadowed":{"command":"npx"},`+
 		`"my.files":{"command":"node"},"a__b":{"command":"node"},"durin-bbbbbbbbbbbb":`+reportBridgeEntry+`},`+
-		`"projects":{"`+project+`":{"mcpServers":{"scoped":{"url":"http://localhost:1/mcp"}}}}}`)
+		`"projects":{`+strconv.Quote(project)+`:{"mcpServers":{"scoped":{"url":"http://localhost:1/mcp"}}}}}`)
 	writeFile(t, filepath.Join(project, ".mcp.json"), `{"mcpServers":{"team":{"command":"node"},"shadowed":{"url":"https://remote.example/mcp"}}}`)
 	location := McpConfigLocation{ConfigPath: agent.ConfigPath, Format: agent.Format, ServerKey: agent.ServerKey}
 	lookup := func(name string) *LocalServer {

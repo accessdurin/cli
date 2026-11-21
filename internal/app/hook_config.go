@@ -82,10 +82,7 @@ func commandLine(input HookConfiguration) string {
 // harnessCommandLine quotes an argv for the shell the harness uses to run a hook command.
 // windows nil means this platform.
 func harnessCommandLine(args []string, format string, windowsOverride *bool) string {
-	windows := runtime.GOOS == "windows"
-	if windowsOverride != nil {
-		windows = *windowsOverride
-	}
+	windows := hookWindows(windowsOverride)
 	quoted := make([]string, len(args))
 	if !windows {
 		for i, a := range args {
@@ -103,6 +100,13 @@ func harnessCommandLine(args []string, format string, windowsOverride *bool) str
 		return script
 	}
 	return "powershell.exe -NoProfile -NonInteractive -EncodedCommand " + base64.StdEncoding.EncodeToString(utf16le(script))
+}
+
+func hookWindows(override *bool) bool {
+	if override != nil {
+		return *override
+	}
+	return runtime.GOOS == "windows"
 }
 
 func utf16le(s string) []byte {
@@ -318,7 +322,7 @@ func GeneratedHookHandler(input HookConfiguration) *jsjson.Object {
 		)
 	}
 	handler := jsjson.Obj(jsjson.KV("type", jsjson.String("command")), jsjson.KV("command", command), jsjson.KV("timeout", jsjson.Int(timeout)))
-	if runtime.GOOS == "windows" && input.Format == "claude" {
+	if hookWindows(input.Windows) && input.Format == "claude" {
 		handler.Set("shell", jsjson.String("powershell"))
 	}
 	return handler

@@ -105,7 +105,11 @@ func TestAgentConfigurationRefusals(t *testing.T) {
 func TestAgentLocationsAndEndpoints(t *testing.T) {
 	agents := AgentsFor("/unused", EnvMap{"CLAUDE_CONFIG_DIR": "/custom/claude", "CODEX_HOME": "/custom/codex", "XDG_CONFIG_HOME": "/custom/xdg", "OPENCODE_CONFIG": "/custom/open.jsonc"})
 	for key, want := range map[string]string{"claude": "/custom/claude/.claude.json", "codex": "/custom/codex/config.toml", "opencode": "/custom/open.jsonc"} {
-		if got := agents[key].ConfigPath; got != filepath.FromSlash(want) {
+		expected := filepath.FromSlash(want)
+		if key == "opencode" {
+			expected = want
+		}
+		if got := agents[key].ConfigPath; got != expected {
 			t.Errorf("%s: %s", key, got)
 		}
 	}
