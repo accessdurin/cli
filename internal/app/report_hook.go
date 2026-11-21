@@ -254,11 +254,12 @@ func (d ReportDependencies) resolved() ReportDependencies {
 
 // Report hook outcomes.
 const (
-	ReportDisabled = "disabled"
-	ReportEndpoint = "endpoint"
-	ReportIgnored  = "ignored"
-	ReportNotLocal = "not_local"
-	ReportQueued   = "queued"
+	ReportDisabled  = "disabled"
+	ReportEndpoint  = "endpoint"
+	ReportIgnored   = "ignored"
+	ReportNotLocal  = "not_local"
+	ReportQueued    = "queued"
+	ReportSignedOut = "signed_out"
 )
 
 // ReportHook handles one post-tool hook event: when Endpoint does not cover the harness and
@@ -298,11 +299,33 @@ func ReportHook(directory, harness string, stdin io.Reader, deps ReportDependenc
 	if report == nil {
 		return ReportIgnored, nil
 	}
+	if !profileMayReport(directory, installation.ProfileID) {
+		return ReportSignedOut, nil
+	}
 	if err := spoolCall(SpoolDirectory(directory, installation.ProfileID), report, deps.Now); err != nil {
 		return "", err
 	}
 	deps.Flush(directory, installation.ProfileID)
 	return ReportQueued, nil
+}
+
+// profileMayReport reports whether the profile is still saved and has no unfinished sign-out.
+// It checks only files, so the hook never waits on the OS credential store; the flush discards
+// the spool of a profile that holds no MCP tokens.
+func profileMayReport(directory, profileID string) bool {
+	path, err := NewFileProfiles(directory).path(profileID)
+	if err != nil {
+		return false
+	}
+	if _, err := os.Stat(path); err != nil {
+		return false
+	}
+	marker, err := NewFileRevocationMarker(directory, profileID)
+	if err != nil {
+		return false
+	}
+	pending, _ := marker.Pending()
+	return !pending
 }
 
 var reportFileName = regexp.MustCompile(`^([0-9a-f-]{36})(?:\.(\d))?\.json$`)

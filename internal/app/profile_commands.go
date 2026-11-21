@@ -53,7 +53,10 @@ func LogoutCommand(ctx context.Context, options *CliOptions, io *IO) error {
 		if err != nil {
 			return SignOutResult{}, err
 		}
-		return SignOutMcp(ctx, SignOutOptions{Profile: profile, Store: store, Marker: marker, Force: options.Values.Flag("force")})
+		return SignOutMcp(ctx, SignOutOptions{
+			Profile: profile, Store: store, Marker: marker, Force: options.Values.Flag("force"),
+			Spool: SpoolDirectory(options.Directory, profile.ID),
+		})
 	}, DefaultLockPatience)
 	if err != nil {
 		return err

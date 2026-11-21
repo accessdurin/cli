@@ -198,6 +198,7 @@ func newReportingFixture(t *testing.T) *reportingFixture {
 		bridge: BridgeConfiguration{ExecutablePath: filepath.Join(root, "runtime", "durin"), ConfigDirectory: filepath.Join(root, "durin"), ProfileID: reportProfile},
 	}
 	writeFile(t, agent.ConfigPath, `{"mcpServers":{"filesystem":{"command":"npx"}}}`)
+	writeFile(t, filepath.Join(f.bridge.ConfigDirectory, "profiles", reportProfile+".json"), "{}")
 	if err := InstallReporting(agent, f.bridge); err != nil {
 		t.Fatal(err)
 	}
@@ -263,6 +264,19 @@ func TestReportHookStaysQuiet(t *testing.T) {
 	}
 	if got := f.run(t, claudeEvent(`"tool_name":"Read"`), deps); got != ReportIgnored {
 		t.Fatalf("built-in: %s", got)
+	}
+	marker, err := NewFileRevocationMarker(f.bridge.ConfigDirectory, reportProfile)
+	if err != nil || marker.Mark() != nil {
+		t.Fatal(err)
+	}
+	if got := f.run(t, claudeEvent(""), deps); got != ReportSignedOut {
+		t.Fatalf("unfinished sign-out: %s", got)
+	}
+	if err := errors.Join(marker.Clear(), os.Remove(filepath.Join(f.bridge.ConfigDirectory, "profiles", reportProfile+".json"))); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.run(t, claudeEvent(""), deps); got != ReportSignedOut {
+		t.Fatalf("removed profile: %s", got)
 	}
 	if files := spooled(t, f.spool); len(files) != 0 || len(f.flushed) != 0 {
 		t.Fatalf("nothing is queued or flushed: %v %v", files, f.flushed)
@@ -336,6 +350,25 @@ func spoolReport(t *testing.T, index int) *jsjson.Object {
 	call := *observed(t, "claude", claudeEvent(""))
 	call.ToolCallID = "call-" + strings.Repeat("x", index%3) + string(rune('a'+index%26)) + string(rune('a'+index/26))
 	return LocalToolCall("claude", call, stdioServer, time.Now())
+}
+
+func TestFlushDeletesTheSpoolOfASignedOutProfile(t *testing.T) {
+	dir := tempDir(t)
+	profile := mustProfile(t, testScope)
+	profiles := NewFileProfiles(dir)
+	if err := errors.Join(profiles.Save(profile), profiles.Activate(profile.ID)); err != nil {
+		t.Fatal(err)
+	}
+	spool := SpoolDirectory(dir, profile.ID)
+	if err := spoolCall(spool, spoolReport(t, 0), time.Now); err != nil {
+		t.Fatal(err)
+	}
+	if err := flushProfile(context.Background(), cliArgs(t, "hooks", "flush", "--config-dir", dir), newMemoryStore()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(spool); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("spool left after sign-out: %v", err)
+	}
 }
 
 func TestSpoolDeliversInShortSessionsAndBacksOff(t *testing.T) {

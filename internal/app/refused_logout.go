@@ -218,6 +218,9 @@ func (l refusedLogout) clear() error {
 	if err := l.clearRevocations(); err != nil {
 		return err
 	}
+	if err := os.RemoveAll(SpoolDirectory(l.Directory, l.ID)); err != nil {
+		return err
+	}
 	if err := rmForce(filepath.Join(l.Directory, "profiles", l.ID+".json")); err != nil {
 		return err
 	}
