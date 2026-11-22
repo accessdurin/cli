@@ -1,9 +1,10 @@
 # Hooks and the observer
 
 Setup registers a durin handler for every hook event each supported harness
-exposes, and installs the **observer**: a per-user background service that
-receives those events, notices connections to AI providers, and keeps an
-encrypted, bounded capture on this machine.
+exposes, and offers to install the **observer**: a per-user background service
+that receives those events, notices connections to AI providers, and keeps an
+encrypted, bounded capture on this machine. Setup asks first ("Install the Durin
+observer?", default no); hooks work without it.
 
 Nothing the observer collects leaves the machine. Telemetry is unchanged.
 Hook commands and the observer never initialize telemetry, so captured content
@@ -46,7 +47,14 @@ How a hook sends to the observer:
 
 Without a checker (setup's "Skip local pre-tool checks"):
 
-- The check event also only captures.
+- The check event also only captures, as long as durin can read the installation
+  record. Its handler runs the same command as a checking one, so durin learns
+  that no checker is configured only from `<config>/hooks/<harness>.json`.
+- If that record is missing, unreadable or invalid, or the configuration directory
+  is not private (owned by you, mode `0700`), the check event fails closed: it
+  exits 2 and the harness blocks the tool call. durin cannot tell a checker-less
+  installation from one whose checker it can no longer read. To recover, run
+  `chmod 700` on the directory or run setup again.
 - Cursor's `preToolUse` is not registered at all, because a passive handler cannot
   answer it without overriding Cursor's own approval.
 - A later setup run that skips the question keeps the checker an earlier run
@@ -153,7 +161,10 @@ Sources (read 2026-11-18):
 ## The observer
 
 `durin observe --config-dir <config>` is the observer. Setup installs it as a
-per-user service; `durin observer install` does the same by itself.
+per-user service only when you answer yes to "Install the Durin observer?"
+(the default is no); `durin observer install` installs it at any time.
+Answering no does not remove a service an earlier run installed; use
+`durin observer remove`.
 
 | OS | Service | Restarts on crash |
 | --- | --- | --- |
@@ -165,7 +176,8 @@ How the service runs:
 
 - It always runs `<config>/runtime/durin`, the copy setup publishes, never a path
   inside an npm or Homebrew cache.
-- Re-running setup restarts it, so an updated runtime is picked up.
+- Re-running setup and answering yes restarts it, so an updated runtime is
+  picked up.
 - Nothing asks for elevation.
 - If the service manager is unavailable (no systemd user session, for example),
   setup reports it and continues; hooks keep working without the observer.

@@ -15,6 +15,7 @@ import (
 
 	"github.com/accessdurin/cli/internal/contracts"
 	"github.com/accessdurin/cli/internal/jsjson"
+	"github.com/accessdurin/cli/internal/ports"
 	"github.com/accessdurin/cli/internal/zod"
 )
 
@@ -195,6 +196,9 @@ type ReportDependencies struct {
 	Home            string
 	Flush           func(directory, profileID string)
 	Now             func() time.Time
+	LookupEnv       func(name string) (string, bool)
+	// Store is the OS credential store the hook checks for the profile's MCP tokens.
+	Store ports.CredentialStore
 }
 
 const endpointHelper = "observer-preflight"
@@ -249,21 +253,58 @@ func (d ReportDependencies) resolved() ReportDependencies {
 	if d.Flush == nil {
 		d.Flush = launchFlush
 	}
+	if d.LookupEnv == nil {
+		d.LookupEnv = os.LookupEnv
+	}
+	if d.Store == nil {
+		d.Store = NewNativeCredentialStore()
+	}
 	return d
+}
+
+// importerMarkers are payload keys that name the harness that made the call, and
+// importerVariables are variables set when another harness runs Claude Code's hooks. They
+// match Endpoint's detection (apps/osx/Hook/HookEnvelope.swift).
+var (
+	importerMarkers   = []struct{ key, harness string }{{"hookEventName", "grok"}, {"cursor_version", "cursor"}}
+	importerVariables = []struct{ name, harness string }{{"DEVIN_PROJECT_DIR", "devin"}}
+)
+
+// callingHarness is the harness that made the call, which differs from the configured one
+// when another harness imports its hooks.
+func callingHarness(configured string, event jsjson.Value, lookupEnv func(string) (string, bool)) string {
+	fields, _ := event.(*jsjson.Object)
+	for _, marker := range importerMarkers {
+		if fields != nil && fields.Has(marker.key) {
+			return marker.harness
+		}
+	}
+	if configured != "claude" {
+		return configured
+	}
+	for _, variable := range importerVariables {
+		if _, found := lookupEnv(variable.name); found {
+			return variable.harness
+		}
+	}
+	return configured
 }
 
 // Report hook outcomes.
 const (
-	ReportDisabled = "disabled"
-	ReportEndpoint = "endpoint"
-	ReportIgnored  = "ignored"
-	ReportNotLocal = "not_local"
-	ReportQueued   = "queued"
+	ReportDisabled  = "disabled"
+	ReportEndpoint  = "endpoint"
+	ReportIgnored   = "ignored"
+	ReportImported  = "imported"
+	ReportNotLocal  = "not_local"
+	ReportQueued    = "queued"
+	ReportSignedOut = "signed_out"
 )
 
-// ReportHook handles one post-tool hook event: when Endpoint does not cover the harness and
-// the call went to a local MCP server, it spools the call and starts a background flush. The
-// caller never lets it block or fail the agent.
+// ReportHook handles one post-tool hook event: when Endpoint does not cover the harness, the
+// configured harness made the call and it went to a local MCP server, it spools the call and
+// starts a background flush. A call from a harness that imports these hooks is not reported,
+// as Endpoint does not report it. The caller never lets it block or fail the agent.
 func ReportHook(directory, harness string, stdin io.Reader, deps ReportDependencies) (string, error) {
 	deps = deps.resolved()
 	installation, err := ReadReporting(directory, harness)
@@ -283,6 +324,9 @@ func ReportHook(directory, harness string, stdin io.Reader, deps ReportDependenc
 	if event == nil {
 		return ReportIgnored, nil
 	}
+	if callingHarness(installation.Harness, event, deps.LookupEnv) != installation.Harness {
+		return ReportImported, nil
+	}
 	call, err := ObservedMcpCall(installation.Format, event)
 	if err != nil {
 		return "", err
@@ -298,11 +342,52 @@ func ReportHook(directory, harness string, stdin io.Reader, deps ReportDependenc
 	if report == nil {
 		return ReportIgnored, nil
 	}
+	if !profileMayReport(directory, installation.ProfileID) || !profileSignedIn(deps.Store, installation.ProfileID) {
+		return ReportSignedOut, nil
+	}
 	if err := spoolCall(SpoolDirectory(directory, installation.ProfileID), report, deps.Now); err != nil {
 		return "", err
 	}
 	deps.Flush(directory, installation.ProfileID)
 	return ReportQueued, nil
+}
+
+// profileMayReport reports whether the profile is still saved and has no unfinished sign-out.
+func profileMayReport(directory, profileID string) bool {
+	path, err := NewFileProfiles(directory).path(profileID)
+	if err != nil {
+		return false
+	}
+	if _, err := os.Stat(path); err != nil {
+		return false
+	}
+	marker, err := NewFileRevocationMarker(directory, profileID)
+	if err != nil {
+		return false
+	}
+	pending, _ := marker.Pending()
+	return !pending
+}
+
+// reportCredentialDeadline bounds the hook's credential-store read, so a locked or hung store
+// costs the agent at most this long; tests shorten it.
+var reportCredentialDeadline = 2 * time.Second
+
+// profileSignedIn reports whether the store confirms, within reportCredentialDeadline, that it
+// holds the profile's MCP tokens. A missing entry, a failed read or no answer in time means
+// signed out, so the call's arguments are never written to disk.
+func profileSignedIn(store ports.CredentialStore, profileID string) bool {
+	found := make(chan bool, 1)
+	go func() {
+		_, ok, err := store.Read("mcp:" + profileID + ":tokens")
+		found <- err == nil && ok
+	}()
+	select {
+	case ok := <-found:
+		return ok
+	case <-time.After(reportCredentialDeadline):
+		return false
+	}
 }
 
 var reportFileName = regexp.MustCompile(`^([0-9a-f-]{36})(?:\.(\d))?\.json$`)

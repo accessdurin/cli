@@ -306,6 +306,30 @@ func TestShellHookCommandIsQuoted(t *testing.T) {
 	}
 }
 
+// PowerShell also ends a single-quoted string at U+2018–U+201B, so a profile path such as
+// C:\Users\O’Brien must not cut the hook command short or run a command it contains.
+func TestPowerShellHookCommandIsQuoted(t *testing.T) {
+	for _, quote := range []string{"'", "\u2018", "\u2019", "\u201a", "\u201b"} {
+		if got, want := powershellQuote("O"+quote+"Brien"), "'O"+quote+quote+"Brien'"; got != want {
+			t.Errorf("powershellQuote = %q, want %q", got, want)
+		}
+	}
+	windows := true
+	values := []string{`C:\Users\O’Brien\.config\durin`, "x‘; Write-Output injected; ‛", "a‚b'c"}
+	if got := harnessCommandLine(append([]string{"Write-Output"}, values...), "claude", &windows); !strings.Contains(got, `'C:\Users\O’’Brien\.config\durin'`) {
+		t.Fatalf("claude on Windows: %s", got)
+	}
+	pwsh, err := exec.LookPath("pwsh")
+	if err != nil || runtime.GOOS == "windows" { // Windows consoles may not write UTF-8.
+		return
+	}
+	command := strings.Fields(harnessCommandLine(append([]string{"Write-Output"}, values...), "codex", &windows))
+	out, err := exec.Command(pwsh, command[1:]...).Output()
+	if got := strings.TrimRight(string(out), "\n"); err != nil || got != strings.Join(values, "\n") {
+		t.Fatalf("PowerShell ran %q (%v), want the arguments unchanged", got, err)
+	}
+}
+
 func TestInterruptedSaveKeepsTheManifest(t *testing.T) {
 	f := newHookFixture(t)
 	agent := AgentsFor(f.home, EnvMap{})["claude"]

@@ -88,16 +88,20 @@ func TestPromptsInAPseudoTerminal(t *testing.T) {
 
 	done := make(chan struct{})
 	var chosen, name string
-	var chooseErr, nameErr, cancelErr error
+	reporting := true
+	var chooseErr, nameErr, reportingErr, cancelErr error
 	go func() {
 		defer close(done)
 		chosen, chooseErr = ui.Organizations.Choose(ctx, organizations)
 		name, nameErr = ui.Organizations.Create(ctx)
+		reporting, reportingErr = ui.Agent.Reporting(ctx, contracts.AgentConfig{Name: "Claude Code"}, false)
 		_, cancelErr = ui.Agent.Choose(ctx)
 	}()
 	term.expect("Which organization should this agent use?", "\x1b[B\r")
 	term.expect("What is your organization called?", "A\r")
 	term.expect("Enter an organization name of 2–80 characters.", "cme Corp \r")
+	// Sending tool arguments off the computer is opt-in: Enter keeps the default, No.
+	term.expect("Report local MCP tool calls to your organization?", "\r")
 	term.expect("Which agent would you like to use?", "\x03")
 	select {
 	case <-done:
@@ -109,6 +113,9 @@ func TestPromptsInAPseudoTerminal(t *testing.T) {
 	}
 	if nameErr != nil || name != "Acme Corp " {
 		t.Errorf("create: %q %v", name, nameErr)
+	}
+	if reportingErr != nil || reporting {
+		t.Errorf("reporting: Enter answered %v %v; want the default, No", reporting, reportingErr)
 	}
 	if cancelErr != errSetupCancelled {
 		t.Errorf("cancel: %v", cancelErr)

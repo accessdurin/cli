@@ -186,6 +186,7 @@ func refusedProfile(t *testing.T, issuer string, extra map[string]string) (dir, 
 	id = textDigest(jsjson.Stringify(scope))
 	writeFile(t, filepath.Join(dir, "profiles", id+".json"), jsjson.Stringify(scope.Clone().Set("version", jsjson.Int(1)).Set("id", jsjson.String(id))))
 	writeFile(t, filepath.Join(dir, "active"), id+"\n")
+	writeFile(t, filepath.Join(SpoolDirectory(dir, id), "call.json"), "{}")
 	store = newMemoryStore()
 	store.values["mcp:"+id+":tokens"] = `{"access_token":"` + refusedAccess + `","refresh_token":"` + refusedRefresh + `","token_type":"Bearer"}`
 	store.values["mcp:"+id+":client"] = `{"client_id":"client_one"}`
@@ -339,6 +340,9 @@ func wantNothingLeft(t *testing.T, dir, id string, store *memoryStore) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "profiles", id+".json")); err == nil {
 		t.Error("the profile was not removed")
+	}
+	if _, err := os.Stat(SpoolDirectory(dir, id)); err == nil {
+		t.Error("the report spool was not removed")
 	}
 }
 

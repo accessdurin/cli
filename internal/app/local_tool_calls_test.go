@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -186,28 +187,41 @@ type reportingFixture struct {
 	agent   contracts.AgentConfig
 	flushed []string
 	spool   string
+	store   *memoryStore
 }
 
 func newReportingFixture(t *testing.T) *reportingFixture {
+	t.Helper()
+	return newReportingFixtureFor(t, reportProfile)
+}
+
+// newReportingFixtureFor installs reporting for profileID, signed in: its store holds MCP tokens.
+func newReportingFixtureFor(t *testing.T, profileID string) *reportingFixture {
 	t.Helper()
 	root := tempDir(t)
 	agent := AgentsFor(root, EnvMap{})["claude"]
 	f := &reportingFixture{
 		root:   root,
 		agent:  agent,
-		bridge: BridgeConfiguration{ExecutablePath: filepath.Join(root, "runtime", "durin"), ConfigDirectory: filepath.Join(root, "durin"), ProfileID: reportProfile},
+		bridge: BridgeConfiguration{ExecutablePath: filepath.Join(root, "runtime", "durin"), ConfigDirectory: filepath.Join(root, "durin"), ProfileID: profileID},
+		store:  newMemoryStore(),
 	}
+	f.store.values["mcp:"+profileID+":tokens"] = `{"access_token":"synthetic-access","token_type":"Bearer"}`
 	writeFile(t, agent.ConfigPath, `{"mcpServers":{"filesystem":{"command":"npx"}}}`)
+	writeFile(t, filepath.Join(f.bridge.ConfigDirectory, "profiles", profileID+".json"), "{}")
 	if err := InstallReporting(agent, f.bridge); err != nil {
 		t.Fatal(err)
 	}
-	f.spool = SpoolDirectory(f.bridge.ConfigDirectory, reportProfile)
+	f.spool = SpoolDirectory(f.bridge.ConfigDirectory, profileID)
 	return f
 }
 
 func (f *reportingFixture) run(t *testing.T, event string, deps ReportDependencies) string {
 	t.Helper()
 	deps.Flush = func(directory, profile string) { f.flushed = append(f.flushed, directory+" "+profile) }
+	if deps.Store == nil {
+		deps.Store = f.store
+	}
 	outcome, err := ReportHook(f.bridge.ConfigDirectory, "claude", strings.NewReader(event), deps)
 	if err != nil {
 		t.Fatal(err)
@@ -264,8 +278,85 @@ func TestReportHookStaysQuiet(t *testing.T) {
 	if got := f.run(t, claudeEvent(`"tool_name":"Read"`), deps); got != ReportIgnored {
 		t.Fatalf("built-in: %s", got)
 	}
+	marker, err := NewFileRevocationMarker(f.bridge.ConfigDirectory, reportProfile)
+	if err != nil || marker.Mark() != nil {
+		t.Fatal(err)
+	}
+	if got := f.run(t, claudeEvent(""), deps); got != ReportSignedOut {
+		t.Fatalf("unfinished sign-out: %s", got)
+	}
+	if err := errors.Join(marker.Clear(), os.Remove(filepath.Join(f.bridge.ConfigDirectory, "profiles", reportProfile+".json"))); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.run(t, claudeEvent(""), deps); got != ReportSignedOut {
+		t.Fatalf("removed profile: %s", got)
+	}
 	if files := spooled(t, f.spool); len(files) != 0 || len(f.flushed) != 0 {
 		t.Fatalf("nothing is queued or flushed: %v %v", files, f.flushed)
+	}
+}
+
+// failingStore answers every read with err; blocked, when set, makes reads wait for it instead.
+type failingStore struct {
+	*memoryStore
+	err     error
+	blocked chan struct{}
+}
+
+func (s failingStore) Read(key string) (string, bool, error) {
+	if s.blocked != nil {
+		<-s.blocked
+	}
+	return "", false, s.err
+}
+
+func TestReportHookSpoolsNothingAfterACompletedLogoutEvenIfTheFlushCannotStart(t *testing.T) {
+	profile := mustProfile(t, testScope)
+	f := newReportingFixtureFor(t, profile.ID)
+	f.store = signedInStore(t, profile)
+	deps := ReportDependencies{EndpointPresent: noEndpoint}
+	if got := f.run(t, claudeEvent(""), deps); got != ReportQueued {
+		t.Fatalf("signed in: %s", got)
+	}
+	marker, err := NewFileRevocationMarker(f.bridge.ConfigDirectory, profile.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := newAuthorizationServer(answer(200, ""))
+	result, err := SignOutMcp(context.Background(), SignOutOptions{Profile: profile, Store: f.store, Marker: marker, Fetch: &http.Client{Transport: server}, Spool: f.spool})
+	if err != nil || result.Local != "cleared" {
+		t.Fatalf("logout: %v %v", result, err)
+	}
+	// The profile file stays and no revocation is pending; the flush the hook asks for never runs.
+	f.flushed = nil
+	if got := f.run(t, claudeEvent(`"tool_use_id":"after-logout"`), deps); got != ReportSignedOut {
+		t.Errorf("after logout: %s", got)
+	}
+	if files := spooled(t, f.spool); len(files) != 0 || len(f.flushed) != 0 {
+		t.Fatalf("a signed-out call reached the spool: %v, flushes %v", files, f.flushed)
+	}
+}
+
+func TestReportHookSpoolsNothingWhenTheCredentialStoreFailsOrHangs(t *testing.T) {
+	previous := reportCredentialDeadline
+	reportCredentialDeadline = 50 * time.Millisecond
+	t.Cleanup(func() { reportCredentialDeadline = previous })
+	hung := make(chan struct{})
+	t.Cleanup(func() { close(hung) })
+	stores := map[string]failingStore{
+		"a failed read": {memoryStore: newMemoryStore(), err: errors.New("keychain locked")},
+		"a hung read":   {memoryStore: newMemoryStore(), blocked: hung},
+	}
+	for name, store := range stores {
+		f := newReportingFixture(t)
+		started := time.Now()
+		got := f.run(t, claudeEvent(""), ReportDependencies{EndpointPresent: noEndpoint, Store: store})
+		if got != ReportSignedOut || len(spooled(t, f.spool)) != 0 || len(f.flushed) != 0 {
+			t.Errorf("%s: outcome %s, spool %v, flushes %v", name, got, spooled(t, f.spool), f.flushed)
+		}
+		if waited := time.Since(started); waited > 2*time.Second {
+			t.Errorf("%s: the hook waited %s", name, waited)
+		}
 	}
 }
 
@@ -299,6 +390,36 @@ func TestReportHookDefersToEndpointOnlyWhileWiredAndSignedIn(t *testing.T) {
 	}
 	if got := f.run(t, claudeEvent(""), deps); got != ReportQueued {
 		t.Fatalf("stale marker: %s", got)
+	}
+}
+
+func TestReportHookSkipsCallsFromHarnessesThatImportClaudeHooks(t *testing.T) {
+	cases := []struct {
+		name, changes string
+		environment   map[string]string
+	}{
+		{"cursor", `"cursor_version":"2.9.0","conversation_id":"cursor-conversation"`, nil},
+		{"grok", `"hookEventName":"post_tool_use","sessionId":"session-1"`, nil},
+		{"devin", "", map[string]string{"DEVIN_PROJECT_DIR": "/home/dev/project"}},
+	}
+	endpoint := map[string]func(string, ReportingInstallation) bool{
+		"without endpoint": noEndpoint,
+		"with endpoint":    func(string, ReportingInstallation) bool { return true },
+	}
+	for _, c := range cases {
+		for coverage, present := range endpoint {
+			f := newReportingFixture(t)
+			lookup := func(name string) (string, bool) { value, found := c.environment[name]; return value, found }
+			got := f.run(t, claudeEvent(c.changes), ReportDependencies{EndpointPresent: present, LookupEnv: lookup})
+			if got == ReportQueued || len(spooled(t, f.spool)) != 0 || len(f.flushed) != 0 {
+				t.Errorf("%s %s: outcome %s, spool %v, flushes %v", c.name, coverage, got, spooled(t, f.spool), f.flushed)
+			}
+		}
+	}
+	f := newReportingFixture(t)
+	absent := func(string) (string, bool) { return "", false }
+	if got := f.run(t, claudeEvent(""), ReportDependencies{EndpointPresent: noEndpoint, LookupEnv: absent}); got != ReportQueued {
+		t.Fatalf("Claude Code's own call: %s", got)
 	}
 }
 
@@ -336,6 +457,25 @@ func spoolReport(t *testing.T, index int) *jsjson.Object {
 	call := *observed(t, "claude", claudeEvent(""))
 	call.ToolCallID = "call-" + strings.Repeat("x", index%3) + string(rune('a'+index%26)) + string(rune('a'+index/26))
 	return LocalToolCall("claude", call, stdioServer, time.Now())
+}
+
+func TestFlushDeletesTheSpoolOfASignedOutProfile(t *testing.T) {
+	dir := tempDir(t)
+	profile := mustProfile(t, testScope)
+	profiles := NewFileProfiles(dir)
+	if err := errors.Join(profiles.Save(profile), profiles.Activate(profile.ID)); err != nil {
+		t.Fatal(err)
+	}
+	spool := SpoolDirectory(dir, profile.ID)
+	if err := spoolCall(spool, spoolReport(t, 0), time.Now); err != nil {
+		t.Fatal(err)
+	}
+	if err := flushProfile(context.Background(), cliArgs(t, "hooks", "flush", "--config-dir", dir), newMemoryStore()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(spool); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("spool left after sign-out: %v", err)
+	}
 }
 
 func TestSpoolDeliversInShortSessionsAndBacksOff(t *testing.T) {

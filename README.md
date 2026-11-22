@@ -128,7 +128,8 @@ computer, with their arguments, unless Durin Endpoint covers that harness. See [
 harnesses, custom descriptors, preservation rules, and hook/reporting boundaries.
 
 Setup also registers a capture-only handler for every other hook event the
-harness supports and installs the **observer**, a per-user background service
+harness supports and, if you agree (the default is no), installs the
+**observer**, a per-user background service
 that receives those events, notices connections to AI providers (OpenAI,
 Anthropic, OpenRouter), and keeps an encrypted, size- and age-bounded capture on
 this machine. Nothing it captures leaves the machine. See
