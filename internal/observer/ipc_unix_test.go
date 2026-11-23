@@ -71,3 +71,23 @@ func TestSendRefusesSocketOtherUsersCouldPlant(t *testing.T) {
 		})
 	}
 }
+
+// The observer serves only connections whose peer it has identified as this user. A peer
+// it cannot identify is dropped, not let through (MAR-1891 N5).
+func TestObserverDropsPeersItCannotIdentify(t *testing.T) {
+	tcp, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tcp.Close()
+	conn, err := net.Dial("tcp", tcp.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	_ = tcp.(*net.TCPListener).SetDeadline(time.Now().Add(200 * time.Millisecond))
+	if accepted, err := (peerChecked{tcp}).Accept(); err == nil {
+		accepted.Close()
+		t.Fatal("the observer accepted a connection whose peer user it could not read")
+	}
+}
