@@ -43,26 +43,28 @@ type spoolEntry struct {
 	attempt    int
 }
 
-// spoolCall writes a call to the spool as <reportId>.json, then trims the spool.
-func spoolCall(spool string, call *jsjson.Object, now func() time.Time) error {
+// spoolCall writes a call to the spool as <reportId>.json, then trims the spool. It returns
+// the call's path.
+func spoolCall(spool string, call *jsjson.Object, now func() time.Time) (string, error) {
 	parsed, err := zod.Parse(contracts.LocalToolCallSchema, call)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if err := os.MkdirAll(spool, 0o700); err != nil {
-		return err
+		return "", err
 	}
 	temporary := filepath.Join(spool, "."+randomUUID()+".tmp")
 	if err := writeExclusive(temporary, []byte(jsjson.Stringify(parsed)), 0o600); err != nil {
-		return err
+		return "", err
 	}
 	id, _ := parsed.(*jsjson.Object).GetString("reportId")
-	if err := os.Rename(temporary, filepath.Join(spool, id+".json")); err != nil {
+	path := filepath.Join(spool, id+".json")
+	if err := os.Rename(temporary, path); err != nil {
 		_ = os.Remove(temporary)
-		return err
+		return "", err
 	}
 	_, err = trimSpool(spool, now)
-	return err
+	return path, err
 }
 
 func listedSpool(spool string) []spoolEntry {

@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -337,6 +338,42 @@ func TestReportHookSpoolsNothingAfterACompletedLogoutEvenIfTheFlushCannotStart(t
 	}
 }
 
+// logoutDuringRead is the store as the hook sees it when a whole logout runs between the
+// hook's credential check and its spool write (MAR-1881): the first read confirms the tokens,
+// then the logout finishes before the hook goes on.
+type logoutDuringRead struct {
+	*memoryStore
+	logout func()
+	once   sync.Once
+}
+
+func (s *logoutDuringRead) Read(key string) (string, bool, error) {
+	value, found, err := s.memoryStore.Read(key)
+	s.once.Do(s.logout)
+	return value, found, err
+}
+
+func TestReportHookLeavesNothingWhenLogoutFinishesBeforeTheWrite(t *testing.T) {
+	profile := mustProfile(t, testScope)
+	f := newReportingFixtureFor(t, profile.ID)
+	f.store = signedInStore(t, profile)
+	marker, err := NewFileRevocationMarker(f.bridge.ConfigDirectory, profile.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := newAuthorizationServer(answer(200, ""))
+	store := &logoutDuringRead{memoryStore: f.store, logout: func() {
+		result, err := SignOutMcp(context.Background(), SignOutOptions{Profile: profile, Store: f.store, Marker: marker, Fetch: &http.Client{Transport: server}, Spool: f.spool})
+		if err != nil || result.Local != "cleared" {
+			t.Errorf("logout: %v %v", result, err)
+		}
+	}}
+	got := f.run(t, claudeEvent(""), ReportDependencies{EndpointPresent: noEndpoint, Store: store})
+	if files := spooled(t, f.spool); len(files) != 0 || len(f.flushed) != 0 || got != ReportSignedOut {
+		t.Fatalf("a call outlived the logout that raced it: outcome %s, spool %v, flushes %v", got, files, f.flushed)
+	}
+}
+
 func TestReportHookSpoolsNothingWhenTheCredentialStoreFailsOrHangs(t *testing.T) {
 	previous := reportCredentialDeadline
 	reportCredentialDeadline = 50 * time.Millisecond
@@ -467,7 +504,7 @@ func TestFlushDeletesTheSpoolOfASignedOutProfile(t *testing.T) {
 		t.Fatal(err)
 	}
 	spool := SpoolDirectory(dir, profile.ID)
-	if err := spoolCall(spool, spoolReport(t, 0), time.Now); err != nil {
+	if _, err := spoolCall(spool, spoolReport(t, 0), time.Now); err != nil {
 		t.Fatal(err)
 	}
 	if err := flushProfile(context.Background(), cliArgs(t, "hooks", "flush", "--config-dir", dir), newMemoryStore()); err != nil {
@@ -481,7 +518,7 @@ func TestFlushDeletesTheSpoolOfASignedOutProfile(t *testing.T) {
 func TestSpoolDeliversInShortSessionsAndBacksOff(t *testing.T) {
 	spool := filepath.Join(tempDir(t), "spool")
 	for i := range 12 {
-		if err := spoolCall(spool, spoolReport(t, i), time.Now); err != nil {
+		if _, err := spoolCall(spool, spoolReport(t, i), time.Now); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -516,7 +553,7 @@ func TestSpoolDeliversInShortSessionsAndBacksOff(t *testing.T) {
 
 func TestSpoolPicksUpQueuedCallsAndDropsUnreadableFiles(t *testing.T) {
 	spool := filepath.Join(tempDir(t), "spool")
-	if err := spoolCall(spool, spoolReport(t, 1), time.Now); err != nil {
+	if _, err := spoolCall(spool, spoolReport(t, 1), time.Now); err != nil {
 		t.Fatal(err)
 	}
 	writeFile(t, filepath.Join(spool, "00000000-0000-4000-8000-000000000000.json"), "")
@@ -525,7 +562,7 @@ func TestSpoolPicksUpQueuedCallsAndDropsUnreadableFiles(t *testing.T) {
 	caller.during = func() {
 		if !queued {
 			queued = true
-			if err := spoolCall(spool, spoolReport(t, 2), time.Now); err != nil {
+			if _, err := spoolCall(spool, spoolReport(t, 2), time.Now); err != nil {
 				t.Error(err)
 			}
 		}
@@ -542,7 +579,7 @@ func TestSpoolPicksUpQueuedCallsAndDropsUnreadableFiles(t *testing.T) {
 
 func TestSpoolRetriesARejectedCallThenDropsIt(t *testing.T) {
 	spool := filepath.Join(tempDir(t), "spool")
-	if err := spoolCall(spool, spoolReport(t, 1), time.Now); err != nil {
+	if _, err := spoolCall(spool, spoolReport(t, 1), time.Now); err != nil {
 		t.Fatal(err)
 	}
 	now := time.Now()
@@ -566,7 +603,7 @@ func TestSpoolKeepsTheNewestCallsWithinBudget(t *testing.T) {
 	for i := range SpoolLimits.Files + 5 {
 		call := spoolReport(t, i)
 		call.Set("reportId", jsjson.String(randomUUID()))
-		if err := spoolCall(spool, call, time.Now); err != nil {
+		if _, err := spoolCall(spool, call, time.Now); err != nil {
 			t.Fatal(err)
 		}
 	}

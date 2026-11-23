@@ -342,11 +342,23 @@ func ReportHook(directory, harness string, stdin io.Reader, deps ReportDependenc
 	if report == nil {
 		return ReportIgnored, nil
 	}
-	if !profileMayReport(directory, installation.ProfileID) || !profileSignedIn(deps.Store, installation.ProfileID) {
+	signedIn := func() bool {
+		return profileMayReport(directory, installation.ProfileID) && profileSignedIn(deps.Store, installation.ProfileID)
+	}
+	if !signedIn() {
 		return ReportSignedOut, nil
 	}
-	if err := spoolCall(SpoolDirectory(directory, installation.ProfileID), report, deps.Now); err != nil {
+	path, err := spoolCall(SpoolDirectory(directory, installation.ProfileID), report, deps.Now)
+	if err != nil {
 		return "", err
+	}
+	// A logout that ran between the check and the write removed the spool before this call
+	// reached it (MAR-1881). From its first step until the tokens are gone, logout keeps the
+	// profile marked, and it removes the spool after marking, so either it removes this file
+	// or this check sees it signed out. TestSignOutModel explores every order.
+	if !signedIn() {
+		_ = os.Remove(path)
+		return ReportSignedOut, nil
 	}
 	deps.Flush(directory, installation.ProfileID)
 	return ReportQueued, nil
