@@ -114,6 +114,7 @@ type McpStdioBridge struct {
 
 	mu                 sync.Mutex
 	initializedRequest jsjson.Value
+	forwardTail        chan struct{}
 	closed             bool
 	signedOut          bool
 }
@@ -193,8 +194,11 @@ func (b *McpStdioBridge) isClosed() bool {
 	return b.closed
 }
 
-// received forwards each agent message on its own, as the TypeScript bridge starts each
-// forward without waiting for the previous one; the profile lock orders them.
+// received queues each agent message behind the previous one, so the gateway sees them in
+// the agent's order: notifications/initialized before the next request, a cancellation after
+// the request it cancels. The profile lock alone does not keep that order; its waiters poll,
+// and a notification used to lose to every later request until the bridge closed (#28's
+// TestBridge failures).
 func (b *McpStdioBridge) received(message mcp.Message) {
 	b.mu.Lock()
 	if b.closed {
@@ -205,9 +209,15 @@ func (b *McpStdioBridge) received(message mcp.Message) {
 		b.initializedRequest, _ = mcp.MessageID(message)
 	}
 	b.forwards.Add(1)
+	previous, done := b.forwardTail, make(chan struct{})
+	b.forwardTail = done
 	b.mu.Unlock()
 	go func() {
 		defer b.forwards.Done()
+		defer close(done)
+		if previous != nil {
+			<-previous
+		}
 		if err := b.forward(message); err != nil {
 			_ = b.Close()
 		}

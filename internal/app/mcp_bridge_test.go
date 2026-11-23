@@ -6,8 +6,10 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/accessdurin/cli/internal/clierror"
 	"github.com/accessdurin/cli/internal/mcp/httpx"
@@ -82,5 +84,86 @@ func TestBridgeFailureMessages(t *testing.T) {
 		if got := bridgeFailureMessage(err); got != want {
 			t.Errorf("%v: %q, want %q", err, got, want)
 		}
+	}
+}
+
+// The gateway sees the agent's messages in the agent's order, one at a time, even under a
+// lock whose waiters are not served first come, first served (the profile lock polls).
+func TestBridgeForwardsInTheAgentsOrder(t *testing.T) {
+	profile := mustProfile(t, testScope)
+	input, agent := io.Pipe()
+	var mu sync.Mutex
+	var sent []string
+	posted := make(chan struct{}, 8)
+	inside, overlapped := 0, false
+	another := make(chan struct{}, 8)
+	marker := &lockedMarker{}
+	bridge, err := NewMcpStdioBridge(McpStdioBridgeOptions{
+		Resource:      profile.Resource,
+		Authorization: NewMcpOAuthProvider(McpOAuthOptions{Profile: profile, Store: newMemoryStore(), Marker: marker}),
+		Fetch: func(_ context.Context, _ string, init *httpx.RequestInit) (*http.Response, error) {
+			if init.Method == http.MethodPost {
+				mu.Lock()
+				sent = append(sent, string(init.Body))
+				mu.Unlock()
+				posted <- struct{}{}
+			}
+			return &http.Response{StatusCode: http.StatusAccepted, Header: http.Header{}, Body: io.NopCloser(bytes.NewReader(nil))}, nil
+		},
+		Input:  input,
+		Output: &bytes.Buffer{},
+		Marker: marker,
+		// The first holder waits long enough for any forward started beside it to arrive.
+		Serialize: func(work func() error) error {
+			mu.Lock()
+			inside++
+			first := len(sent) == 0 && inside == 1
+			if inside > 1 {
+				overlapped = true
+				another <- struct{}{}
+			}
+			mu.Unlock()
+			if first {
+				select {
+				case <-another:
+				case <-time.After(200 * time.Millisecond):
+				}
+			}
+			defer func() { mu.Lock(); inside--; mu.Unlock() }()
+			return work()
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := bridge.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		`{"jsonrpc":"2.0","method":"notifications/first"}`,
+		`{"jsonrpc":"2.0","method":"notifications/second"}`,
+		`{"jsonrpc":"2.0","method":"notifications/third"}`,
+	}
+	for _, line := range want {
+		if _, err := io.WriteString(agent, line+"\n"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for range want {
+		select {
+		case <-posted:
+		case <-time.After(5 * time.Second):
+			t.Fatal("the bridge did not forward every message")
+		}
+	}
+	_ = agent.Close()
+	bridge.Wait()
+	mu.Lock()
+	defer mu.Unlock()
+	if overlapped {
+		t.Fatal("a forward waited for the profile lock while an earlier one held it, so the lock's polling decides the order the gateway sees")
+	}
+	if strings.Join(sent, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("forwarded %q, want %q", sent, want)
 	}
 }
