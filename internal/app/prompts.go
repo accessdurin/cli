@@ -168,9 +168,11 @@ func (p *prompter) selectOne(ctx context.Context, message string, options []prom
 	return value, nil
 }
 
-// confirm is p.confirm: yes or no, starting on initial.
-func (p *prompter) confirm(ctx context.Context, message string, initial bool) (bool, error) {
-	value := initial
+// confirm asks yes or no and always starts on No. Each yes/no question asks for consent to
+// send data off this computer or install something that keeps running (MAR-1875 S3, S5), so
+// pressing Enter must never consent; there is deliberately no way to start on Yes.
+func (p *prompter) confirm(ctx context.Context, message string) (bool, error) {
+	value := false
 	field := huh.NewConfirm().Title(message).Affirmative("Yes").Negative("No").Value(&value)
 	if err := p.run(ctx, field); err != nil {
 		return false, p.guard(message, err)
