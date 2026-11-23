@@ -66,15 +66,11 @@ func ForwardHookInput(directory, harness string, stdin io.Reader) (io.Reader, fu
 // when it names an event and every --event value, however repeated, is an event no format
 // checks.
 func IsCaptureHook(args []string) bool {
-	if len(args) < 2 || args[0] != "hooks" || args[1] != "run" {
+	if command, action := CommandWords(args); command != "hooks" || action != "run" {
 		return false
 	}
-	decoded := make([]string, len(args))
-	for i, a := range args {
-		decoded[i] = jsjson.DecodeUTF8([]byte(a))
-	}
 	events := 0
-	for _, token := range argsToTokens(decoded) {
+	for _, token := range decodedTokens(args) {
 		if token.positional || token.name != "event" {
 			continue
 		}
@@ -84,6 +80,28 @@ func IsCaptureHook(args []string) bool {
 		events++
 	}
 	return events > 0
+}
+
+// CommandWords are the command and action that args run, read with the parser's own
+// tokenizer: options may come first ("--config-dir X hooks run"), and a hook run classified by
+// argument position exited 1, which harnesses treat as a non-blocking error, instead of 2.
+func CommandWords(args []string) (command, action string) {
+	var words []string
+	for _, token := range decodedTokens(args) {
+		if token.positional && len(words) < 2 {
+			words = append(words, *token.value)
+		}
+	}
+	words = append(words, "", "")
+	return words[0], words[1]
+}
+
+func decodedTokens(args []string) []argToken {
+	decoded := make([]string, len(args))
+	for i, a := range args {
+		decoded[i] = jsjson.DecodeUTF8([]byte(a))
+	}
+	return argsToTokens(decoded)
 }
 
 func isCheckEventName(event string) bool {

@@ -32,7 +32,7 @@ func TestExitCodesAndMessages(t *testing.T) {
 		{[]string{"verify", "--nope"}, 1, "Unknown option. Run durin --help.\n"},
 		{[]string{"verify", "--profile"}, 1, genericFailure + "\n"},
 		{[]string{"hooks", "run", "--config-dir", config}, 2, "Invalid harness identifier.\n"},
-		{[]string{"--config-dir", config, "hooks", "run"}, 1, "Invalid harness identifier.\n"},
+		{[]string{"--config-dir", config, "hooks", "run"}, 2, "Invalid harness identifier.\n"},
 		{[]string{"login", "--config-dir", config}, 1, "Run durin in an interactive terminal to complete onboarding.\n"},
 		{[]string{"profiles", "list", "--config-dir", file}, 1, "The Durin directory " + filepath.Join(root, "f") +
 			" must be a directory owned by you that only you can access. Run chmod 700 on it, or choose another --config-dir.\n"},
@@ -221,17 +221,20 @@ func TestEveryHookRunFailsClosed(t *testing.T) {
 	shapes := []struct {
 		name  string
 		flags func(harness, event string) []string
+		// before puts the options ahead of "hooks run", which the parser accepts.
+		before bool
 	}{
-		{"--event", func(h, e string) []string { return []string{"--harness", h, "--event", e} }},
-		{"--event=", func(h, e string) []string { return []string{"--harness", h, "--event=" + e} }},
-		{"capture event first", func(h, e string) []string { return []string{"--harness", h, "--event", capture, "--event", e} }},
-		{"capture event last", func(h, e string) []string { return []string{"--harness", h, "--event", e, "--event=" + capture} }},
-		{"repeated harness", func(h, e string) []string { return []string{"--harness", "custom-other", "--harness", h, "--event", e} }},
+		{"--event", func(h, e string) []string { return []string{"--harness", h, "--event", e} }, false},
+		{"--event=", func(h, e string) []string { return []string{"--harness", h, "--event=" + e} }, false},
+		{"capture event first", func(h, e string) []string { return []string{"--harness", h, "--event", capture, "--event", e} }, false},
+		{"capture event last", func(h, e string) []string { return []string{"--harness", h, "--event", e, "--event=" + capture} }, false},
+		{"repeated harness", func(h, e string) []string { return []string{"--harness", "custom-other", "--harness", h, "--event", e} }, false},
 		// The parser keeps the last value, here a harness whose checker allows everything.
-		{"repeated harness, allowing last", func(h, e string) []string { return []string{"--harness", h, "--harness", "custom-allow", "--event", e} }},
+		{"repeated harness, allowing last", func(h, e string) []string { return []string{"--harness", h, "--harness", "custom-allow", "--event", e} }, false},
 		{"unusable options", func(h, e string) []string {
 			return []string{"--harness", h, "--app-url", "http://example.com", "--event", e}
-		}},
+		}, false},
+		{"options before the command", func(h, e string) []string { return []string{"--harness", h, "--event", e} }, true},
 	}
 	formats := make([]string, 0, len(app.HarnessEvents))
 	for format := range app.HarnessEvents {
@@ -260,6 +263,9 @@ func TestEveryHookRunFailsClosed(t *testing.T) {
 					for _, shape := range shapes {
 						var stdout, stderr bytes.Buffer
 						args := append([]string{"hooks", "run", "--config-dir", config}, shape.flags(harness, event.Name)...)
+						if shape.before {
+							args = append(append([]string{"--config-dir", config}, shape.flags(harness, event.Name)...), "hooks", "run")
+						}
 						runs++
 						if code := run(args, strings.NewReader(pre), &stdout, &stderr, func() bool { return false }); code != want {
 							failures++

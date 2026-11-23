@@ -492,6 +492,10 @@ func TestHookEventsForwardAndContinue(t *testing.T) {
 		"hooks run --event --event PreToolUse":                             false,
 		"hooks run --event --event=PreToolUse":                             false,
 		"hooks run --event=":                                               false,
+		// Options may come before the command.
+		"--config-dir /x hooks run --event Stop":       true,
+		"--config-dir /x hooks run --event PreToolUse": false,
+		"--config-dir hooks run --event Stop":          false,
 	} {
 		if got := IsCaptureHook(strings.Fields(args)); got != capture {
 			t.Errorf("%s: %v", args, got)
