@@ -218,6 +218,20 @@ func TestObserver(t *testing.T) {
 	}()
 	e.WriteFile(filepath.Join(e.Config, "observer", "config.json"), `{"pollIntervalSeconds":1,"captureMaxAgeHours":24}`, 0o600)
 	stop := e.startObserver("DURIN_OBSERVER_RESOLVE=api.anthropic.com=127.0.0.2")
+	waitStatus := func(want func(string) bool) string {
+		deadline := time.Now().Add(15 * time.Second)
+		for {
+			out := e.runQuiet("", "observer", "status", "--config-dir", e.Config).Stdout
+			if want(out) || time.Now().After(deadline) {
+				return out
+			}
+			time.Sleep(200 * time.Millisecond)
+		}
+	}
+	// The observer listens before its capture key is loaded from the credential store, and
+	// drops events that arrive before then; sending earlier made recordsStored depend on how
+	// fast the keyring answered (stored=2 dropped=3 on a slow run).
+	waitStatus(func(s string) bool { return strings.Contains(statusSummary(s), "capture: available=true") })
 	socket := filepath.Join(e.Config, "observer", "observer.sock")
 	info, _ := os.Stat(socket)
 	dir, _ := os.Stat(filepath.Dir(socket))
@@ -231,16 +245,6 @@ func TestObserver(t *testing.T) {
 	conn, err := net.Dial("tcp", listener.Addr().String())
 	if err != nil {
 		t.Fatal(err)
-	}
-	waitStatus := func(want func(string) bool) string {
-		deadline := time.Now().Add(15 * time.Second)
-		for {
-			out := e.runQuiet("", "observer", "status", "--config-dir", e.Config).Stdout
-			if want(out) || time.Now().After(deadline) {
-				return out
-			}
-			time.Sleep(200 * time.Millisecond)
-		}
 	}
 	waitStatus(func(s string) bool { return strings.Contains(s, `"openProviderConnections": 1`) })
 	conn.Close()

@@ -10,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"syscall"
+
+	"github.com/accessdurin/cli/internal/observer/peercred"
 )
 
 const isWindows = false
@@ -30,9 +32,9 @@ func dial(ctx context.Context, address string) (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	if uid, ok := peerUID(conn); ok && uid != os.Getuid() {
+	if err := peercred.SameUser(conn); err != nil {
 		conn.Close()
-		return nil, errors.New("observer: the socket is served by another user")
+		return nil, err
 	}
 	return conn, nil
 }
@@ -100,8 +102,9 @@ func ownerOnlyDirectory(dir string) error {
 	return nil
 }
 
-// peerChecked drops connections from other users. The directory and socket modes already
-// keep them out; this holds even if those modes are changed.
+// peerChecked drops connections from other users and from peers it cannot identify. The
+// directory and socket modes already keep other users out; this holds even if those modes
+// are changed.
 type peerChecked struct{ net.Listener }
 
 func (l peerChecked) Accept() (net.Conn, error) {
@@ -110,7 +113,7 @@ func (l peerChecked) Accept() (net.Conn, error) {
 		if err != nil {
 			return nil, err
 		}
-		if uid, ok := peerUID(conn); ok && uid != os.Getuid() {
+		if peercred.SameUser(conn) != nil {
 			conn.Close()
 			continue
 		}

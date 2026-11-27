@@ -119,11 +119,12 @@ func errorMessage(err error, localHook bool) string {
 }
 
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer, isTTY func() bool) int {
-	localHook := len(args) >= 2 && args[0] == "hooks" && args[1] == "run"
+	command, action := app.CommandWords(args)
+	localHook := command == "hooks" && action == "run"
 	// Reporting runs beside the agent: it stays silent and never fails a tool call.
-	reportingHook := len(args) >= 2 && args[0] == "hooks" && (args[1] == "report" || args[1] == "flush")
+	reportingHook := command == "hooks" && (action == "report" || action == "flush")
 	// Hooks and the observer handle captured content; they never initialize telemetry.
-	observe := len(args) >= 1 && args[0] == "observe"
+	observe := command == "observe"
 	if !localHook && !observe && !reportingHook {
 		telemetry.Initialize()
 	}

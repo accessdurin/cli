@@ -196,7 +196,9 @@ The observer listens on one local channel for every harness and session:
 - **Linux and macOS**: a Unix socket, `<config>/observer/observer.sock`.
   - The directory is 0700 and the socket 0600.
   - Peer credentials (`SO_PEERCRED`, `LOCAL_PEERCRED`) must match the observer's
-    user.
+    user, on both ends. A connection whose peer credentials cannot be read is
+    refused. Other Unix systems have no such check, so there the observer and
+    its hooks refuse every connection.
   - If that path is too long for a socket, it moves to
     `$TMPDIR/durin-<uid>/<hash>.sock`.
 - **Windows**: a named pipe, `\\.\pipe\durin-observer-<hash>`.

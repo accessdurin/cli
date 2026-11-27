@@ -6,9 +6,12 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/accessdurin/cli/internal/app"
 )
 
 func TestExitCodesAndMessages(t *testing.T) {
@@ -29,7 +32,7 @@ func TestExitCodesAndMessages(t *testing.T) {
 		{[]string{"verify", "--nope"}, 1, "Unknown option. Run durin --help.\n"},
 		{[]string{"verify", "--profile"}, 1, genericFailure + "\n"},
 		{[]string{"hooks", "run", "--config-dir", config}, 2, "Invalid harness identifier.\n"},
-		{[]string{"--config-dir", config, "hooks", "run"}, 1, "Invalid harness identifier.\n"},
+		{[]string{"--config-dir", config, "hooks", "run"}, 2, "Invalid harness identifier.\n"},
 		{[]string{"login", "--config-dir", config}, 1, "Run durin in an interactive terminal to complete onboarding.\n"},
 		{[]string{"profiles", "list", "--config-dir", file}, 1, "The Durin directory " + filepath.Join(root, "f") +
 			" must be a directory owned by you that only you can access. Run chmod 700 on it, or choose another --config-dir.\n"},
@@ -98,8 +101,19 @@ func TestCustomHarnessWithBuiltInFormatDenyBlocks(t *testing.T) {
 // hookRecord writes <config>/hooks/<harness>.json naming format and a checker that denies.
 func hookRecord(t *testing.T, root, config, harness, format string) {
 	t.Helper()
-	checker := filepath.Join(root, "deny.sh")
-	if err := os.WriteFile(checker, []byte("#!/bin/sh\ncat >/dev/null\nexit 2\n"), 0o700); err != nil {
+	checkerRecord(t, root, config, harness, format, 2)
+}
+
+// allowingRecord is hookRecord with a checker that allows every call.
+func allowingRecord(t *testing.T, root, config, harness, format string) {
+	t.Helper()
+	checkerRecord(t, root, config, harness, format, 0)
+}
+
+func checkerRecord(t *testing.T, root, config, harness, format string, exit int) {
+	t.Helper()
+	checker := filepath.Join(root, "checker-"+strconv.Itoa(exit)+".sh")
+	if err := os.WriteFile(checker, []byte("#!/bin/sh\ncat >/dev/null\nexit "+strconv.Itoa(exit)+"\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	record := `{"format":` + strconv.Quote(format) + `,"harness":` + strconv.Quote(harness) + `,"checker":{"command":` + strconv.Quote(checker) + `,"args":[],"timeoutMs":1000},` +
@@ -160,5 +174,118 @@ func TestHookRunFailsClosed(t *testing.T) {
 		if code := run(args, strings.NewReader(pre), &stdout, &stderr, func() bool { return false }); code != c.want {
 			t.Errorf("%s: exit %d (stdout %q, stderr %q), want %d", c.name, code, stdout.String(), stderr.String(), c.want)
 		}
+	}
+}
+
+// TestEveryHookRunFailsClosed sweeps every event of every built-in format, under the format's
+// own harness id and a custom harness that uses the format, through every record state and
+// every argv shape that broke the pre-tool check before (MAR-1874, #28's B1, MAR-1876,
+// MAR-1877): a check event never exits 0 with a denying checker or after any failure, and a
+// capture event always exits 0. A new format, event, record state or flag spelling joins the
+// sweep instead of waiting for a reviewer's probe table.
+func TestEveryHookRunFailsClosed(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell-script checker and POSIX permissions")
+	}
+	t.Setenv("DO_NOT_TRACK", "1")
+	const pre = `{"hook_event_name":"PreToolUse","session_id":"s","tool_use_id":"c","tool_name":"mcp__sandbox__read","tool_input":{}}`
+	// A capture event in every format's terms: no format checks it.
+	const capture = "Stop"
+	type state struct {
+		name  string
+		write func(root, config, harness, format string)
+		mode  os.FileMode
+	}
+	writeRecord := func(text string) func(root, config, harness, format string) {
+		return func(_, config, harness, _ string) {
+			if err := os.MkdirAll(filepath.Join(config, "hooks"), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(config, "hooks", harness+".json"), []byte(text), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	valid := func(root, config, harness, format string) { hookRecord(t, root, config, harness, format) }
+	// #28's B1 planted a record of a format that checks nothing in a directory durin refuses.
+	unchecked := func(root, config, harness, _ string) { hookRecord(t, root, config, harness, "custom") }
+	states := []state{
+		{"denying record", valid, 0o700},
+		{"denying record in a non-private directory", valid, 0o755},
+		{"record of a format without checks", unchecked, 0o700},
+		{"record of a format without checks in a non-private directory", unchecked, 0o755},
+		{"no record", func(string, string, string, string) {}, 0o700},
+		{"corrupt record", writeRecord("{"), 0o700},
+		{"schema-invalid record", writeRecord(`{"format":"claude"}`), 0o700},
+	}
+	shapes := []struct {
+		name  string
+		flags func(harness, event string) []string
+		// before puts the options ahead of "hooks run", which the parser accepts.
+		before bool
+	}{
+		{"--event", func(h, e string) []string { return []string{"--harness", h, "--event", e} }, false},
+		{"--event=", func(h, e string) []string { return []string{"--harness", h, "--event=" + e} }, false},
+		{"capture event first", func(h, e string) []string { return []string{"--harness", h, "--event", capture, "--event", e} }, false},
+		{"capture event last", func(h, e string) []string { return []string{"--harness", h, "--event", e, "--event=" + capture} }, false},
+		{"repeated harness", func(h, e string) []string { return []string{"--harness", "custom-other", "--harness", h, "--event", e} }, false},
+		// The parser keeps the last value, here a harness whose checker allows everything.
+		{"repeated harness, allowing last", func(h, e string) []string { return []string{"--harness", h, "--harness", "custom-allow", "--event", e} }, false},
+		{"unusable options", func(h, e string) []string {
+			return []string{"--harness", h, "--app-url", "http://example.com", "--event", e}
+		}, false},
+		{"options before the command", func(h, e string) []string { return []string{"--harness", h, "--event", e} }, true},
+	}
+	formats := make([]string, 0, len(app.HarnessEvents))
+	for format := range app.HarnessEvents {
+		formats = append(formats, format)
+	}
+	sort.Strings(formats)
+	failures, runs := 0, 0
+	for _, format := range formats {
+		for _, harness := range []string{format, "custom-acme"} {
+			for _, s := range states {
+				root, _ := filepath.EvalSymlinks(t.TempDir())
+				config := filepath.Join(root, "config")
+				if err := os.MkdirAll(config, 0o700); err != nil {
+					t.Fatal(err)
+				}
+				s.write(root, config, harness, format)
+				allowingRecord(t, root, config, "custom-allow", format)
+				if err := os.Chmod(config, s.mode); err != nil {
+					t.Fatal(err)
+				}
+				for _, event := range app.HarnessEvents[format] {
+					want := 0
+					if event.Check {
+						want = 2
+					}
+					for _, shape := range shapes {
+						var stdout, stderr bytes.Buffer
+						args := append([]string{"hooks", "run", "--config-dir", config}, shape.flags(harness, event.Name)...)
+						if shape.before {
+							args = append(append([]string{"--config-dir", config}, shape.flags(harness, event.Name)...), "hooks", "run")
+						}
+						runs++
+						if code := run(args, strings.NewReader(pre), &stdout, &stderr, func() bool { return false }); code != want {
+							failures++
+							kind := "capture"
+							if event.Check {
+								kind = "check"
+							}
+							t.Errorf("%s event %s/%s, harness %s, %s, %s: exit %d, want %d (stderr %q)",
+								kind, format, event.Name, harness, s.name, shape.name, code, want, stderr.String())
+							if failures >= 20 {
+								t.Fatalf("stopping after %d failures of %d runs", failures, runs)
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	t.Logf("swept %d hook runs", runs)
+	if runs < 1000 {
+		t.Fatalf("swept only %d hook runs; HarnessEvents shrank or the sweep broke", runs)
 	}
 }

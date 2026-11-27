@@ -227,7 +227,8 @@ while the profile is signed out: the profile is removed, a sign-out is unfinishe
 or the OS credential store does not confirm the profile's MCP tokens within two
 seconds (missing, unreadable or not answering). Otherwise it writes the call to
 `reporting/spool/` under the Durin configuration directory (private files, at most
-200 calls, kept up to 7 days) and starts `durin hooks flush` in the background. The
+200 calls, kept up to 7 days), checks again, removes the call if a sign-out finished
+meanwhile, and otherwise starts `durin hooks flush` in the background. The
 flush sends waiting calls with `durin_report_local_tool_call`, opening a connection
 for at most 5 calls at a time (up to 50 per run), so the Durin bridge, which shares
 the profile lock, waits at most for one short batch. It picks up calls queued while

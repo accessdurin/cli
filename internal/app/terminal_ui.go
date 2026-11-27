@@ -206,8 +206,7 @@ func (q agentQuestions) Checker(ctx context.Context, agent contracts.AgentConfig
 	return nil, nil
 }
 
-// Reporting explains what reporting local MCP tool calls sends and asks whether to turn it on
-// (the default is no: the tool arguments leave this computer).
+// Reporting explains what reporting local MCP tool calls sends and asks whether to turn it on.
 func (q agentQuestions) Reporting(ctx context.Context, agent contracts.AgentConfig, endpoint bool) (bool, error) {
 	takeover := "If you later install Durin Endpoint, it takes over and this hook stays quiet."
 	if endpoint {
@@ -219,11 +218,10 @@ func (q agentQuestions) Reporting(ctx context.Context, agent contracts.AgentConf
 		"The arguments are sent in full (up to 16 KiB); your organization’s capture policy decides on Durin’s side whether they are kept. Results are never sent.",
 		takeover,
 	}, "\n"), "Local MCP tool calls")
-	return q.p.confirm(ctx, "Report local MCP tool calls to your organization?", false)
+	return q.p.confirm(ctx, "Report local MCP tool calls to your organization?")
 }
 
-// Observer explains what the observer service keeps and asks whether to install it (the
-// default is no).
+// Observer explains what the observer service keeps and asks whether to install it.
 func (q agentQuestions) Observer(ctx context.Context) (bool, error) {
 	q.p.note(strings.Join([]string{
 		"The Durin observer is a background service that starts when you log in. It records the hook",
@@ -231,7 +229,7 @@ func (q agentQuestions) Observer(ctx context.Context) (bool, error) {
 		"and source code, and connections to AI providers. The capture stays on this computer, encrypted,",
 		"for up to 7 days or 512 MiB. Hooks work without it; durin observer install adds it later.",
 	}, "\n"), "Durin observer")
-	return q.p.confirm(ctx, "Install the Durin observer?", false)
+	return q.p.confirm(ctx, "Install the Durin observer?")
 }
 
 func (q agentQuestions) Integrations(result ports.IntegrationsResult) {
